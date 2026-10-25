@@ -2,7 +2,7 @@ import { basename } from "node:path";
 import {
 	type CleanupPlan,
 	type CreateSessionParams,
-	groupCategories,
+	groupTopics,
 	type ImportCandidate,
 	type MasterState,
 	needsYou,
@@ -40,6 +40,7 @@ import {
 	drawTopics,
 	moveFocus,
 	type NodeBox,
+	stepTopic,
 } from "./topics";
 import { useDaemon } from "./use-daemon";
 
@@ -129,7 +130,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const master: MasterState = state?.master ?? { status: "idle", error: null };
 	const attached =
 		sessions.find((s) => s.id === state?.attachedSessionId) ?? null;
-	const groups = useMemo(() => groupCategories(sessions), [sessions]);
+	const groups = useMemo(() => groupTopics(sessions), [sessions]);
 	const needs = useMemo(
 		() => needsYou(sessions, suggestions),
 		[sessions, suggestions],
@@ -438,6 +439,11 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				);
 				return setElement(elements[next] ?? null);
 			}
+			if (input === "[" || input === "]") {
+				const id = stepTopic(groups, card?.id ?? null, input === "]" ? 1 : -1);
+				if (id) focusNode(id);
+				return;
+			}
 
 			if (focusedPermission) {
 				if (input === "y" || input === "n")
@@ -607,7 +613,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 						permissions={permissions}
 						conversation={state?.conversation ?? []}
 						master={master}
-						calmCategories={calm}
+						calmTopics={calm}
 						focused={onMaster}
 						selected={onMaster ? selected : null}
 						inputText={masterText}
@@ -623,8 +629,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					</Text>
 				) : (
 					<Text color="gray">
-						<Key>WASD</Key> move · <Key>↑↓</Key> select · <Key>Tab</Key> next
-						need · <Key>g</Key> master
+						<Key>WASD</Key> move · <Key>↑↓</Key> select · <Key>[ ]</Key> topic ·{" "}
+						<Key>Tab</Key> next need · <Key>g</Key> master
 					</Text>
 				)}
 				<Text color="gray">
@@ -787,7 +793,7 @@ function SessionZoom({
 						<Text color="magenta" bold>
 							◆ serenity
 						</Text>
-						<Text color="gray"> › {session.category ?? "unsorted"} › </Text>
+						<Text color="gray"> › {session.topic ?? "unsorted"} › </Text>
 						<Text>{session.name}</Text>
 					</Text>
 				</Box>

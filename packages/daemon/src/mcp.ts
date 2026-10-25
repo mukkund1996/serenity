@@ -30,16 +30,16 @@ export const MCP_TOOLS = [
 		},
 	},
 	{
-		name: "set_category",
+		name: "set_topic",
 		description:
-			"Move a session to another category. Use only when the user asks.",
+			"Move a session to another topic. Use only when the user asks.",
 		inputSchema: {
 			type: "object",
 			properties: {
 				session: { type: "string" },
-				category: { type: "string" },
+				topic: { type: "string" },
 			},
-			required: ["session", "category"],
+			required: ["session", "topic"],
 		},
 	},
 	{

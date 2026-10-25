@@ -26,7 +26,7 @@ export interface Session {
 	repo: string;
 	name: string;
 	/** Assigned by the master; null until it has placed the session. */
-	category: string | null;
+	topic: string | null;
 	cwd: string;
 	worktree: string | null;
 	branch: string | null;
@@ -57,8 +57,8 @@ export interface Session {
 	ask: string | null;
 	/** Why a waiting session waits; decides which suggestions apply. */
 	waitingOn: WaitingOn | null;
-	/** A different category the summarizer proposed once; adopted if proposed again. */
-	categoryCandidate: string | null;
+	/** A different topic the summarizer proposed once; adopted if proposed again. */
+	topicCandidate: string | null;
 	lastPrompt: string | null;
 	lastAssistantMessage: string | null;
 	transcriptPath: string | null;

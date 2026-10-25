@@ -22,6 +22,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0014](0014-distribution-and-release.md) | Distribution, release, licence, telemetry | Accepted |
 | [0015](0015-workflow-and-milestones.md) | Workflow and milestones | Accepted |
 | [0016](0016-importing-running-sessions.md) | Importing Claude sessions already running in tmux | Accepted |
+| [0017](0017-topics-zoom-shows-every-topic.md) | The topics zoom shows every topic; "topic" replaces "category" | Accepted |
 
 ## System at a glance
 
@@ -36,10 +37,10 @@ All `claude` processes run on the user's own Claude login (0007).
              ┌──────────────── serenityd (one per machine, state keyed by repo) ───────────────┐
              │ session registry · status reducer · tmux driver · git/worktree driver · gh driver │
              │ storage (interface) ── SQLite                                                    │
-             │ MCP server for the chat (suggest / set_category / request_permission)           │
+             │ MCP server for the chat (suggest / set_topic / request_permission)           │
              │ master supervisor                                                                │
              │   ├─ Opus: long-lived `claude -p` stream-json  (chat; uses the MCP tools)       │
-             │   ├─ Haiku: one-shot per event → JSON (summary, ask, finished, category)        │
+             │   ├─ Haiku: one-shot per event → JSON (summary, ask, finished, topic)        │
              │   └─ Sonnet: one-shot per event → JSON (one suggestion)                         │
              └──────────────────────────────────────────────────────────────────────────────────┘
 ```

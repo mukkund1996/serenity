@@ -7,7 +7,7 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
 		id: "s1",
 		repo: "/repos/demo",
 		name: "api-auth",
-		category: null,
+		topic: null,
 		cwd: "/repos/demo-api-auth",
 		worktree: "/repos/demo-api-auth",
 		branch: "api-auth",
@@ -22,7 +22,7 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
 		summary: null,
 		ask: null,
 		waitingOn: null,
-		categoryCandidate: null,
+		topicCandidate: null,
 		lastPrompt: null,
 		lastAssistantMessage: null,
 		transcriptPath: null,
@@ -62,7 +62,7 @@ export function storageContract(name: string, open: () => Storage): void {
 		afterEach(() => storage.close());
 
 		test("put then get returns an equal copy", () => {
-			const s = makeSession({ category: "backend", watched: true });
+			const s = makeSession({ topic: "backend", watched: true });
 			storage.sessions.put(s);
 			expect(storage.sessions.get("s1")).toEqual(s);
 		});

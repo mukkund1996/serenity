@@ -21,7 +21,7 @@ test("data survives reopening", () => {
 	second.close();
 });
 
-test("sessions written before milestone 2 read back with the new fields", async () => {
+test("older sessions read back with the new fields, category as topic", async () => {
 	const { Database } = await import("bun:sqlite");
 	const path = join(dir, "old.db");
 	const first = createSqliteStorage(path);
@@ -36,6 +36,7 @@ test("sessions written before milestone 2 read back with the new fields", async 
 				name: "legacy",
 				status: "idle",
 				createdAt: 1,
+				category: "backend",
 			}),
 		],
 	);
@@ -44,7 +45,9 @@ test("sessions written before milestone 2 read back with the new fields", async 
 	expect(second.sessions.get("old")).toMatchObject({
 		name: "legacy",
 		waitingOn: null,
-		categoryCandidate: null,
+		topic: "backend",
+		topicCandidate: null,
 	});
+	expect(second.sessions.get("old")).not.toHaveProperty("category");
 	second.close();
 });

@@ -335,7 +335,7 @@ export function MasterPanel({
 	permissions,
 	conversation,
 	master,
-	calmCategories,
+	calmTopics,
 	focused,
 	selected,
 	inputText,
@@ -348,7 +348,7 @@ export function MasterPanel({
 	permissions: MasterPermission[];
 	conversation: MasterMessage[];
 	master: MasterState;
-	calmCategories: number;
+	calmTopics: number;
 	focused: boolean;
 	selected: string | null;
 	inputText: string | null;
@@ -398,11 +398,10 @@ export function MasterPanel({
 						) : (
 							<Text color="gray">nothing needs you</Text>
 						)}
-						{!master.error && calmCategories > 0 ? (
+						{!master.error && calmTopics > 0 ? (
 							<Text color="gray">
 								{" "}
-								· {calmCategories}{" "}
-								{calmCategories === 1 ? "category" : "categories"} calm
+								· {calmTopics} {calmTopics === 1 ? "topic" : "topics"} calm
 							</Text>
 						) : null}
 					</Text>

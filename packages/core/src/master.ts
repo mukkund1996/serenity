@@ -9,7 +9,7 @@ import { prStatus } from "./pr";
 const SUMMARY_MAX = 160;
 const ASK_MAX = 100;
 const LABEL_MAX = 60;
-const CATEGORY_MAX = 20;
+const TOPIC_MAX = 20;
 
 /** "PR #482 checks passing", or what is known instead. */
 export function prLine(session: Session): string {
@@ -24,31 +24,31 @@ function clip(text: string, max: number): string {
 }
 
 /** Lowercase, single-spaced, short; empty becomes null. */
-export function normalizeCategory(raw: unknown): string | null {
+export function normalizeTopic(raw: unknown): string | null {
 	if (typeof raw !== "string") return null;
 	const name = raw
 		.toLowerCase()
 		.replace(/[^a-z0-9 _-]+/g, " ")
 		.replace(/\s+/g, " ")
 		.trim()
-		.slice(0, CATEGORY_MAX)
+		.slice(0, TOPIC_MAX)
 		.trim();
 	return name || null;
 }
 
 /**
- * Sticky categories: a session without one takes the proposal; a different
+ * Sticky topics: a session without one takes the proposal; a different
  * proposal only wins when it comes twice in a row, so bubbles do not jump.
  */
-export function nextCategory(
-	session: Pick<Session, "category" | "categoryCandidate">,
+export function nextTopic(
+	session: Pick<Session, "topic" | "topicCandidate">,
 	proposed: string | null,
-): Pick<Session, "category" | "categoryCandidate"> {
-	if (!proposed || proposed === session.category)
-		return { category: session.category, categoryCandidate: null };
-	if (!session.category || session.categoryCandidate === proposed)
-		return { category: proposed, categoryCandidate: null };
-	return { category: session.category, categoryCandidate: proposed };
+): Pick<Session, "topic" | "topicCandidate"> {
+	if (!proposed || proposed === session.topic)
+		return { topic: session.topic, topicCandidate: null };
+	if (!session.topic || session.topicCandidate === proposed)
+		return { topic: proposed, topicCandidate: null };
+	return { topic: session.topic, topicCandidate: proposed };
 }
 
 // ---------------------------------------------------------------- summarizer
@@ -59,9 +59,9 @@ export const SUMMARY_SCHEMA = {
 		summary: { type: "string" },
 		ask: { type: ["string", "null"] },
 		finished: { type: "boolean" },
-		category: { type: "string" },
+		topic: { type: "string" },
 	},
-	required: ["summary", "ask", "finished", "category"],
+	required: ["summary", "ask", "finished", "topic"],
 	additionalProperties: false,
 } as const;
 
@@ -69,23 +69,23 @@ export interface SummaryResult {
 	summary: string;
 	ask: string | null;
 	finished: boolean;
-	category: string | null;
+	topic: string | null;
 }
 
-export function summaryPrompt(session: Session, categories: string[]): string {
+export function summaryPrompt(session: Session, topics: string[]): string {
 	return [
 		"You keep a dashboard of coding-agent sessions and describe one session for its card.",
 		"",
 		`Session: ${session.name}${session.branch ? ` (branch ${session.branch})` : ""}`,
 		`The user's last prompt: ${session.lastPrompt ?? "(none)"}`,
 		`The agent's last reply: ${session.lastAssistantMessage ?? "(none)"}`,
-		`Existing categories: ${categories.length ? categories.join(", ") : "(none yet)"}`,
+		`Existing topics: ${topics.length ? topics.join(", ") : "(none yet)"}`,
 		"",
 		"Return:",
 		`- summary: what this session is doing or did, at most 2 short sentences and ${SUMMARY_MAX} characters. Describe the work, not yourself.`,
 		`- ask: if the reply asks the user a question or for a decision, that question in one line under ${ASK_MAX} characters; otherwise null.`,
 		"- finished: true only if the reply says the task is complete and nothing is asked.",
-		"- category: a short lowercase topic of 1–2 words for grouping sessions. Reuse an existing category when it fits.",
+		"- topic: a short lowercase name of 1–2 words for grouping sessions. Reuse an existing topic when it fits.",
 	].join("\n");
 }
 
@@ -99,7 +99,7 @@ export function parseSummary(raw: unknown): SummaryResult | null {
 		summary: clip(r.summary, SUMMARY_MAX),
 		ask: ask ? clip(ask, ASK_MAX) : null,
 		finished: r.finished && !ask,
-		category: normalizeCategory(r.category),
+		topic: normalizeTopic(r.topic),
 	};
 }
 
@@ -114,7 +114,7 @@ export function applySummary(
 ): Partial<Session> {
 	const patch: Partial<Session> = {
 		summary: result.summary,
-		...nextCategory(session, result.category),
+		...nextTopic(session, result.topic),
 	};
 	if (session.status !== "idle") return patch;
 	if (result.ask) {
@@ -226,7 +226,7 @@ export const MASTER_SYSTEM_PROMPT = [
 	"Each message from the user starts with a snapshot of every session; trust it over memory.",
 	"You can read the repo (Read, Grep, Glob, read-only git and gh). You cannot change files or sessions.",
 	"To propose an action, call mcp__serenity__suggest with the session name, kind (reply, approve or cleanup), a short label and, for replies, the text. Nothing runs until the user presses y.",
-	"Call mcp__serenity__set_category only when the user asks to move a session.",
+	"Call mcp__serenity__set_topic only when the user asks to move a session.",
 	"Answer in at most 3 short sentences; your replies are shown in a small panel. No markdown headings or tables.",
 ].join("\n");
 
@@ -238,7 +238,7 @@ export function chatSnapshot(
 	if (!sessions.length) return "Sessions: none yet.";
 	const lines = sessions.map((s) => {
 		const parts = [
-			`- ${s.name} [${s.category ?? "unsorted"}] ${s.status}${s.waitingOn ? ` on ${s.waitingOn}` : ""}`,
+			`- ${s.name} [${s.topic ?? "unsorted"}] ${s.status}${s.waitingOn ? ` on ${s.waitingOn}` : ""}`,
 		];
 		if (s.ask) parts.push(`asks: ${s.ask}`);
 		if (s.pr || s.prError) parts.push(prLine(s));

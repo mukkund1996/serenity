@@ -8,7 +8,7 @@ import {
 	type MasterState,
 	type MasterToolResult,
 	needsSuggestion,
-	normalizeCategory,
+	normalizeTopic,
 	parseSuggestion,
 	parseSummary,
 	type Session,
@@ -147,17 +147,17 @@ export class MasterSupervisor {
 	private async summarize(sessionId: string): Promise<void> {
 		const session = this.host.storage.sessions.get(sessionId);
 		if (!session?.lastAssistantMessage) return;
-		const categories = [
+		const topics = [
 			...new Set(
 				this.host.storage.sessions
 					.listByRepo(session.repo)
-					.map((s) => s.category)
+					.map((s) => s.topic)
 					.filter((c): c is string => !!c),
 			),
 		];
 		await this.track(session.repo, `summary of ${session.name}`, async () => {
 			const raw = await this.runner.runJson({
-				prompt: summaryPrompt(session, categories),
+				prompt: summaryPrompt(session, topics),
 				model: this.host.models.summarizer,
 				schema: SUMMARY_SCHEMA,
 				cwd: this.host.workerCwd,
@@ -341,12 +341,12 @@ export class MasterSupervisor {
 				isError: true,
 			};
 
-		if (name === "set_category") {
-			const category = normalizeCategory(args.category);
-			if (!category) return { text: "Give a category name.", isError: true };
-			this.host.update(session, { category, categoryCandidate: null });
+		if (name === "set_topic") {
+			const topic = normalizeTopic(args.topic);
+			if (!topic) return { text: "Give a topic name.", isError: true };
+			this.host.update(session, { topic, topicCandidate: null });
 			this.host.broadcast(repo);
-			return { text: `Moved ${session.name} to ${category}.` };
+			return { text: `Moved ${session.name} to ${topic}.` };
 		}
 
 		if (name === "suggest") {

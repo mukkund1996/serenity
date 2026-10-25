@@ -8,7 +8,7 @@ serenity is a keyboard-only terminal app that shows every Claude Code session as
 ## Decision
 - **Audience:** public, open source. No hardcoded personal setup; everything user-specific comes from config or the repo.
 - **Zoom levels:** all three in v1 — map, topics, session.
-- **Master:** full in v1 — summaries, NEEDS YOU list, `y`/`e`/`n` suggestions, master-owned categories, chat.
+- **Master:** full in v1 — summaries, NEEDS YOU list, `y`/`e`/`n` suggestions, master-owned topics, chat.
 - **Sessions:** only sessions serenity spawns. No discovery or import of existing Claude sessions.
 - **GitHub PRs:** in v1, via the `gh` CLI (see 0011).
 - **Platforms:** macOS and Linux.

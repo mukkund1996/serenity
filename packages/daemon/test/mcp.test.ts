@@ -28,7 +28,7 @@ test("tools/list names serenity's three tools", async () => {
 	};
 	expect(out.result.tools.map((t) => t.name)).toEqual([
 		"suggest",
-		"set_category",
+		"set_topic",
 		"request_permission",
 	]);
 });

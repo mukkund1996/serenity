@@ -139,6 +139,7 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 			["W A S D", "move between master and cards"],
 			["↑ ↓", "select inside master or card"],
 			["Tab ⇧Tab", "next / previous in NEEDS YOU"],
+			["[ ]", "previous / next topic"],
 		],
 	],
 	[

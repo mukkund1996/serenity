@@ -63,7 +63,7 @@ export function cleanupPlan(
 	}
 
 	steps.push(
-		`keep the node on the map, archived${session.category ? ` inside ${session.category}` : ""}`,
+		`keep the node on the map, archived${session.topic ? ` inside ${session.topic}` : ""}`,
 	);
 	const branchSafe = facts.prMerged !== null || (facts.unmerged ?? 0) === 0;
 	const safe = (facts.dirty ?? 0) === 0 && branchSafe;
