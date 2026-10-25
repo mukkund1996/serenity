@@ -229,4 +229,28 @@ export class Tmux {
 			"send-keys C-g",
 		]);
 	}
+
+	/**
+	 * The tmux settings Claude Code recommends: extended keys so Shift+Enter
+	 * reaches it as a newline instead of submitting, and passthrough for its
+	 * notifications. Extended keys only go to programs that ask for them, so
+	 * other panes are unaffected. Adds `extkeys` once, not on every attach.
+	 */
+	async enableClaudeKeys(): Promise<void> {
+		await this.cmd(["set-option", "-s", "extended-keys", "on"]);
+		const features = await this.cmd([
+			"show-options",
+			"-s",
+			"-v",
+			"terminal-features",
+		]);
+		if (!features.includes("xterm*:extkeys"))
+			await this.cmd([
+				"set-option",
+				"-as",
+				"terminal-features",
+				"xterm*:extkeys",
+			]);
+		await this.cmd(["set-option", "-g", "allow-passthrough", "on"]);
+	}
 }
