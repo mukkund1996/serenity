@@ -10,8 +10,14 @@ import {
 	type Suggestion,
 } from "@serenity/core";
 import { Box, Text, useApp, useInput, useWindowSize } from "ink";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { CanvasView, Key, MasterPanel, SessionMaster } from "./components";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+	CanvasView,
+	Key,
+	MASTER_INPUT,
+	MasterPanel,
+	SessionMaster,
+} from "./components";
 import { openUrl } from "./open-url";
 import {
 	ConfirmDialog,
@@ -21,7 +27,13 @@ import {
 	ShortcutsPanel,
 } from "./overlays";
 import { splitAtNewline } from "./text-input";
-import { drawTopics, moveFocus } from "./topics";
+import {
+	type CardElement,
+	cardElements,
+	drawTopics,
+	moveFocus,
+	type NodeBox,
+} from "./topics";
 import { useDaemon } from "./use-daemon";
 
 export const MIN_COLUMNS = 80;
@@ -53,6 +65,8 @@ export interface AppProps {
 }
 
 const PERM = "perm:";
+/** The master panel's node id; every other node is a session card. */
+const MASTER = "master";
 
 /** A text field's keys: backspace, typing, and Enter (also inside a pasted chunk). */
 function editText(
@@ -71,8 +85,10 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const { exit } = useApp();
 	const { columns, rows } = useWindowSize();
 	const { state, connected, call } = useDaemon(home, repo);
-	/** A session id, or `perm:<id>` for one of the master's permission requests. */
-	const [focusId, setFocusId] = useState<string | null>(null);
+	/** The focused node: MASTER or a session card's id (WASD). */
+	const [node, setNode] = useState<string>(MASTER);
+	/** The element selected inside the node (arrow keys); null means its first. */
+	const [element, setElement] = useState<string | null>(null);
 	const [replyText, setReplyText] = useState<string | null>(null);
 	/** The suggestion whose reply is being edited (e), if any. */
 	const [replyEdit, setReplyEdit] = useState<string | null>(null);
@@ -93,36 +109,83 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		[sessions, suggestions],
 	);
 
-	const focusedPermission = focusId?.startsWith(PERM)
-		? (permissions.find((p) => `${PERM}${p.id}` === focusId) ?? null)
-		: null;
-	const focused = sessions.find((s) => s.id === focusId) ?? null;
 	const suggestionFor = (id: string | undefined): Suggestion | undefined =>
 		suggestions.find((g) => g.sessionId === id);
+	const onMaster = node === MASTER;
+	const card = onMaster ? null : (sessions.find((s) => s.id === node) ?? null);
+	const cardSuggestion = suggestionFor(card?.id);
+
+	/** What ↑↓ step through: the master's requests, NEEDS YOU and its input, or a card's rows. */
+	const elements: string[] = onMaster
+		? [
+				...permissions.map((p) => `${PERM}${p.id}`),
+				...needs.map((s) => s.id),
+				MASTER_INPUT,
+			]
+		: cardElements(!!cardSuggestion);
+	const selected =
+		element && elements.includes(element) ? element : (elements[0] ?? null);
+	const focusedPermission =
+		onMaster && selected?.startsWith(PERM)
+			? (permissions.find((p) => `${PERM}${p.id}` === selected) ?? null)
+			: null;
+	/** The session that y / e / n / i / o / f / x act on: the card, or the selected NEEDS YOU item. */
+	const focused = onMaster
+		? (sessions.find((s) => s.id === selected) ?? null)
+		: card;
 	const focusedSuggestion = suggestionFor(focused?.id);
 
 	const bodyHeight = rows - 2;
 	const masterWidth = Math.max(34, Math.min(56, columns - 52));
+	const masterRow = Math.floor(bodyHeight / 2);
 	const topics = useMemo(
 		() =>
 			drawTopics({
 				width: Math.max(1, columns - masterWidth),
 				height: Math.max(1, bodyHeight),
-				masterRow: Math.floor(bodyHeight / 2),
+				masterRow,
 				groups,
-				focusId: focused?.id ?? null,
-				replyText,
+				focusId: card?.id ?? null,
+				focusElement: (onMaster ? "card" : selected) as CardElement,
+				focusSuggestion: cardSuggestion?.label ?? null,
+				replyText: onMaster ? null : replyText,
 			}),
-		[columns, masterWidth, bodyHeight, groups, focused?.id, replyText],
+		[
+			columns,
+			masterWidth,
+			bodyHeight,
+			masterRow,
+			groups,
+			card?.id,
+			onMaster,
+			selected,
+			cardSuggestion?.label,
+			replyText,
+		],
 	);
+	/** The map's nodes in canvas cells; the master sits left of the canvas. */
+	const nodes: NodeBox[] = [
+		{ id: MASTER, x: -masterWidth, y: 0, w: masterWidth, h: bodyHeight },
+		...topics.cards.map((c) => ({ ...c, id: c.sessionId })),
+	];
 
-	// Keep focus on something that still exists.
+	const focusNode = (id: string, at: string | null = null) => {
+		setNode(id);
+		setElement(at);
+	};
+	/** A session just created or imported, focused before the daemon reports it. */
+	const arriving = useRef<string | null>(null);
+
+	// Keep focus on a card that is still on the map; otherwise the master has it.
 	useEffect(() => {
-		const valid = focusId?.startsWith(PERM)
-			? !!focusedPermission
-			: sessions.some((s) => s.id === focusId);
-		if (!valid) setFocusId(topics.cards[0]?.sessionId ?? null);
-	}, [topics, focusId, focusedPermission, sessions]);
+		if (node === MASTER || topics.cards.some((c) => c.sessionId === node))
+			return;
+		if (node === arriving.current && !sessions.some((s) => s.id === node))
+			return;
+		arriving.current = null;
+		setNode(MASTER);
+		setElement(null);
+	}, [topics, node, sessions]);
 
 	useEffect(() => {
 		if (!notice) return;
@@ -133,17 +196,53 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const fail = (e: unknown) =>
 		setNotice(e instanceof Error ? e.message : String(e));
 
-	/** Tab order: the master's permission requests, then NEEDS YOU. */
+	/** Tab order: the master's permission requests, then NEEDS YOU. Focuses the master. */
 	const cycleNeeds = (back: boolean) => {
 		const order = [
 			...permissions.map((p) => `${PERM}${p.id}`),
 			...needs.map((s) => s.id),
 		];
 		if (!order.length) return;
-		const at = order.indexOf(focusId ?? "");
+		const at = onMaster ? order.indexOf(selected ?? "") : -1;
 		const next =
 			at === -1 ? 0 : (at + (back ? order.length - 1 : 1)) % order.length;
-		setFocusId(order[next] ?? null);
+		focusNode(MASTER, order[next] ?? null);
+	};
+
+	const startReply = () => {
+		setReplyEdit(null);
+		setReplyText("");
+		if (!onMaster) setElement("reply");
+	};
+
+	const attach = (session: Session) => {
+		if (!tmuxPane) return setNotice("attach needs serenity to run inside tmux");
+		call("session.attach", { id: session.id, clientPane: tmuxPane }).catch(
+			fail,
+		);
+	};
+
+	/** Enter acts on the selected element; on the card itself it attaches. */
+	const activate = () => {
+		if (onMaster) {
+			if (selected === MASTER_INPUT) return setMasterText("");
+			if (focused) attach(focused);
+			return;
+		}
+		if (!card) return;
+		switch (selected as CardElement) {
+			case "pr":
+				if (card.pr) openUrl(card.pr.url);
+				else setNotice(`${card.name} has no PR yet`);
+				return;
+			case "suggestion":
+				if (cardSuggestion) void accept(cardSuggestion, card);
+				return;
+			case "reply":
+				return startReply();
+			default:
+				attach(card);
+		}
 	};
 
 	const openConfirm = async (session: Session, suggestionId: string | null) => {
@@ -185,10 +284,16 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		}
 	};
 
-	const sendReply = (text: string) => {
-		const target = focused;
+	/** Leaves the reply input; on a card the selection returns to the card itself. */
+	const endReply = () => {
 		setReplyText(null);
 		setReplyEdit(null);
+		if (!onMaster) setElement(null);
+	};
+
+	const sendReply = (text: string) => {
+		const target = focused;
+		endReply();
 		setOverlay(null);
 		if (!target || !text.trim()) return;
 		setSentReplies((list) =>
@@ -251,10 +356,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			}
 
 			if (replyText !== null) {
-				if (key.escape) {
-					setReplyEdit(null);
-					return setReplyText(null);
-				}
+				if (key.escape) return endReply();
 				if (key.tab) {
 					if (recentReplies().length)
 						setOverlay({ kind: "replies", selected: 0 });
@@ -289,19 +391,16 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 			if (key.tab) return cycleNeeds(key.shift);
 			const dir = { w: "up", s: "down", a: "left", d: "right" } as const;
-			const move =
-				dir[input as keyof typeof dir] ??
-				(key.upArrow
-					? "up"
-					: key.downArrow
-						? "down"
-						: key.leftArrow
-							? "left"
-							: key.rightArrow
-								? "right"
-								: null);
-			if (move)
-				return setFocusId(moveFocus(topics.cards, focused?.id ?? null, move));
+			const move = dir[input as keyof typeof dir];
+			if (move) return focusNode(moveFocus(nodes, node, move) ?? MASTER);
+			if (key.upArrow || key.downArrow) {
+				const at = selected ? elements.indexOf(selected) : 0;
+				const next = Math.max(
+					0,
+					Math.min(elements.length - 1, at + (key.upArrow ? -1 : 1)),
+				);
+				return setElement(elements[next] ?? null);
+			}
 
 			if (focusedPermission) {
 				if (input === "y" || input === "n")
@@ -336,6 +435,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					else setOverlay({ kind: "new" });
 					return;
 			}
+			if (key.return) return activate();
 			if (!focused) return;
 			switch (input) {
 				case "y":
@@ -347,6 +447,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					if (focusedSuggestion.kind === "reply") {
 						setReplyEdit(focusedSuggestion.id);
 						setReplyText(focusedSuggestion.text ?? "");
+						if (!onMaster) setElement("reply");
 					} else if (focusedSuggestion.kind === "cleanup") {
 						void openConfirm(focused, focusedSuggestion.id);
 					} else if (tmuxPane) {
@@ -379,15 +480,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					);
 					return;
 				case "i":
-					setReplyEdit(null);
-					return setReplyText("");
-			}
-			if (key.return) {
-				if (!tmuxPane)
-					return setNotice("attach needs serenity to run inside tmux");
-				call("session.attach", { id: focused.id, clientPane: tmuxPane }).catch(
-					fail,
-				);
+					return startReply();
 			}
 		},
 		{ isActive: overlay?.kind !== "new" && overlay?.kind !== "import" },
@@ -396,7 +489,10 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const importSessions = async (claudeSessionIds: string[]) => {
 		const adopted = await call("session.adopt", { repo, claudeSessionIds });
 		setOverlay(null);
-		if (adopted[0]) setFocusId(adopted[0].id);
+		if (adopted[0]) {
+			arriving.current = adopted[0].id;
+			focusNode(adopted[0].id);
+		}
 		setNotice(
 			`imported ${adopted.length} ${adopted.length === 1 ? "session" : "sessions"}`,
 		);
@@ -405,7 +501,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const createSession = async (params: CreateSessionParams) => {
 		const session = await call("session.create", params);
 		setOverlay(null);
-		setFocusId(session.id);
+		arriving.current = session.id;
+		focusNode(session.id);
 	};
 
 	if (attached)
@@ -474,8 +571,10 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 						conversation={state?.conversation ?? []}
 						master={master}
 						calmCategories={calm}
-						focusId={focusId}
+						focused={onMaster}
+						selected={onMaster ? selected : null}
 						inputText={masterText}
+						replyText={onMaster ? replyText : null}
 					/>
 				</Box>
 				<CanvasView canvas={topics.canvas} />
@@ -487,8 +586,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					</Text>
 				) : (
 					<Text color="gray">
-						<Key>WASD</Key> move · <Key>Tab</Key> next need · <Key>g</Key>{" "}
-						master
+						<Key>WASD</Key> move · <Key>↑↓</Key> select · <Key>Tab</Key> next
+						need · <Key>g</Key> master
 					</Text>
 				)}
 				<Text color="gray">
