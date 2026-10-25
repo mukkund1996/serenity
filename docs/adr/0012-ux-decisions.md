@@ -19,7 +19,9 @@ The canvas's colours, frames, status language, card anatomy and keymap are final
 | Config | JSON at `~/.config/serenity/config.json` (XDG). |
 | Master permission prompts | Top of NEEDS YOU: "◆ master wants to use <tool>", the command below, `y` allow / `n` deny (0008). |
 | `n` (design keymap conflict) | On an item with a pending suggestion `n` declines it; elsewhere it opens New session. `N` always opens New session. |
-| `y e n` target | The selected NEEDS YOU item: `Tab` / `⇧Tab` cycle through the master's requests, then NEEDS YOU; WASD selects cards. |
+| Focus | One node has focus: the master or a card. WASD moves between nodes spatially (the master is reached with `A` from the left column, left with `D`); the focused node gets the heavy white frame. Focus starts on the master. |
+| Arrow keys | `↑` `↓` select an element inside the focused node, marked `▸`. Master: its permission requests, NEEDS YOU items, then the input. Card: the card itself, the PR row, the master's suggestion (shown on the focused card), the input row. `Enter` acts on the selection: attach (card, NEEDS YOU item), open PR, accept the suggestion, start typing. |
+| `y e n` target | The selected NEEDS YOU item when the master has focus, or the focused card's suggestion. `Tab` / `⇧Tab` focus the master and cycle through its requests, then NEEDS YOU. |
 | `e` | Reply: edit the text in the card's input, Enter sends. Cleanup: open Confirm. Approve: attach to inspect the prompt first. |
 | Conversation | The latest exchange (your message, the master's reply), a few lines each; the full history is `M` (v1.1). |
 

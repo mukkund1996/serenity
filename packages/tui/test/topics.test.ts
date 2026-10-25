@@ -147,9 +147,9 @@ describe("drawTopics", () => {
 
 describe("moveFocus", () => {
 	const cards = [
-		{ sessionId: "top", x: 0, y: 0, w: 40, h: 5 },
-		{ sessionId: "right", x: 42, y: 0, w: 40, h: 5 },
-		{ sessionId: "below", x: 0, y: 8, w: 40, h: 5 },
+		{ id: "top", x: 0, y: 0, w: 40, h: 5 },
+		{ id: "right", x: 42, y: 0, w: 40, h: 5 },
+		{ id: "below", x: 0, y: 8, w: 40, h: 5 },
 	];
 	test("moves to the nearest card in a direction and stays put at an edge", () => {
 		expect(moveFocus(cards, "top", "right")).toBe("right");
@@ -157,6 +157,55 @@ describe("moveFocus", () => {
 		expect(moveFocus(cards, "below", "up")).toBe("top");
 		expect(moveFocus(cards, "top", "up")).toBe("top");
 		expect(moveFocus(cards, null, "down")).toBe("top");
+	});
+
+	test("the master is reached with A from the left column and left with D", () => {
+		const nodes = [{ id: "master", x: -40, y: 0, w: 40, h: 20 }, ...cards];
+		expect(moveFocus(nodes, "below", "left")).toBe("master");
+		expect(moveFocus(nodes, "right", "left")).toBe("top");
+		// D from the master picks the card nearest its centre row.
+		expect(moveFocus(nodes, "master", "right")).toBe("below");
+		expect(moveFocus(nodes, "master", "up")).toBe("master");
+		expect(moveFocus(nodes, "master", "down")).toBe("master");
+		expect(moveFocus(nodes, "top", "up")).toBe("top");
+	});
+});
+
+describe("focused card elements", () => {
+	const groups = groupCategories([
+		makeSession({ id: "x", name: "api-auth", status: "waiting", ask: "ok?" }),
+	]);
+	const drawFocused = (
+		focusElement: "card" | "pr" | "suggestion" | "reply",
+		focusSuggestion: string | null,
+	) =>
+		drawTopics({
+			width: 60,
+			height: 16,
+			masterRow: 8,
+			groups,
+			focusId: "x",
+			focusElement,
+			focusSuggestion,
+			replyText: null,
+		});
+
+	test("the master's suggestion gets its own row above the input", () => {
+		const { canvas, cards } = drawFocused("card", 'Reply "ok"');
+		expect(cards[0]?.h).toBe(7);
+		const rows = canvas.toString().split("\n");
+		const pick = rows.findIndex((r) => r.includes('◆ Reply "ok"'));
+		expect(pick).toBeGreaterThan(-1);
+		expect(rows[pick]).toContain("y e n");
+		expect(rows[pick + 1]).toContain("›");
+	});
+
+	test("the selected element carries the ▸ cursor; the card itself has none", () => {
+		expect(drawFocused("card", null).canvas.toString()).not.toContain("▸");
+		const pr = drawFocused("pr", null).canvas.toString().split("\n");
+		expect(pr.find((r) => r.includes("▸"))).toContain("no PR yet");
+		const reply = drawFocused("reply", null).canvas.toString().split("\n");
+		expect(reply.find((r) => r.includes("▸"))).toContain("┃▸›");
 	});
 });
 

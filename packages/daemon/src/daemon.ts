@@ -291,6 +291,9 @@ export class Daemon {
 			const current = this.attached.get(session.repo);
 			if (current) await this.detach(current.sessionId);
 			await this.tmux.bindDetachKey(this.detachCommand());
+			await this.tmux
+				.enableClaudeKeys()
+				.catch((e: Error) => this.log(`tmux claude keys: ${e.message}`));
 			if (session.origin === "adopted") {
 				// Its pane stays in the user's own window; go there (ADR 0016).
 				const clientTty = await this.tmux.clientShowing(clientPane);

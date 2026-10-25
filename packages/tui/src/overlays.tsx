@@ -136,15 +136,16 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 	[
 		"MOVE",
 		[
+			["W A S D", "move between master and cards"],
+			["↑ ↓", "select inside master or card"],
 			["Tab ⇧Tab", "next / previous in NEEDS YOU"],
-			["W A S D", "move between cards"],
 		],
 	],
 	[
 		"ON A NODE",
 		[
 			["i", "reply · Tab recent replies"],
-			["Enter", "attach · Ctrl+g back"],
+			["Enter", "act on ▸ (attach) · Ctrl+g"],
 			["o", "open PR"],
 			["f", "watch · remind master when done"],
 			["x", "clean up / remove"],
@@ -380,21 +381,27 @@ export function ImportDialog({
 			</Text>
 			{candidates.map((c, i) => {
 				const g = glyph(c.status);
+				// A pointer and bright text, not inverse: inverse turns the row and
+				// its grey and status colours into light backgrounds that are hard to read.
+				const current = i === selected;
 				return (
 					<Box key={c.claudeSessionId} flexDirection="column" marginTop={1}>
 						<Box justifyContent="space-between">
-							<Text inverse={i === selected} wrap="truncate">
+							<Text color={current ? "whiteBright" : undefined} wrap="truncate">
+								<Text color="magenta">{current ? "› " : "  "}</Text>
 								{chosen.has(c.claudeSessionId) ? "[x] " : "[ ] "}
 								{g ? <Text color={g.color}>{g.ch} </Text> : "  "}
 								<Text bold>{c.name}</Text>
-								{c.branch ? <Text color="gray"> · {c.branch}</Text> : null}
+								{c.branch ? (
+									<Text color={current ? "white" : "gray"}> · {c.branch}</Text>
+								) : null}
 							</Text>
 							<Box flexShrink={0} marginLeft={1}>
-								<Text color="gray">{c.location}</Text>
+								<Text color={current ? "white" : "gray"}>{c.location}</Text>
 							</Box>
 						</Box>
-						<Text color="gray" wrap="truncate">
-							{"      "}
+						<Text color="white" wrap="truncate">
+							{"        "}
 							{c.title ?? c.lastPrompt ?? "no prompt yet"}
 						</Text>
 					</Box>

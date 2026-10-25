@@ -42,8 +42,26 @@ export interface TopicsInput {
 	masterRow: number;
 	groups: CategoryGroup[];
 	focusId: string | null;
+	/** The element selected inside the focused card (arrow keys). */
+	focusElement?: CardElement;
+	/** The master's suggestion for the focused card, shown above its input row. */
+	focusSuggestion?: string | null;
 	/** Text being typed into the focused card's input row, or null when not replying. */
 	replyText: string | null;
+}
+
+/** What the arrow keys step through on a focused card; `card` is the card itself. */
+export type CardElement = "card" | "pr" | "suggestion" | "reply";
+
+export function cardElements(hasSuggestion: boolean): CardElement[] {
+	return hasSuggestion
+		? ["card", "pr", "suggestion", "reply"]
+		: ["card", "pr", "reply"];
+}
+
+function cardHeight(focused: boolean, suggestion: string | null): number {
+	if (!focused) return CARD_H;
+	return FOCUSED_CARD_H + (suggestion ? 1 : 0);
 }
 
 export interface TopicsLayout {
@@ -211,15 +229,21 @@ function drawPrLine(
 	}
 }
 
+interface CardFocus {
+	element: CardElement;
+	suggestion: string | null;
+	replyText: string | null;
+}
+
 function drawCard(
 	canvas: Canvas,
 	s: Session,
 	x: number,
 	y: number,
-	focused: boolean,
-	replyText: string | null,
+	focus: CardFocus | null,
 ): number {
-	const h = focused ? FOCUSED_CARD_H : CARD_H;
+	const focused = focus !== null;
+	const h = cardHeight(focused, focus?.suggestion ?? null);
 	const frameStyle: Style = focused
 		? { fg: "whiteBright", bold: true }
 		: s.status === "waiting"
@@ -257,14 +281,30 @@ function drawCard(
 		for (const run of line)
 			at = canvas.text(at, y + 2 + i, run.text, run.style);
 	});
-	if (focused) {
-		const input = replyText === null ? "› " : `› ${replyText}█`;
-		canvas.fill(x + 2, y + 4, inner, 1, { bg: "black" });
-		canvas.text(x + 2, y + 4, truncate(input, inner), {
-			fg: "whiteBright",
-			bg: "black",
-		});
+	if (!focus) return h;
+	const cursor = (row: number) =>
+		canvas.text(x + 1, row, "▸", { fg: "whiteBright", bold: true });
+	if (focus.element === "pr") cursor(y + 1);
+	let inputRow = y + 4;
+	if (focus.suggestion) {
+		const chips = " y e n";
+		let col = canvas.text(x + 2, inputRow, "◆ ", { fg: "magenta" });
+		col = canvas.text(
+			col,
+			inputRow,
+			truncate(focus.suggestion, inner - 2 - chips.length),
+		);
+		canvas.text(x + 2 + inner - chips.length, inputRow, chips, DIM);
+		if (focus.element === "suggestion") cursor(inputRow);
+		inputRow++;
 	}
+	const input = focus.replyText === null ? "› " : `› ${focus.replyText}█`;
+	canvas.fill(x + 2, inputRow, inner, 1, { bg: "black" });
+	canvas.text(x + 2, inputRow, truncate(input, inner), {
+		fg: "whiteBright",
+		bg: "black",
+	});
+	if (focus.element === "reply") cursor(inputRow);
 	return h;
 }
 
@@ -291,7 +331,10 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 		const rowHeights: number[] = [];
 		shown.forEach((s, i) => {
 			const row = Math.floor(i / cols);
-			const h = s.id === input.focusId ? FOCUSED_CARD_H : CARD_H;
+			const h = cardHeight(
+				s.id === input.focusId,
+				input.focusSuggestion ?? null,
+			);
 			rowHeights[row] = Math.max(rowHeights[row] ?? 0, h);
 		});
 		const cardsH =
@@ -316,14 +359,18 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 					const s = shown[row * cols + c];
 					if (!s) continue;
 					const cx = BUBBLE_X + PAD_X + c * (CARD_W + CARD_GAP_X);
-					const focused = s.id === input.focusId;
 					const h = drawCard(
 						canvas,
 						s,
 						cx,
 						rowY,
-						focused,
-						focused ? input.replyText : null,
+						s.id === input.focusId
+							? {
+									element: input.focusElement ?? "card",
+									suggestion: input.focusSuggestion ?? null,
+									replyText: input.replyText,
+								}
+							: null,
 					);
 					cards.push({ sessionId: s.id, x: cx, y: rowY, w: CARD_W, h });
 				}
@@ -386,25 +433,46 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 	return { canvas, cards };
 }
 
-/** Spatial focus movement between card boxes (WASD). */
+/** A focusable box on the map: a card, or the master panel. */
+export interface NodeBox {
+	id: string;
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+}
+
+/**
+ * Spatial focus movement between nodes (WASD). A node counts as ahead only
+ * when it lies wholly past the current one, so the full-height master panel
+ * is reached with A and left with D, never with W or S.
+ */
 export function moveFocus(
-	cards: CardBox[],
+	nodes: NodeBox[],
 	fromId: string | null,
 	dir: "up" | "down" | "left" | "right",
 ): string | null {
-	const from = cards.find((c) => c.sessionId === fromId);
-	if (!from) return cards[0]?.sessionId ?? null;
+	const from = nodes.find((c) => c.id === fromId);
+	if (!from) return nodes[0]?.id ?? null;
 	const cx = from.x + from.w / 2;
 	const cy = from.y + from.h / 2;
-	let best: CardBox | null = null;
+	let best: NodeBox | null = null;
 	let bestScore = Number.POSITIVE_INFINITY;
-	for (const c of cards) {
+	for (const c of nodes) {
 		if (c === from) continue;
+		const past =
+			dir === "up"
+				? c.y + c.h <= from.y
+				: dir === "down"
+					? c.y >= from.y + from.h
+					: dir === "left"
+						? c.x + c.w <= from.x
+						: c.x >= from.x + from.w;
+		if (!past) continue;
 		const dx = c.x + c.w / 2 - cx;
 		const dy = c.y + c.h / 2 - cy;
 		const ahead =
 			dir === "up" ? -dy : dir === "down" ? dy : dir === "left" ? -dx : dx;
-		if (ahead <= 0) continue;
 		const sideways =
 			dir === "up" || dir === "down" ? Math.abs(dx) : Math.abs(dy);
 		const score = ahead + sideways * 2;
@@ -413,5 +481,5 @@ export function moveFocus(
 			best = c;
 		}
 	}
-	return best?.sessionId ?? from.sessionId;
+	return best?.id ?? from.id;
 }
