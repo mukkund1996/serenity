@@ -31,8 +31,14 @@ export interface Methods {
 		params: { id: string; clientPane: string };
 		result: null;
 	};
-	/** Detach by the agent's pane (from the tmux Ctrl+g binding) or by session id. */
-	"session.detach": { params: { pane?: string; id?: string }; result: null };
+	/**
+	 * Detach by the agent's pane (the tmux Ctrl+g binding), by session id, or
+	 * whatever is attached beside a map pane (clientPane: the map is exiting).
+	 */
+	"session.detach": {
+		params: { pane?: string; id?: string; clientPane?: string };
+		result: null;
+	};
 	"hook.event": {
 		params: { sessionId: string; kind: HookKind; payload: HookPayload };
 		result: null;

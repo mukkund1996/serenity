@@ -192,11 +192,16 @@ export class Daemon {
 			return null;
 		},
 
-		"session.detach": async ({ pane, id }) => {
-			const session = id
-				? this.requireSession(id)
-				: this.opts.storage.sessions.listAll().find((s) => s.tmuxPane === pane);
-			if (session) await this.detach(session.id);
+		"session.detach": async ({ pane, id, clientPane }) => {
+			const sessionId = clientPane
+				? [...this.attached.values()].find((a) => a.clientPane === clientPane)
+						?.sessionId
+				: id
+					? this.requireSession(id).id
+					: this.opts.storage.sessions
+							.listAll()
+							.find((s) => s.tmuxPane === pane)?.id;
+			if (sessionId) await this.detach(sessionId);
 			return null;
 		},
 

@@ -76,8 +76,53 @@ describe("drawTopics", () => {
 
 	test("the focused card is heavy and taller", () => {
 		const { canvas, cards } = draw("a2");
-		expect(cards.find((c) => c.sessionId === "a2")?.h).toBe(7);
+		expect(cards.find((c) => c.sessionId === "a2")?.h).toBe(6);
 		expect(canvas.toString()).toContain("┏ ● sync-worker");
+	});
+
+	test("a card shows the latest exchange in order: prompt, then reply", () => {
+		const groups = groupCategories([
+			makeSession({
+				id: "x",
+				status: "idle",
+				lastPrompt: "who are you?",
+				lastAssistantMessage: "I'm Claude.",
+			}),
+		]);
+		const rows = drawTopics({
+			width: 60,
+			height: 12,
+			masterRow: 6,
+			groups,
+			focusId: null,
+			replyText: null,
+		})
+			.canvas.toString()
+			.split("\n");
+		const you = rows.findIndex((r) => r.includes('you › "who are you?"'));
+		const claude = rows.findIndex((r) => r.includes("claude › I'm Claude."));
+		expect(you).toBeGreaterThan(-1);
+		expect(claude).toBe(you + 1);
+	});
+
+	test("while working, the reply row says so instead of an older answer", () => {
+		const groups = groupCategories([
+			makeSession({
+				id: "x",
+				status: "working",
+				lastPrompt: "go",
+				lastAssistantMessage: null,
+			}),
+		]);
+		const text = drawTopics({
+			width: 60,
+			height: 12,
+			masterRow: 6,
+			groups,
+			focusId: null,
+			replyText: null,
+		}).canvas.toString();
+		expect(text).toContain("working…");
 	});
 
 	test("cards sit side by side when there is room", () => {

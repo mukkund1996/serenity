@@ -51,6 +51,8 @@ export function reduceHook(
 			patch.status = "working";
 			patch.ask = null;
 			patch.lastPrompt = oneLine(payload.prompt);
+			// The previous reply is older than this prompt now.
+			patch.lastAssistantMessage = null;
 			break;
 		case "PostToolUse":
 			if (session.status === "waiting" || session.status === "idle") {

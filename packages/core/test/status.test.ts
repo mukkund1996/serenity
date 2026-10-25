@@ -20,7 +20,7 @@ describe("reduceHook", () => {
 		});
 	});
 
-	test("a prompt starts work and clears the ask", () => {
+	test("a prompt starts work and clears the ask and the older reply", () => {
 		const patch = reduceHook(
 			makeSession({ status: "waiting", ask: "x" }),
 			"UserPromptSubmit",
@@ -32,6 +32,7 @@ describe("reduceHook", () => {
 			status: "working",
 			ask: null,
 			lastPrompt: "rotate refresh tokens",
+			lastAssistantMessage: null,
 		});
 	});
 

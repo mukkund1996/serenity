@@ -145,7 +145,12 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 	if (attached)
 		return (
-			<SessionZoom session={attached} sessions={sessions} columns={columns} />
+			<SessionZoom
+				session={attached}
+				sessions={sessions}
+				columns={columns}
+				rows={rows}
+			/>
 		);
 
 	if (columns < MIN_COLUMNS || rows < MIN_ROWS) {
@@ -172,6 +177,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			flexDirection="column"
 			width={columns}
 			height={rows}
+			overflow="hidden"
 			position="relative"
 		>
 			<Header
@@ -288,30 +294,38 @@ function SessionZoom({
 	session,
 	sessions,
 	columns,
+	rows,
 }: {
 	session: Session;
 	sessions: Session[];
 	columns: number;
+	rows: number;
 }) {
 	const others = needsYou(sessions).filter((s) => s.id !== session.id);
+	// This pane is narrow; every line is clipped to it so nothing wraps or scrolls.
 	return (
-		<Box flexDirection="column" width={columns}>
+		<Box flexDirection="column" width={columns} height={rows} overflow="hidden">
 			<Box
 				width={columns}
+				height={1}
 				backgroundColor="black"
 				justifyContent="space-between"
 				paddingX={1}
 			>
-				<Text wrap="truncate">
-					<Text color="magenta" bold>
-						◆ serenity
+				<Box flexShrink={1} overflow="hidden">
+					<Text wrap="truncate">
+						<Text color="magenta" bold>
+							◆ serenity
+						</Text>
+						<Text color="gray"> › {session.category ?? "unsorted"} › </Text>
+						<Text>{session.name}</Text>
 					</Text>
-					<Text color="gray"> › {session.category ?? "unsorted"} › </Text>
-					<Text>{session.name}</Text>
-				</Text>
-				<Text color="gray">
-					<Key>Ctrl+g</Key> map
-				</Text>
+				</Box>
+				<Box flexShrink={0} marginLeft={1}>
+					<Text color="gray">
+						<Key>Ctrl+g</Key> map
+					</Text>
+				</Box>
 			</Box>
 			<Box marginTop={1} paddingLeft={1}>
 				<SessionMaster

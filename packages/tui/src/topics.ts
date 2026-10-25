@@ -16,7 +16,7 @@ import { cardText, glyph, nameColor } from "./theme";
 
 export const CARD_W = 40;
 const CARD_H = 5;
-const FOCUSED_CARD_H = 7;
+const FOCUSED_CARD_H = 6;
 const CARD_GAP_X = 2;
 const PAD_X = 3;
 const TRUNK_X = 2;
@@ -113,6 +113,66 @@ function counts(group: CategoryGroup): Array<{ text: string; style: Style }> {
 	return out;
 }
 
+type Line = Array<{ text: string; style: Style }>;
+
+/** "label text", cut to `width` columns. */
+function labelled(
+	label: string,
+	text: string,
+	labelStyle: Style,
+	textStyle: Style,
+	width: number,
+): Line {
+	return [
+		{ text: label, style: labelStyle },
+		{ text: truncate(text, width - [...label].length), style: textStyle },
+	];
+}
+
+/**
+ * The card's two text rows. Until the master writes summaries (milestone 2)
+ * they show the latest exchange in order: your prompt, then Claude's reply,
+ * or what it is doing now.
+ */
+function cardBody(s: Session, width: number): Line[] {
+	const plain = (text: string) =>
+		wrap(text, width, 2).map((t): Line => [{ text: t, style: DIM }]);
+	if (s.summary || !s.lastPrompt) return plain(cardText(s));
+	const you = labelled(
+		"you › ",
+		`"${s.lastPrompt}"`,
+		{ fg: "cyan" },
+		{ fg: "white" },
+		width,
+	);
+	if (s.status === "waiting")
+		return [
+			you,
+			[
+				{
+					text: truncate(s.ask ?? "needs you", width),
+					style: { fg: "yellow" },
+				},
+			],
+		];
+	if (s.status === "working")
+		return [you, [{ text: "working…", style: { fg: "blue" } }]];
+	if (s.status === "dead")
+		return [you, [{ text: "Session ended.", style: DIM }]];
+	if (s.lastAssistantMessage)
+		return [
+			you,
+			labelled(
+				"claude › ",
+				s.lastAssistantMessage,
+				DIM,
+				{ fg: "white" },
+				width,
+			),
+		];
+	return [you];
+}
+
 function drawCard(
 	canvas: Canvas,
 	s: Session,
@@ -153,19 +213,15 @@ function drawCard(
 
 	const inner = CARD_W - 4;
 	canvas.text(x + 2, y + 1, "no PR yet", { fg: "gray", dim: true });
-	wrap(cardText(s), inner, 2).forEach((line, i) => {
-		canvas.text(x + 2, y + 2 + i, line, DIM);
+	cardBody(s, inner).forEach((line, i) => {
+		let at = x + 2;
+		for (const run of line)
+			at = canvas.text(at, y + 2 + i, run.text, run.style);
 	});
 	if (focused) {
-		if (s.lastPrompt) {
-			const col2 = canvas.text(x + 2, y + 4, "you › ", { fg: "cyan" });
-			canvas.text(col2, y + 4, truncate(`"${s.lastPrompt}"`, inner - 6), {
-				fg: "whiteBright",
-			});
-		}
 		const input = replyText === null ? "› " : `› ${replyText}█`;
-		canvas.fill(x + 2, y + 5, inner, 1, { bg: "black" });
-		canvas.text(x + 2, y + 5, truncate(input, inner), {
+		canvas.fill(x + 2, y + 4, inner, 1, { bg: "black" });
+		canvas.text(x + 2, y + 4, truncate(input, inner), {
 			fg: "whiteBright",
 			bg: "black",
 		});

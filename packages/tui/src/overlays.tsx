@@ -40,7 +40,7 @@ export function NewSessionDialog({
 				setError(null);
 				onSubmit({
 					repo,
-					name: v.name,
+					name: v.name.trim().replace(/\s+/g, "-"),
 					cwd: v.cwd,
 					mode,
 					branch: v.branch || undefined,
