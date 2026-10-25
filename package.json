@@ -1,0 +1,22 @@
+{
+	"name": "serenity",
+	"private": true,
+	"type": "module",
+	"workspaces": [
+		"packages/*"
+	],
+	"scripts": {
+		"dev": "bun packages/cli/src/main.ts",
+		"lint": "biome check .",
+		"format": "biome check --write .",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"test": "bun test packages",
+		"test:e2e": "bun test e2e",
+		"build": "bun scripts/build.ts"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.6.3",
+		"@types/bun": "1.4.4",
+		"typescript": "7.0.2"
+	}
+}

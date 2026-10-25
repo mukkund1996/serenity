@@ -1,0 +1,22 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "Preserve",
+		"moduleResolution": "bundler",
+		"jsx": "react-jsx",
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"noFallthroughCasesInSwitch": true,
+		"verbatimModuleSyntax": true,
+		"skipLibCheck": true,
+		"types": ["bun"],
+		"noEmit": true
+	},
+	"include": [
+		"packages/*/src",
+		"packages/*/test",
+		"packages/*/test-support",
+		"e2e",
+		"scripts"
+	]
+}

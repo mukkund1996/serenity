@@ -1,0 +1,254 @@
+import { connect as netConnect, type Socket } from "node:net";
+import type { HookKind, HookPayload, RepoState, Session } from "./domain";
+
+/**
+ * JSON-RPC 2.0 over a unix socket, one JSON message per line (ADR 0005).
+ * Both ends are an RpcPeer: the daemon answers requests and pushes
+ * notifications; clients do the reverse.
+ */
+
+export type SessionMode = "worktree" | "branch";
+
+export interface CreateSessionParams {
+	repo: string;
+	name: string;
+	/** Directory to run in when mode is "branch" and the branch is already checked out there. */
+	cwd: string;
+	mode: SessionMode;
+	/** Branch to create (worktree) or to check out (branch). Defaults to the name. */
+	branch?: string;
+}
+
+export interface Methods {
+	hello: {
+		params: { clientVersion: string };
+		result: { daemonVersion: string; pid: number };
+	};
+	"state.subscribe": { params: { repo: string }; result: RepoState };
+	"session.create": { params: CreateSessionParams; result: Session };
+	"session.reply": { params: { id: string; text: string }; result: null };
+	"session.attach": {
+		params: { id: string; clientPane: string };
+		result: null;
+	};
+	/** Detach by the agent's pane (from the tmux Ctrl+g binding) or by session id. */
+	"session.detach": { params: { pane?: string; id?: string }; result: null };
+	"hook.event": {
+		params: { sessionId: string; kind: HookKind; payload: HookPayload };
+		result: null;
+	};
+	"daemon.shutdown": { params: Record<string, never>; result: null };
+}
+
+export interface Notifications {
+	"state.changed": RepoState;
+}
+
+export type Method = keyof Methods;
+export type Params<M extends Method> = Methods[M]["params"];
+export type Result<M extends Method> = Methods[M]["result"];
+
+export const RpcErrorCode = {
+	ParseError: -32700,
+	MethodNotFound: -32601,
+	InvalidParams: -32602,
+	Internal: -32603,
+	Timeout: -32000,
+	Closed: -32001,
+} as const;
+
+export class RpcError extends Error {
+	constructor(
+		readonly code: number,
+		message: string,
+	) {
+		super(message);
+		this.name = "RpcError";
+	}
+}
+
+type Message =
+	| { jsonrpc: "2.0"; id: number; method: string; params?: unknown }
+	| { jsonrpc: "2.0"; method: string; params?: unknown }
+	| { jsonrpc: "2.0"; id: number; result: unknown }
+	| { jsonrpc: "2.0"; id: number; error: { code: number; message: string } };
+
+type RequestHandler = (
+	method: string,
+	params: unknown,
+) => Promise<unknown> | unknown;
+type NotificationHandler = (method: string, params: unknown) => void;
+
+interface Pending {
+	resolve: (value: unknown) => void;
+	reject: (error: Error) => void;
+	timer: ReturnType<typeof setTimeout> | null;
+}
+
+export class RpcPeer {
+	private buffer = "";
+	private nextId = 1;
+	private readonly pending = new Map<number, Pending>();
+	private requestHandler: RequestHandler | null = null;
+	private notificationHandler: NotificationHandler | null = null;
+	private readonly closeHandlers: Array<() => void> = [];
+	private closed = false;
+
+	constructor(private readonly socket: Socket) {
+		socket.setEncoding("utf8");
+		socket.on("data", (chunk: string) => this.receive(chunk));
+		socket.on("error", () => this.shutdown());
+		socket.on("close", () => this.shutdown());
+	}
+
+	request<M extends Method>(
+		method: M,
+		params: Params<M>,
+		opts: { timeoutMs?: number } = {},
+	): Promise<Result<M>> {
+		if (this.closed)
+			return Promise.reject(
+				new RpcError(RpcErrorCode.Closed, "connection closed"),
+			);
+		const id = this.nextId++;
+		return new Promise<Result<M>>((resolve, reject) => {
+			const timer = opts.timeoutMs
+				? setTimeout(() => {
+						this.pending.delete(id);
+						reject(new RpcError(RpcErrorCode.Timeout, `${method} timed out`));
+					}, opts.timeoutMs)
+				: null;
+			this.pending.set(id, {
+				resolve: resolve as (v: unknown) => void,
+				reject,
+				timer,
+			});
+			this.send({ jsonrpc: "2.0", id, method, params });
+		});
+	}
+
+	notify<N extends keyof Notifications>(
+		method: N,
+		params: Notifications[N],
+	): void {
+		this.send({ jsonrpc: "2.0", method, params });
+	}
+
+	onRequest(handler: RequestHandler): void {
+		this.requestHandler = handler;
+	}
+
+	onNotification(handler: NotificationHandler): void {
+		this.notificationHandler = handler;
+	}
+
+	onClose(handler: () => void): void {
+		if (this.closed) handler();
+		else this.closeHandlers.push(handler);
+	}
+
+	get isClosed(): boolean {
+		return this.closed;
+	}
+
+	close(): void {
+		this.socket.end();
+		this.shutdown();
+	}
+
+	private send(message: Message): void {
+		if (this.closed) return;
+		this.socket.write(`${JSON.stringify(message)}\n`);
+	}
+
+	private receive(chunk: string): void {
+		this.buffer += chunk;
+		let newline = this.buffer.indexOf("\n");
+		while (newline !== -1) {
+			const line = this.buffer.slice(0, newline).trim();
+			this.buffer = this.buffer.slice(newline + 1);
+			if (line) this.dispatch(line);
+			newline = this.buffer.indexOf("\n");
+		}
+	}
+
+	private dispatch(line: string): void {
+		let message: Message;
+		try {
+			message = JSON.parse(line);
+		} catch {
+			this.send({
+				jsonrpc: "2.0",
+				id: 0,
+				error: { code: RpcErrorCode.ParseError, message: "invalid JSON" },
+			});
+			return;
+		}
+		if ("method" in message) {
+			if ("id" in message)
+				void this.answer(message.id, message.method, message.params);
+			else this.notificationHandler?.(message.method, message.params);
+			return;
+		}
+		const pending = this.pending.get(message.id);
+		if (!pending) return;
+		this.pending.delete(message.id);
+		if (pending.timer) clearTimeout(pending.timer);
+		if ("error" in message)
+			pending.reject(new RpcError(message.error.code, message.error.message));
+		else pending.resolve(message.result);
+	}
+
+	private async answer(
+		id: number,
+		method: string,
+		params: unknown,
+	): Promise<void> {
+		if (!this.requestHandler) {
+			this.send({
+				jsonrpc: "2.0",
+				id,
+				error: { code: RpcErrorCode.MethodNotFound, message: method },
+			});
+			return;
+		}
+		try {
+			const result = await this.requestHandler(method, params);
+			this.send({ jsonrpc: "2.0", id, result: result ?? null });
+		} catch (error) {
+			const code =
+				error instanceof RpcError ? error.code : RpcErrorCode.Internal;
+			const message = error instanceof Error ? error.message : String(error);
+			this.send({ jsonrpc: "2.0", id, error: { code, message } });
+		}
+	}
+
+	private shutdown(): void {
+		if (this.closed) return;
+		this.closed = true;
+		for (const [, pending] of this.pending) {
+			if (pending.timer) clearTimeout(pending.timer);
+			pending.reject(new RpcError(RpcErrorCode.Closed, "connection closed"));
+		}
+		this.pending.clear();
+		for (const handler of this.closeHandlers) handler();
+	}
+}
+
+export function connectRpc(path: string, timeoutMs = 1000): Promise<RpcPeer> {
+	return new Promise((resolve, reject) => {
+		const socket = netConnect(path);
+		const timer = setTimeout(() => {
+			socket.destroy();
+			reject(new RpcError(RpcErrorCode.Timeout, "connect timed out"));
+		}, timeoutMs);
+		socket.once("connect", () => {
+			clearTimeout(timer);
+			resolve(new RpcPeer(socket));
+		});
+		socket.once("error", (error) => {
+			clearTimeout(timer);
+			reject(error);
+		});
+	});
+}

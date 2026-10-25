@@ -1,0 +1,80 @@
+export const VERSION = "0.1.0";
+
+export type SessionStatus =
+	| "waiting"
+	| "working"
+	| "idle"
+	| "done"
+	| "dead"
+	| "archived";
+
+export interface Session {
+	id: string;
+	/** Absolute path of the repo root this session belongs to; the map is scoped by it. */
+	repo: string;
+	name: string;
+	/** Assigned by the master; null until it has placed the session. */
+	category: string | null;
+	cwd: string;
+	worktree: string | null;
+	branch: string | null;
+	tmuxPane: string | null;
+	status: SessionStatus;
+	/** ≤2 sentences, written by the master. */
+	summary: string | null;
+	/** One line: what the agent needs from the user. */
+	ask: string | null;
+	lastPrompt: string | null;
+	lastAssistantMessage: string | null;
+	transcriptPath: string | null;
+	claudeSessionId: string | null;
+	watched: boolean;
+	createdAt: number;
+	updatedAt: number;
+}
+
+export const HOOK_KINDS = [
+	"SessionStart",
+	"UserPromptSubmit",
+	"PostToolUse",
+	"PermissionRequest",
+	"Notification",
+	"Stop",
+	"SessionEnd",
+] as const;
+
+export type HookKind = (typeof HOOK_KINDS)[number];
+
+export function isHookKind(value: string): value is HookKind {
+	return (HOOK_KINDS as readonly string[]).includes(value);
+}
+
+/** The JSON Claude Code writes to a hook's stdin. Only the fields we read are typed. */
+export interface HookPayload {
+	session_id?: string;
+	transcript_path?: string;
+	cwd?: string;
+	hook_event_name?: string;
+	prompt?: string;
+	message?: string;
+	notification_type?: string;
+	last_assistant_message?: string;
+	tool_name?: string;
+	[key: string]: unknown;
+}
+
+export interface HookEvent {
+	id: number;
+	sessionId: string;
+	kind: HookKind;
+	payload: HookPayload;
+	at: number;
+}
+
+/** What a client sees for one repo. */
+export interface RepoState {
+	repo: string;
+	sessions: Session[];
+	/** Session currently joined into a serenity window, if any. */
+	attachedSessionId: string | null;
+}
