@@ -10,13 +10,14 @@ const WAITING_NOTIFICATIONS = new Set([
 
 const ONE_LINE_MAX = 200;
 
-function oneLine(text: string | undefined): string | null {
+/** Enough of the agent's reply for the summarizer; cards cut it further. */
+const REPLY_MAX = 2000;
+
+function oneLine(text: string | undefined, max = ONE_LINE_MAX): string | null {
 	if (!text) return null;
 	const line = text.replace(/\s+/g, " ").trim();
 	if (!line) return null;
-	return line.length > ONE_LINE_MAX
-		? `${line.slice(0, ONE_LINE_MAX - 1)}…`
-		: line;
+	return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 
 function permissionAsk(payload: HookPayload): string {
@@ -46,10 +47,12 @@ export function reduceHook(
 		case "SessionStart":
 			patch.status = "idle";
 			patch.ask = null;
+			patch.waitingOn = null;
 			break;
 		case "UserPromptSubmit":
 			patch.status = "working";
 			patch.ask = null;
+			patch.waitingOn = null;
 			patch.lastPrompt = oneLine(payload.prompt);
 			// The previous reply is older than this prompt now.
 			patch.lastAssistantMessage = null;
@@ -58,11 +61,13 @@ export function reduceHook(
 			if (session.status === "waiting" || session.status === "idle") {
 				patch.status = "working";
 				patch.ask = null;
+				patch.waitingOn = null;
 			}
 			break;
 		case "PermissionRequest":
 			patch.status = "waiting";
 			patch.ask = permissionAsk(payload);
+			patch.waitingOn = "permission";
 			break;
 		case "Notification": {
 			const type = payload.notification_type;
@@ -71,6 +76,11 @@ export function reduceHook(
 				: /permission|needs your/i.test(payload.message ?? "");
 			if (blocking) {
 				patch.status = "waiting";
+				patch.waitingOn =
+					type === "permission_prompt" ||
+					(!type && /permission/i.test(payload.message ?? ""))
+						? "permission"
+						: "question";
 				// A PermissionRequest just before it says more than the generic message.
 				if (session.status !== "waiting" || !session.ask)
 					patch.ask = oneLine(payload.message) ?? "needs you";
@@ -80,11 +90,16 @@ export function reduceHook(
 		case "Stop":
 			patch.status = "idle";
 			patch.ask = null;
-			patch.lastAssistantMessage = oneLine(payload.last_assistant_message);
+			patch.waitingOn = null;
+			patch.lastAssistantMessage = oneLine(
+				payload.last_assistant_message,
+				REPLY_MAX,
+			);
 			break;
 		case "SessionEnd":
 			patch.status = "dead";
 			patch.ask = null;
+			patch.waitingOn = null;
 			break;
 	}
 	return patch;

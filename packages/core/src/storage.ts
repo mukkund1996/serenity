@@ -1,4 +1,11 @@
-import type { HookEvent, HookKind, HookPayload, Session } from "./domain";
+import type {
+	HookEvent,
+	HookKind,
+	HookPayload,
+	MasterMessage,
+	Session,
+	Suggestion,
+} from "./domain";
 
 /**
  * Storage interfaces (ADR 0009). They speak domain types only, so a backend
@@ -27,9 +34,27 @@ export interface EventStore {
 	listForSession(sessionId: string, limit: number): HookEvent[];
 }
 
+export interface SuggestionStore {
+	get(id: string): Suggestion | null;
+	/** Inserts or replaces the whole suggestion. */
+	put(suggestion: Suggestion): void;
+	/** Pending suggestions of a repo, oldest first. */
+	listPending(repo: string): Suggestion[];
+}
+
+export type NewMasterMessage = Omit<MasterMessage, "id">;
+
+export interface ConversationStore {
+	append(message: NewMasterMessage): MasterMessage;
+	/** The newest `limit` messages of a repo, oldest first. */
+	listRecent(repo: string, limit: number): MasterMessage[];
+}
+
 export interface Storage {
 	readonly sessions: SessionStore;
 	readonly events: EventStore;
+	readonly suggestions: SuggestionStore;
+	readonly conversation: ConversationStore;
 	/** Runs `fn` atomically; nested calls join the outer transaction. */
 	transaction<T>(fn: () => T): T;
 	close(): void;
@@ -38,7 +63,10 @@ export interface Storage {
 export function createMemoryStorage(): Storage {
 	const sessions = new Map<string, Session>();
 	const events: HookEvent[] = [];
+	const suggestions = new Map<string, Suggestion>();
+	const messages: MasterMessage[] = [];
 	let nextEventId = 1;
+	let nextMessageId = 1;
 
 	return {
 		sessions: {
@@ -73,6 +101,32 @@ export function createMemoryStorage(): Storage {
 					.filter((e) => e.sessionId === sessionId)
 					.reverse()
 					.slice(0, limit),
+		},
+		suggestions: {
+			get: (id) => {
+				const s = suggestions.get(id);
+				return s ? { ...s } : null;
+			},
+			put: (suggestion) => {
+				suggestions.set(suggestion.id, { ...suggestion });
+			},
+			listPending: (repo) =>
+				[...suggestions.values()]
+					.filter((s) => s.repo === repo && s.status === "pending")
+					.sort((a, b) => a.createdAt - b.createdAt)
+					.map((s) => ({ ...s })),
+		},
+		conversation: {
+			append: (message) => {
+				const stored = { ...message, id: nextMessageId++ };
+				messages.push(stored);
+				return { ...stored };
+			},
+			listRecent: (repo, limit) =>
+				messages
+					.filter((m) => m.repo === repo)
+					.slice(-limit)
+					.map((m) => ({ ...m })),
 		},
 		transaction: (fn) => fn(),
 		close: () => {},

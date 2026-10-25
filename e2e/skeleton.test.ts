@@ -90,6 +90,8 @@ async function newSession(name: string): Promise<void> {
 				.includes(name),
 		`a window for ${name}`,
 	);
+	// The window appears before the dialog closes; keys typed earlier land in it.
+	await until(() => !screen().includes("Working dir"), "the dialog to close");
 }
 
 beforeAll(() => {
@@ -120,6 +122,7 @@ beforeAll(() => {
 		SERENITY_CLAUDE_BIN: FAKE,
 		SERENITY_SELF: JSON.stringify([process.execPath, MAIN]),
 		SERENITY_STARTUP_GRACE_MS: "300",
+		SERENITY_WORKER_DEBOUNCE_MS: "100",
 	};
 	const envArgs = Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
 	tmux(
@@ -176,31 +179,31 @@ test(
 );
 
 test(
-	"a reply reaches the agent and its hooks update the card",
+	"a reply reaches the agent; Haiku summarises it and Sonnet suggests a cleanup",
 	async () => {
 		keys("i");
 		// Text and Enter in one burst, the way a paste arrives.
 		type("rotate tokens\r");
-		await waitFor(/Done: rotate tokens/);
-		expect(screen()).toContain('you › "rotate tokens"');
+		const done = await waitFor(/Summary: Done: rotate tokens/);
+		expect(done).toContain("✓ api-auth");
+		expect(done).toContain("backend ·");
+		await waitFor(/◆ Clean up the worktree/);
 	},
 	STEP_TIMEOUT,
 );
 
 test(
-	"a permission prompt shows as waiting everywhere, and clears when answered",
+	"a permission prompt waits, the master suggests approving, and y approves it",
 	async () => {
 		keys("i");
 		type("needs permission\r");
 		const waiting = await waitFor(/WAITING/);
 		expect(waiting).toContain("1 need you");
-		expect(waiting).toContain("NEEDS YOU 1");
-		expect(waiting).toContain("Claude needs your permission to use Bash");
-
-		keys("i");
-		type("yes\r");
-		const done = await waitFor(/Ran it\./);
-		expect(done).not.toContain("WAITING");
+		expect(waiting).toContain("wants to run touch x");
+		await waitFor(/◆ Approve: run it/);
+		keys("y");
+		const after = await waitFor(/Summary: Ran it\./);
+		expect(after).not.toContain("WAITING");
 	},
 	STEP_TIMEOUT,
 );
@@ -227,6 +230,48 @@ test(
 			"the agent pane to be parked again",
 		);
 		await waitFor(/zoom: topics/);
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"g messages the master; its reply shows in the conversation",
+	async () => {
+		keys("g");
+		type("status?\r");
+		const chat = await waitFor(/Heard: status\?/);
+		expect(chat).toMatch(/you\s+status\?/);
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"the master's suggest tool reaches NEEDS YOU through serenity mcp; n declines it",
+	async () => {
+		keys("g");
+		type("suggest a reply to api-auth\r");
+		await waitFor(/◆ Reply "ok"/);
+		keys("n");
+		await until(
+			() => !screen().includes('◆ Reply "ok"'),
+			"the suggestion to go",
+		);
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"the master's permission request waits at the top of NEEDS YOU until y",
+	async () => {
+		keys("g");
+		type("ask permission\r");
+		const asking = await waitFor(/master wants to use Bash/);
+		expect(asking).toContain("npm test");
+		keys("Tab");
+		await waitFor(/▸ ◆ master wants to use Bash/);
+		keys("y");
+		await waitFor(/Permission: allow/);
+		expect(screen()).not.toContain("master wants to use Bash");
 	},
 	STEP_TIMEOUT,
 );
@@ -270,6 +315,31 @@ test(
 	async () => {
 		typeInAgent("api-auth", "exit");
 		await until(() => endedCards() === 3, "api-auth to show as ended");
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"y on a cleanup suggestion stops the session, removes its worktree and merged branch",
+	async () => {
+		await newSession("tidy");
+		keys("i");
+		type("finish\r");
+		await waitFor(/◆ Clean up the worktree/);
+		keys("y");
+		await until(
+			() => !existsSync(join(dir, "repos", "demo-tidy")),
+			"the tidy worktree to be removed",
+		);
+		const branches = spawnSync(
+			"git",
+			["-C", repo, "branch", "--list", "tidy"],
+			{
+				encoding: "utf8",
+			},
+		).stdout;
+		expect(branches.trim()).toBe("");
+		await waitFor(/Archived\. Summary: Done: finish/);
 	},
 	STEP_TIMEOUT,
 );

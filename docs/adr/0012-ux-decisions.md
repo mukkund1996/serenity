@@ -17,7 +17,11 @@ The canvas's colours, frames, status language, card anatomy and keymap are final
 | Failures | By severity: daemon or master down → red chip in the header; per-session problems (gh error, pane gone) → on that card. |
 | Master busy | Spinner next to `◆ master`. |
 | Config | JSON at `~/.config/serenity/config.json` (XDG). |
-| Master permission prompts | Shown in the master panel (0008); layout to design. |
+| Master permission prompts | Top of NEEDS YOU: "◆ master wants to use <tool>", the command below, `y` allow / `n` deny (0008). |
+| `n` (design keymap conflict) | On an item with a pending suggestion `n` declines it; elsewhere it opens New session. `N` always opens New session. |
+| `y e n` target | The selected NEEDS YOU item: `Tab` / `⇧Tab` cycle through the master's requests, then NEEDS YOU; WASD selects cards. |
+| `e` | Reply: edit the text in the card's input, Enter sends. Cleanup: open Confirm. Approve: attach to inspect the prompt first. |
+| Conversation | The latest exchange (your message, the master's reply), a few lines each; the full history is `M` (v1.1). |
 
 ## Consequences
 - The spinner is the one animation; keep its tick cheap (no full canvas re-render).

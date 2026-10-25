@@ -20,3 +20,31 @@ test("data survives reopening", () => {
 	expect(second.events.listForSession("s1", 5)).toHaveLength(1);
 	second.close();
 });
+
+test("sessions written before milestone 2 read back with the new fields", async () => {
+	const { Database } = await import("bun:sqlite");
+	const path = join(dir, "old.db");
+	const first = createSqliteStorage(path);
+	first.close();
+	const raw = new Database(path);
+	raw.run(
+		"INSERT INTO sessions (id, repo, created_at, data) VALUES ('old', '/r', 1, ?)",
+		[
+			JSON.stringify({
+				id: "old",
+				repo: "/r",
+				name: "legacy",
+				status: "idle",
+				createdAt: 1,
+			}),
+		],
+	);
+	raw.close();
+	const second = createSqliteStorage(path);
+	expect(second.sessions.get("old")).toMatchObject({
+		name: "legacy",
+		waitingOn: null,
+		categoryCandidate: null,
+	});
+	second.close();
+});

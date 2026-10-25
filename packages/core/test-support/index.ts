@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { Session } from "../src/domain";
+import type { Session, Suggestion } from "../src/domain";
 import type { Storage } from "../src/storage";
 
 export function makeSession(overrides: Partial<Session> = {}): Session {
@@ -11,15 +11,36 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
 		cwd: "/repos/demo-api-auth",
 		worktree: "/repos/demo-api-auth",
 		branch: "api-auth",
+		ownsBranch: true,
 		tmuxPane: "%1",
 		status: "idle",
 		summary: null,
 		ask: null,
+		waitingOn: null,
+		categoryCandidate: null,
 		lastPrompt: null,
 		lastAssistantMessage: null,
 		transcriptPath: null,
 		claudeSessionId: null,
 		watched: false,
+		createdAt: 1,
+		updatedAt: 1,
+		...overrides,
+	};
+}
+
+export function makeSuggestion(
+	overrides: Partial<Suggestion> = {},
+): Suggestion {
+	return {
+		id: "g1",
+		repo: "/repos/demo",
+		sessionId: "s1",
+		kind: "reply",
+		label: 'Reply "yes"',
+		text: "yes",
+		status: "pending",
+		source: "worker",
 		createdAt: 1,
 		updatedAt: 1,
 		...overrides,
@@ -120,6 +141,48 @@ export function storageContract(name: string, open: () => Storage): void {
 				});
 			});
 			expect(storage.sessions.get("s1")).not.toBeNull();
+		});
+
+		test("suggestions: put, get, and pending ones per repo in order", () => {
+			storage.suggestions.put(makeSuggestion({ id: "b", createdAt: 2 }));
+			storage.suggestions.put(makeSuggestion({ id: "a", createdAt: 1 }));
+			storage.suggestions.put(makeSuggestion({ id: "c", status: "declined" }));
+			storage.suggestions.put(
+				makeSuggestion({ id: "d", repo: "/repos/other" }),
+			);
+			expect(storage.suggestions.get("a")).toEqual(
+				makeSuggestion({ id: "a", createdAt: 1 }),
+			);
+			expect(
+				storage.suggestions.listPending("/repos/demo").map((g) => g.id),
+			).toEqual(["a", "b"]);
+			storage.suggestions.put(
+				makeSuggestion({ id: "a", createdAt: 1, status: "accepted" }),
+			);
+			expect(
+				storage.suggestions.listPending("/repos/demo").map((g) => g.id),
+			).toEqual(["b"]);
+			expect(storage.suggestions.get("nope")).toBeNull();
+		});
+
+		test("conversation: append and list the newest messages oldest first", () => {
+			for (const [i, text] of ["one", "two", "three"].entries())
+				storage.conversation.append({
+					repo: "/repos/demo",
+					from: i % 2 ? "master" : "you",
+					text,
+					at: i,
+				});
+			storage.conversation.append({
+				repo: "/repos/other",
+				from: "you",
+				text: "x",
+				at: 9,
+			});
+			const recent = storage.conversation.listRecent("/repos/demo", 2);
+			expect(recent.map((m) => m.text)).toEqual(["two", "three"]);
+			expect(recent[0]?.from).toBe("master");
+			expect(recent[1]?.id).toBeGreaterThan(recent[0]?.id ?? 0);
 		});
 	});
 }

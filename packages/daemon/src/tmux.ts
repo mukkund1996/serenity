@@ -133,6 +133,15 @@ export class Tmux {
 		]);
 	}
 
+	/** Presses one key (no Enter), e.g. "1" to pick the first option of a menu. */
+	async pressKey(pane: string, key: string): Promise<void> {
+		await this.cmd(["send-keys", "-t", pane, key]);
+	}
+
+	async killPane(pane: string): Promise<void> {
+		await this.cmd(["kill-pane", "-t", pane]);
+	}
+
 	selectPane(pane: string): Promise<string> {
 		return this.cmd(["select-pane", "-t", pane]);
 	}

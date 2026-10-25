@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:net";
+import { join } from "node:path";
 import {
+	type CleanupPlan,
 	type CreateSessionParams,
 	hookSettingsPath,
 	isHookKind,
+	loadConfig,
 	type Method,
 	type Params,
 	type RepoState,
@@ -20,14 +23,22 @@ import {
 	tmuxSessionName,
 	VERSION,
 } from "@serenity/core";
+import { type ClaudeRunner, CliClaudeRunner } from "./claude";
+import { type CleanupFacts, cleanupPlan, plannedRemovals } from "./cleanup";
+import { run } from "./exec";
 import {
 	addWorktree,
 	branchExists,
+	commitsNotIn,
 	currentBranch,
 	defaultBase,
+	deleteBranch,
+	dirtyCount,
+	removeWorktree,
 	siblingWorktreePath,
 } from "./git";
 import { agentCommand, shellQuote, writeHookSettings } from "./hooks";
+import { type MasterModels, MasterSupervisor } from "./master";
 import { Tmux } from "./tmux";
 
 export interface DaemonOptions {
@@ -36,6 +47,9 @@ export interface DaemonOptions {
 	tmux?: Tmux;
 	/** The command spawned for each session; SERENITY_CLAUDE_BIN overrides it (the E2E fake). */
 	claudeCommand?: string[];
+	/** Runs the master's claude processes; defaults to the CLI. */
+	runner?: ClaudeRunner;
+	models?: MasterModels;
 	now?: () => number;
 	log?: (line: string) => void;
 	/**
@@ -43,6 +57,8 @@ export interface DaemonOptions {
 	 * Claude's startup prompt. SERENITY_STARTUP_GRACE_MS overrides it.
 	 */
 	startupGraceMs?: number;
+	/** Quiet time before a summary or suggestion runs; SERENITY_WORKER_DEBOUNCE_MS overrides it. */
+	workerDebounceMs?: number;
 }
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,39}$/i;
@@ -54,6 +70,10 @@ const ATTACH_PERCENT = 67;
  */
 const DEFAULT_STARTUP_GRACE_MS = 5000;
 const STARTUP_ASK = "confirm Claude's startup prompt (folder trust)";
+/** A burst of hooks (tool calls, then Stop) yields one model call. */
+const DEFAULT_WORKER_DEBOUNCE_MS = 1500;
+/** Messages of the master conversation sent to clients. */
+const CONVERSATION_SHOWN = 4;
 
 type Handlers = {
 	[M in Method]: (
@@ -61,6 +81,9 @@ type Handlers = {
 		peer: RpcPeer,
 	) => Promise<Result<M>> | Result<M>;
 };
+
+const envNumber = (name: string, fallback: number) =>
+	process.env[name] ? Number(process.env[name]) : fallback;
 
 export class Daemon {
 	private server: Server | null = null;
@@ -77,6 +100,7 @@ export class Daemon {
 	private readonly log: (line: string) => void;
 	private readonly startupGraceMs: number;
 	private readonly timers = new Set<ReturnType<typeof setTimeout>>();
+	private readonly master: MasterSupervisor;
 	private stopped: (() => void) | null = null;
 	readonly done: Promise<void>;
 
@@ -88,17 +112,33 @@ export class Daemon {
 		this.now = opts.now ?? Date.now;
 		this.startupGraceMs =
 			opts.startupGraceMs ??
-			Number(process.env.SERENITY_STARTUP_GRACE_MS ?? DEFAULT_STARTUP_GRACE_MS);
+			envNumber("SERENITY_STARTUP_GRACE_MS", DEFAULT_STARTUP_GRACE_MS);
 		this.log =
 			opts.log ??
 			((line) => console.log(`${new Date().toISOString()} ${line}`));
+		this.master = new MasterSupervisor(
+			{
+				storage: opts.storage,
+				now: this.now,
+				log: this.log,
+				broadcast: (repo) => this.broadcast(repo),
+				update: (session, patch) => this.update(session, patch),
+				mcpConfig: (repo) => this.mcpConfig(repo),
+				workerCwd: join(opts.home, "workers"),
+				models: opts.models ?? loadConfig().models,
+				debounceMs:
+					opts.workerDebounceMs ??
+					envNumber("SERENITY_WORKER_DEBOUNCE_MS", DEFAULT_WORKER_DEBOUNCE_MS),
+			},
+			opts.runner ?? new CliClaudeRunner(this.claudeCommand),
+		);
 		this.done = new Promise((resolve) => {
 			this.stopped = resolve;
 		});
 	}
 
 	async start(): Promise<void> {
-		mkdirSync(this.opts.home, { recursive: true });
+		mkdirSync(join(this.opts.home, "workers"), { recursive: true });
 		writeHookSettings(hookSettingsPath(this.opts.home), this.self);
 		const path = socketPath(this.opts.home);
 		if (existsSync(path)) rmSync(path);
@@ -112,6 +152,7 @@ export class Daemon {
 
 	async stop(): Promise<void> {
 		for (const timer of this.timers) clearTimeout(timer);
+		this.master.stop();
 		for (const peer of this.subscriptions.keys()) peer.close();
 		await new Promise<void>((resolve) =>
 			this.server ? this.server.close(() => resolve()) : resolve(),
@@ -142,6 +183,13 @@ export class Daemon {
 			repo,
 			sessions: this.opts.storage.sessions.listByRepo(repo),
 			attachedSessionId: this.attached.get(repo)?.sessionId ?? null,
+			suggestions: this.opts.storage.suggestions.listPending(repo),
+			conversation: this.opts.storage.conversation.listRecent(
+				repo,
+				CONVERSATION_SHOWN,
+			),
+			permissions: this.master.permissions(repo),
+			master: this.master.state(repo),
 		};
 	}
 
@@ -161,6 +209,13 @@ export class Daemon {
 	private update(session: Session, patch: Partial<Session>): Session {
 		const next = { ...session, ...patch, updatedAt: this.now() };
 		this.opts.storage.sessions.put(next);
+		return next;
+	}
+
+	/** Updates a session and lets the master react (summaries, suggestions). */
+	private change(session: Session, patch: Partial<Session>): Session {
+		const next = this.update(session, patch);
+		this.master.onSessionChanged(session, next);
 		return next;
 	}
 
@@ -205,6 +260,95 @@ export class Daemon {
 			return null;
 		},
 
+		"session.watch": ({ id, watched }) => {
+			const session = this.requireSession(id);
+			this.change(session, { watched });
+			this.broadcast(session.repo);
+			return null;
+		},
+
+		"session.cleanupPlan": async ({ id }) =>
+			cleanupPlan(
+				this.requireSession(id),
+				await this.cleanupFacts(this.requireSession(id)),
+			),
+
+		"session.cleanup": async ({ id }) => {
+			await this.cleanup(this.requireSession(id));
+			return null;
+		},
+
+		"suggestion.accept": async ({ id, text }) => {
+			const suggestion = this.opts.storage.suggestions.get(id);
+			if (suggestion?.status !== "pending")
+				throw new RpcError(
+					RpcErrorCode.InvalidParams,
+					"that suggestion is no longer pending",
+				);
+			const session = this.requireSession(suggestion.sessionId);
+			const settle = (status: "accepted" | "failed") =>
+				this.opts.storage.suggestions.put({
+					...suggestion,
+					status,
+					updatedAt: this.now(),
+				});
+			try {
+				if (suggestion.kind === "reply") {
+					const pane = await this.requireLivePane(session);
+					await this.tmux.sendText(pane, text ?? suggestion.text ?? "");
+				} else if (suggestion.kind === "approve") {
+					if (session.waitingOn !== "permission")
+						throw new RpcError(
+							RpcErrorCode.InvalidParams,
+							`${session.name} is no longer waiting on a permission prompt`,
+						);
+					// "1" picks "Yes" in Claude Code's numbered permission menu.
+					await this.tmux.pressKey(await this.requireLivePane(session), "1");
+				} else {
+					await this.cleanup(session);
+				}
+				settle("accepted");
+			} catch (error) {
+				settle("failed");
+				throw error;
+			} finally {
+				this.broadcast(session.repo);
+			}
+			return null;
+		},
+
+		"suggestion.decline": ({ id }) => {
+			const suggestion = this.opts.storage.suggestions.get(id);
+			if (suggestion?.status === "pending") {
+				this.opts.storage.suggestions.put({
+					...suggestion,
+					status: "declined",
+					updatedAt: this.now(),
+				});
+				this.broadcast(suggestion.repo);
+			}
+			return null;
+		},
+
+		"master.message": ({ repo, text }) => {
+			if (!text.trim())
+				throw new RpcError(RpcErrorCode.InvalidParams, "empty message");
+			this.master.message(repo, text.trim());
+			return null;
+		},
+
+		"master.permission": ({ id, allow }) => {
+			if (!this.master.answerPermission(id, allow))
+				throw new RpcError(
+					RpcErrorCode.InvalidParams,
+					"that request is no longer pending",
+				);
+			return null;
+		},
+
+		"master.tool": ({ repo, name, args }) =>
+			this.master.handleTool(repo, name, args),
+
 		"hook.event": ({ sessionId, kind, payload }) => {
 			if (!isHookKind(kind))
 				throw new RpcError(RpcErrorCode.InvalidParams, `unknown hook ${kind}`);
@@ -217,7 +361,7 @@ export class Daemon {
 					payload,
 					at: this.now(),
 				});
-				this.update(session, reduceHook(session, kind, payload));
+				this.change(session, reduceHook(session, kind, payload));
 			});
 			this.broadcast(session.repo);
 			return null;
@@ -248,6 +392,21 @@ export class Daemon {
 		return ["env", ...env, ...this.self, "detach"].map(shellQuote).join(" ");
 	}
 
+	/** `--mcp-config` for a repo's master chat: `serenity mcp <repo>` (ADR 0008). */
+	private mcpConfig(repo: string): string {
+		const [command, ...args] = this.self;
+		return JSON.stringify({
+			mcpServers: {
+				serenity: {
+					type: "stdio",
+					command,
+					args: [...args, "mcp", repo],
+					env: { SERENITY_HOME: this.opts.home },
+				},
+			},
+		});
+	}
+
 	/** The session's pane id; if the pane is gone, the session is marked ended. */
 	private async requireLivePane(session: Session): Promise<string> {
 		const pane = session.tmuxPane;
@@ -260,7 +419,7 @@ export class Daemon {
 		if (this.attached.get(session.repo)?.sessionId === session.id)
 			this.attached.delete(session.repo);
 		if (session.status !== "dead" && session.status !== "archived")
-			this.update(session, { status: "dead", ask: null });
+			this.change(session, { status: "dead", ask: null, waitingOn: null });
 		this.broadcast(session.repo);
 	}
 
@@ -271,7 +430,11 @@ export class Daemon {
 			const session = this.opts.storage.sessions.get(sessionId);
 			if (!session || session.claudeSessionId || session.status !== "idle")
 				return;
-			this.update(session, { status: "waiting", ask: STARTUP_ASK });
+			this.update(session, {
+				status: "waiting",
+				ask: STARTUP_ASK,
+				waitingOn: "startup",
+			});
 			this.broadcast(session.repo);
 		}, this.startupGraceMs);
 		this.timers.add(timer);
@@ -292,6 +455,55 @@ export class Daemon {
 		if (await this.tmux.paneExists(attached.clientPane))
 			await this.tmux.selectPane(attached.clientPane);
 		this.broadcast(session.repo);
+	}
+
+	private async cleanupFacts(session: Session): Promise<CleanupFacts> {
+		const alive =
+			!!session.tmuxPane && (await this.tmux.paneExists(session.tmuxPane));
+		const worktreeOnDisk = !!session.worktree && existsSync(session.worktree);
+		const dirty = worktreeOnDisk
+			? await dirtyCount(session.worktree as string).catch(() => null)
+			: session.worktree
+				? 0
+				: null;
+		const base = await defaultBase(session.repo).catch(() => "HEAD");
+		const unmerged =
+			session.branch && session.ownsBranch
+				? await commitsNotIn(session.repo, base, session.branch).catch(
+						() => null,
+					)
+				: null;
+		return { alive, dirty, unmerged, base };
+	}
+
+	/**
+	 * Stops the agent, removes its worktree and its merged branch when nothing
+	 * would be lost, and keeps the node on the map as archived (design 4b).
+	 */
+	private async cleanup(session: Session): Promise<CleanupPlan> {
+		const facts = await this.cleanupFacts(session);
+		const removals = plannedRemovals(session, facts);
+		if (this.attached.get(session.repo)?.sessionId === session.id)
+			await this.detach(session.id);
+		// Archive first, so the exit that killing the pane causes changes nothing.
+		this.change(session, {
+			status: "archived",
+			ask: null,
+			waitingOn: null,
+			tmuxPane: null,
+		});
+		if (facts.alive && session.tmuxPane)
+			await this.tmux.killPane(session.tmuxPane).catch(() => {});
+		if (removals.removeWorktree && session.worktree) {
+			if (existsSync(session.worktree))
+				await removeWorktree(session.repo, session.worktree);
+			else await run(["git", "-C", session.repo, "worktree", "prune"]);
+		}
+		if (removals.deleteBranch && session.branch)
+			await deleteBranch(session.repo, session.branch);
+		this.log(`cleaned up ${session.name}`);
+		this.broadcast(session.repo);
+		return cleanupPlan(session, facts);
 	}
 
 	private async createSession(params: CreateSessionParams): Promise<Session> {
@@ -364,10 +576,13 @@ export class Daemon {
 			cwd,
 			worktree,
 			branch,
+			ownsBranch: mode === "worktree",
 			tmuxPane: pane,
 			status: "idle",
 			summary: null,
 			ask: null,
+			waitingOn: null,
+			categoryCandidate: null,
 			lastPrompt: null,
 			lastAssistantMessage: null,
 			transcriptPath: null,

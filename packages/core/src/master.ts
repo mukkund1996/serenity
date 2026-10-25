@@ -1,0 +1,237 @@
+import type { Session, Suggestion, SuggestionKind } from "./domain";
+
+/**
+ * The master's model-facing logic (ADR 0007), kept pure: prompts, JSON
+ * schemas, parsing of what the models return, and the rules for applying it.
+ */
+
+const SUMMARY_MAX = 160;
+const ASK_MAX = 100;
+const LABEL_MAX = 60;
+const CATEGORY_MAX = 20;
+
+function clip(text: string, max: number): string {
+	const line = text.replace(/\s+/g, " ").trim();
+	return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+}
+
+/** Lowercase, single-spaced, short; empty becomes null. */
+export function normalizeCategory(raw: unknown): string | null {
+	if (typeof raw !== "string") return null;
+	const name = raw
+		.toLowerCase()
+		.replace(/[^a-z0-9 _-]+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim()
+		.slice(0, CATEGORY_MAX)
+		.trim();
+	return name || null;
+}
+
+/**
+ * Sticky categories: a session without one takes the proposal; a different
+ * proposal only wins when it comes twice in a row, so bubbles do not jump.
+ */
+export function nextCategory(
+	session: Pick<Session, "category" | "categoryCandidate">,
+	proposed: string | null,
+): Pick<Session, "category" | "categoryCandidate"> {
+	if (!proposed || proposed === session.category)
+		return { category: session.category, categoryCandidate: null };
+	if (!session.category || session.categoryCandidate === proposed)
+		return { category: proposed, categoryCandidate: null };
+	return { category: session.category, categoryCandidate: proposed };
+}
+
+// ---------------------------------------------------------------- summarizer
+
+export const SUMMARY_SCHEMA = {
+	type: "object",
+	properties: {
+		summary: { type: "string" },
+		ask: { type: ["string", "null"] },
+		finished: { type: "boolean" },
+		category: { type: "string" },
+	},
+	required: ["summary", "ask", "finished", "category"],
+	additionalProperties: false,
+} as const;
+
+export interface SummaryResult {
+	summary: string;
+	ask: string | null;
+	finished: boolean;
+	category: string | null;
+}
+
+export function summaryPrompt(session: Session, categories: string[]): string {
+	return [
+		"You keep a dashboard of coding-agent sessions and describe one session for its card.",
+		"",
+		`Session: ${session.name}${session.branch ? ` (branch ${session.branch})` : ""}`,
+		`The user's last prompt: ${session.lastPrompt ?? "(none)"}`,
+		`The agent's last reply: ${session.lastAssistantMessage ?? "(none)"}`,
+		`Existing categories: ${categories.length ? categories.join(", ") : "(none yet)"}`,
+		"",
+		"Return:",
+		`- summary: what this session is doing or did, at most 2 short sentences and ${SUMMARY_MAX} characters. Describe the work, not yourself.`,
+		`- ask: if the reply asks the user a question or for a decision, that question in one line under ${ASK_MAX} characters; otherwise null.`,
+		"- finished: true only if the reply says the task is complete and nothing is asked.",
+		"- category: a short lowercase topic of 1–2 words for grouping sessions. Reuse an existing category when it fits.",
+	].join("\n");
+}
+
+export function parseSummary(raw: unknown): SummaryResult | null {
+	if (!raw || typeof raw !== "object") return null;
+	const r = raw as Record<string, unknown>;
+	if (typeof r.summary !== "string" || typeof r.finished !== "boolean")
+		return null;
+	const ask = typeof r.ask === "string" && r.ask.trim() ? r.ask : null;
+	return {
+		summary: clip(r.summary, SUMMARY_MAX),
+		ask: ask ? clip(ask, ASK_MAX) : null,
+		finished: r.finished && !ask,
+		category: normalizeCategory(r.category),
+	};
+}
+
+/**
+ * What a summary changes on the session. An ask makes it wait on a question;
+ * a finished task is done. Only applied to a session that is still idle, so
+ * a summary arriving late never overrides newer activity.
+ */
+export function applySummary(
+	session: Session,
+	result: SummaryResult,
+): Partial<Session> {
+	const patch: Partial<Session> = {
+		summary: result.summary,
+		...nextCategory(session, result.category),
+	};
+	if (session.status !== "idle") return patch;
+	if (result.ask) {
+		patch.status = "waiting";
+		patch.waitingOn = "question";
+		patch.ask = result.ask;
+	} else if (result.finished) {
+		patch.status = "done";
+	}
+	return patch;
+}
+
+// ----------------------------------------------------------------- suggester
+
+export const SUGGESTION_SCHEMA = {
+	type: "object",
+	properties: {
+		kind: { type: "string", enum: ["reply", "approve", "cleanup", "none"] },
+		label: { type: "string" },
+		text: { type: ["string", "null"] },
+	},
+	required: ["kind", "label", "text"],
+	additionalProperties: false,
+} as const;
+
+export interface SuggestionResult {
+	kind: SuggestionKind;
+	label: string;
+	text: string | null;
+}
+
+/** A session needs a suggestion when it starts to need the user. */
+export function needsSuggestion(before: Session, after: Session): boolean {
+	const needs = (s: Session) => s.status === "waiting" || s.status === "done";
+	return (
+		needs(after) &&
+		(!needs(before) ||
+			before.status !== after.status ||
+			before.ask !== after.ask)
+	);
+}
+
+export function suggestionPrompt(session: Session): string {
+	const kinds = [
+		session.waitingOn === "permission"
+			? "- approve: the agent is blocked on a tool permission prompt and approving it looks safe."
+			: null,
+		session.waitingOn === "question" || session.waitingOn === null
+			? "- reply: the agent asked a question; text is the short reply the user would most likely send."
+			: null,
+		session.status === "done"
+			? `- cleanup: the task is finished; stop the session${session.worktree ? " and remove its worktree" : ""}.`
+			: null,
+		"- none: nothing sensible to suggest.",
+	].filter(Boolean);
+	return [
+		"Suggest the single most useful next action for a coding-agent session that needs its user.",
+		"",
+		`Session: ${session.name}`,
+		`Status: ${session.status}${session.waitingOn ? ` (waiting on ${session.waitingOn})` : ""}`,
+		`It asks: ${session.ask ?? "(nothing)"}`,
+		`Summary: ${session.summary ?? "(none)"}`,
+		`The user's last prompt: ${session.lastPrompt ?? "(none)"}`,
+		`The agent's last reply: ${session.lastAssistantMessage ?? "(none)"}`,
+		"",
+		"Allowed kinds:",
+		...kinds,
+		"",
+		`label: what will happen, imperative, under ${LABEL_MAX} characters, e.g. Reply "yes, set it to 15m", Approve: terraform plan, Clean up the worktree.`,
+		"text: the reply text for reply; otherwise null.",
+	].join("\n");
+}
+
+/** Validates the suggester's answer against what the session allows. */
+export function parseSuggestion(
+	raw: unknown,
+	session: Session,
+): SuggestionResult | null {
+	if (!raw || typeof raw !== "object") return null;
+	const r = raw as Record<string, unknown>;
+	const label = typeof r.label === "string" ? clip(r.label, LABEL_MAX) : "";
+	const text =
+		typeof r.text === "string" && r.text.trim() ? r.text.trim() : null;
+	if (!label) return null;
+	if (r.kind === "approve" && session.waitingOn === "permission")
+		return { kind: "approve", label, text: null };
+	if (r.kind === "reply" && text && session.waitingOn !== "permission")
+		return { kind: "reply", label, text };
+	if (r.kind === "cleanup" && session.status === "done")
+		return { kind: "cleanup", label, text: null };
+	return null;
+}
+
+// --------------------------------------------------------------------- chat
+
+export const MASTER_SYSTEM_PROMPT = [
+	"You are the master in serenity, a terminal map of the user's Claude Code sessions in one repo.",
+	"Each message from the user starts with a snapshot of every session; trust it over memory.",
+	"You can read the repo (Read, Grep, Glob, read-only git and gh). You cannot change files or sessions.",
+	"To propose an action, call mcp__serenity__suggest with the session name, kind (reply, approve or cleanup), a short label and, for replies, the text. Nothing runs until the user presses y.",
+	"Call mcp__serenity__set_category only when the user asks to move a session.",
+	"Answer in at most 3 short sentences; your replies are shown in a small panel. No markdown headings or tables.",
+].join("\n");
+
+/** The snapshot prepended to each user message sent to the chat. */
+export function chatSnapshot(
+	sessions: Session[],
+	suggestions: Suggestion[],
+): string {
+	if (!sessions.length) return "Sessions: none yet.";
+	const lines = sessions.map((s) => {
+		const parts = [
+			`- ${s.name} [${s.category ?? "unsorted"}] ${s.status}${s.waitingOn ? ` on ${s.waitingOn}` : ""}`,
+		];
+		if (s.ask) parts.push(`asks: ${s.ask}`);
+		if (s.summary) parts.push(`summary: ${s.summary}`);
+		else if (s.lastPrompt)
+			parts.push(`last prompt: ${clip(s.lastPrompt, 120)}`);
+		const pending = suggestions.find((g) => g.sessionId === s.id);
+		if (pending) parts.push(`pending suggestion: ${pending.label}`);
+		return parts.join(" · ");
+	});
+	return ["Sessions now:", ...lines].join("\n");
+}
+
+export function chatMessage(snapshot: string, text: string): string {
+	return `${snapshot}\n\nUser: ${text}`;
+}

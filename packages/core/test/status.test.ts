@@ -15,6 +15,7 @@ describe("reduceHook", () => {
 		expect(patch).toEqual({
 			status: "idle",
 			ask: null,
+			waitingOn: null,
 			claudeSessionId: "c-1",
 			transcriptPath: "/t.jsonl",
 		});
@@ -31,6 +32,7 @@ describe("reduceHook", () => {
 		expect(patch).toEqual({
 			status: "working",
 			ask: null,
+			waitingOn: null,
 			lastPrompt: "rotate refresh tokens",
 			lastAssistantMessage: null,
 		});
@@ -42,6 +44,7 @@ describe("reduceHook", () => {
 		).toMatchObject({
 			status: "waiting",
 			ask: "wants to use Bash",
+			waitingOn: "permission",
 		});
 		expect(
 			reduceHook(makeSession(), "Notification", {
@@ -51,7 +54,14 @@ describe("reduceHook", () => {
 		).toMatchObject({
 			status: "waiting",
 			ask: "Claude needs your permission to use Bash",
+			waitingOn: "permission",
 		});
+		expect(
+			reduceHook(makeSession(), "Notification", {
+				notification_type: "elicitation_dialog",
+				message: "Pick a database",
+			}),
+		).toMatchObject({ status: "waiting", waitingOn: "question" });
 	});
 
 	test("a permission request names the command and outlives the generic notification", () => {
@@ -66,7 +76,7 @@ describe("reduceHook", () => {
 				notification_type: "permission_prompt",
 				message: "Claude needs your permission",
 			}),
-		).toEqual({ status: "waiting" });
+		).toEqual({ status: "waiting", waitingOn: "permission" });
 	});
 
 	test("idle notifications do not change status", () => {
@@ -87,6 +97,7 @@ describe("reduceHook", () => {
 		).toEqual({
 			status: "working",
 			ask: null,
+			waitingOn: null,
 		});
 		expect(
 			reduceHook(makeSession({ status: "working" }), "PostToolUse", {}),
@@ -101,8 +112,18 @@ describe("reduceHook", () => {
 		).toEqual({
 			status: "idle",
 			ask: null,
+			waitingOn: null,
 			lastAssistantMessage: "All done.",
 		});
+	});
+
+	test("the reply is kept long enough for the summarizer", () => {
+		const long = "word ".repeat(300);
+		const kept = reduceHook(makeSession(), "Stop", {
+			last_assistant_message: long,
+		}).lastAssistantMessage as string;
+		expect(kept.length).toBeGreaterThan(1000);
+		expect(kept.length).toBeLessThanOrEqual(2000);
 	});
 
 	test("session end is dead; archived is sticky", () => {

@@ -1,6 +1,14 @@
-import type { Canvas, Color, Session } from "@serenity/core";
+import type {
+	Canvas,
+	Color,
+	MasterMessage,
+	MasterPermission,
+	MasterState,
+	Session,
+	Suggestion,
+} from "@serenity/core";
 import { Box, Text } from "ink";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { askLine, cardText, glyph, nameColor } from "./theme";
 
 const ink = (color: Color | undefined) =>
@@ -122,29 +130,207 @@ function SessionLine({ session }: { session: Session }) {
 	);
 }
 
-function MasterInput() {
+const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+/** The one animation (ADR 0012): ticks only while the master is thinking. */
+function Spinner() {
+	const [frame, setFrame] = useState(0);
+	useEffect(() => {
+		const timer = setInterval(
+			() => setFrame((f) => (f + 1) % SPINNER.length),
+			120,
+		);
+		return () => clearInterval(timer);
+	}, []);
+	return <Text color="magenta">{SPINNER[frame]}</Text>;
+}
+
+/** The master's input row; `text` is null until `g` focuses it. */
+function MasterInput({ text }: { text: string | null }) {
 	return (
-		<Box borderStyle="single" borderColor="gray" marginTop={1}>
-			<Text color="gray">
-				<Text color="magenta">›</Text> message master…
+		<Box
+			borderStyle="single"
+			borderColor={text === null ? "gray" : "whiteBright"}
+			marginTop={1}
+		>
+			<Text wrap="truncate-start">
+				<Text color="magenta">› </Text>
+				{text === null ? (
+					<Text color="gray">message master…</Text>
+				) : (
+					<Text color="whiteBright">{text}█</Text>
+				)}
 			</Text>
 		</Box>
 	);
 }
 
-/** Master panel in the topics zoom: NEEDS YOU plus the (milestone 2) conversation. */
+/** The y / e / n chips after a suggestion; y is the primary key. */
+function Chips({ keys }: { keys: string }) {
+	const [primary, ...rest] = [...keys];
+	return (
+		<Text>
+			<Text backgroundColor="magenta" color="black" bold>
+				{` ${primary} `}
+			</Text>
+			{rest.map((k) => (
+				<Text key={k} color="gray">
+					{" "}
+					{k}
+				</Text>
+			))}
+		</Text>
+	);
+}
+
+function Selector({ on }: { on: boolean }) {
+	return <Text color="whiteBright">{on ? "▸ " : "  "}</Text>;
+}
+
+/** One NEEDS YOU item (design): glyph and name, what it needs, the ◆ suggestion. */
+function NeedItem({
+	session,
+	suggestion,
+	selected,
+}: {
+	session: Session;
+	suggestion: Suggestion | undefined;
+	selected: boolean;
+}) {
+	const g = glyph(session.status);
+	return (
+		<Box flexDirection="column">
+			<Text wrap="truncate">
+				<Selector on={selected} />
+				{g ? <Text color={g.color}>{g.ch} </Text> : null}
+				<Text
+					color={selected ? "whiteBright" : ink(nameColor(session.status))}
+					bold={selected}
+				>
+					{session.name}
+				</Text>
+				{session.watched ? <Text color="white"> ⚑</Text> : null}
+			</Text>
+			<Box paddingLeft={4}>
+				<Text color="gray" wrap="truncate">
+					{askLine(session)}
+				</Text>
+			</Box>
+			{suggestion ? (
+				<Box paddingLeft={4} justifyContent="space-between">
+					<Text wrap="truncate">
+						<Text color="magenta">◆ </Text>
+						{suggestion.label}
+					</Text>
+					<Box flexShrink={0} marginLeft={1}>
+						<Chips keys="yen" />
+					</Box>
+				</Box>
+			) : null}
+		</Box>
+	);
+}
+
+/** The master asking to use a tool (ADR 0008): top of NEEDS YOU, y allow / n deny. */
+function PermissionItem({
+	permission,
+	selected,
+}: {
+	permission: MasterPermission;
+	selected: boolean;
+}) {
+	return (
+		<Box flexDirection="column">
+			<Box justifyContent="space-between">
+				<Text wrap="truncate">
+					<Selector on={selected} />
+					<Text color="magenta">◆ </Text>
+					<Text color={selected ? "whiteBright" : undefined} bold={selected}>
+						master wants to use {permission.toolName}
+					</Text>
+				</Text>
+				<Box flexShrink={0} marginLeft={1}>
+					<Chips keys="yn" />
+				</Box>
+			</Box>
+			<Box paddingLeft={4}>
+				<Text color="gray" wrap="truncate">
+					{permission.detail}
+				</Text>
+			</Box>
+		</Box>
+	);
+}
+
+function Conversation({ messages }: { messages: MasterMessage[] }) {
+	if (!messages.length)
+		return (
+			<Text color="gray">
+				Press <Key>g</Key> to ask the master about your sessions.
+			</Text>
+		);
+	return (
+		<>
+			{messages.map((m, i) => (
+				<Box key={m.id} marginTop={i ? 1 : 0}>
+					<Box width={6} flexShrink={0}>
+						{m.from === "you" ? (
+							<Text color="cyan">you</Text>
+						) : (
+							<Text color="magenta">◆</Text>
+						)}
+					</Box>
+					<Text color={m.from === "you" ? undefined : "white"} wrap="wrap">
+						{clipLines(m.text, 4)}
+					</Text>
+				</Box>
+			))}
+		</>
+	);
+}
+
+/** Keeps a message to a few lines; the full history belongs behind M (v1.1). */
+function clipLines(text: string, lines: number): string {
+	const kept = text.split("\n").filter(Boolean).slice(0, lines).join("\n");
+	return kept.length > 400 ? `${kept.slice(0, 399)}…` : kept;
+}
+
+/** How many NEEDS YOU items fit; the rest are summarised as "+N more". */
+const MAX_NEED_ITEMS = 5;
+
+export type MasterFocus = string | null;
+
+/** Master panel in the topics zoom: NEEDS YOU, the latest exchange, the input. */
 export function MasterPanel({
 	width,
 	sessions,
 	needs,
+	suggestions,
+	permissions,
+	conversation,
+	master,
 	calmCategories,
+	focusId,
+	inputText,
 }: {
 	width: number;
 	sessions: Session[];
 	needs: Session[];
+	suggestions: Suggestion[];
+	permissions: MasterPermission[];
+	conversation: MasterMessage[];
+	master: MasterState;
 	calmCategories: number;
+	focusId: MasterFocus;
+	inputText: string | null;
 }) {
 	const inner = width - 6;
+	const count = needs.length + permissions.length;
+	const items = [
+		...permissions.map((p) => ({ kind: "permission" as const, p })),
+		...needs.map((s) => ({ kind: "session" as const, s })),
+	];
+	const shown = items.slice(0, MAX_NEED_ITEMS);
 	return (
 		<TitledBox
 			title="◆ master"
@@ -152,6 +338,7 @@ export function MasterPanel({
 			borderStyle="round"
 			borderColor="magenta"
 			width={width}
+			right={master.status === "thinking" ? <Spinner /> : undefined}
 		>
 			{sessions.length === 0 ? (
 				<>
@@ -164,15 +351,16 @@ export function MasterPanel({
 			) : (
 				<>
 					<Text wrap="truncate">
-						{needs.length > 0 ? (
+						{master.error ? (
+							<Text color="red">{master.error}</Text>
+						) : count > 0 ? (
 							<Text color="yellow">
-								{needs.length}{" "}
-								{needs.length === 1 ? "session needs" : "sessions need"} you
+								{count} {count === 1 ? "thing needs" : "things need"} you
 							</Text>
 						) : (
 							<Text color="gray">nothing needs you</Text>
 						)}
-						{calmCategories > 0 ? (
+						{!master.error && calmCategories > 0 ? (
 							<Text color="gray">
 								{" "}
 								· {calmCategories}{" "}
@@ -180,31 +368,39 @@ export function MasterPanel({
 							</Text>
 						) : null}
 					</Text>
-					{needs.length > 0 ? (
+					{count > 0 ? (
 						<>
-							<SectionHeader
-								label={`NEEDS YOU ${needs.length}`}
-								width={inner}
-							/>
-							{needs.map((s) => (
-								<Box key={s.id} flexDirection="column">
-									<SessionLine session={s} />
-									<Box paddingLeft={2}>
-										<Text color="gray" wrap="truncate">
-											{askLine(s)}
-										</Text>
-									</Box>
-								</Box>
-							))}
+							<SectionHeader label={`NEEDS YOU ${count}`} width={inner} />
+							{shown.map((item) =>
+								item.kind === "permission" ? (
+									<PermissionItem
+										key={item.p.id}
+										permission={item.p}
+										selected={focusId === `perm:${item.p.id}`}
+									/>
+								) : (
+									<NeedItem
+										key={item.s.id}
+										session={item.s}
+										suggestion={suggestions.find(
+											(g) => g.sessionId === item.s.id,
+										)}
+										selected={focusId === item.s.id}
+									/>
+								),
+							)}
+							{items.length > shown.length ? (
+								<Text color="gray">
+									+{items.length - shown.length} more · Tab cycles
+								</Text>
+							) : null}
 						</>
 					) : null}
 					<SectionHeader label="CONVERSATION" width={inner} />
-					<Text color="gray" dimColor>
-						The master joins in the next milestone.
-					</Text>
+					<Conversation messages={conversation.slice(-2)} />
 				</>
 			)}
-			<MasterInput />
+			<MasterInput text={inputText} />
 		</TitledBox>
 	);
 }
@@ -213,10 +409,12 @@ export function MasterPanel({
 export function SessionMaster({
 	width,
 	session,
+	suggestion,
 	others,
 }: {
 	width: number;
 	session: Session;
+	suggestion: Suggestion | undefined;
 	others: Session[];
 }) {
 	const inner = width - 6;
@@ -238,6 +436,14 @@ export function SessionMaster({
 			)}
 			<SectionHeader label="ABOUT THIS SESSION" width={inner} />
 			<Text color="white">{cardText(session)}</Text>
+			{suggestion ? (
+				<Box marginTop={1}>
+					<Text>
+						<Text color="magenta">◆ </Text>
+						{suggestion.label}
+					</Text>
+				</Box>
+			) : null}
 			{others.length > 0 ? (
 				<>
 					<SectionHeader
@@ -249,7 +455,7 @@ export function SessionMaster({
 					))}
 				</>
 			) : null}
-			<MasterInput />
+			<MasterInput text={null} />
 		</TitledBox>
 	);
 }

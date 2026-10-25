@@ -19,6 +19,22 @@ export interface CreateSessionParams {
 	branch?: string;
 }
 
+/** What cleaning up a session would do, computed by serenity, not the model (ADR 0008). */
+export interface CleanupPlan {
+	/** Each step, e.g. "stop the session api-auth". */
+	steps: string[];
+	/** Facts that decide safety, e.g. "no uncommitted changes". */
+	safety: string[];
+	/** False when something would be lost; the UI then asks via the Confirm overlay. */
+	safe: boolean;
+}
+
+/** A tool call from the master chat, forwarded by `serenity mcp`. */
+export interface MasterToolResult {
+	text: string;
+	isError?: boolean;
+}
+
 export interface Methods {
 	hello: {
 		params: { clientVersion: string };
@@ -47,6 +63,18 @@ export interface Methods {
 	"session.exited": {
 		params: { sessionId: string; code: number | null };
 		result: null;
+	};
+	"session.watch": { params: { id: string; watched: boolean }; result: null };
+	"session.cleanupPlan": { params: { id: string }; result: CleanupPlan };
+	"session.cleanup": { params: { id: string }; result: null };
+	/** Runs a pending suggestion; `text` overrides a reply's text (the e key). */
+	"suggestion.accept": { params: { id: string; text?: string }; result: null };
+	"suggestion.decline": { params: { id: string }; result: null };
+	"master.message": { params: { repo: string; text: string }; result: null };
+	"master.permission": { params: { id: string; allow: boolean }; result: null };
+	"master.tool": {
+		params: { repo: string; name: string; args: Record<string, unknown> };
+		result: MasterToolResult;
 	};
 	"daemon.shutdown": { params: Record<string, never>; result: null };
 }

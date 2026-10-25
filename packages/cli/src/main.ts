@@ -22,7 +22,7 @@ usage:
   serenity version
 
 internal:
-  serenity daemon | tui | hook <Event> | exited <code> | detach <pane>`;
+  serenity daemon | tui | hook <Event> | exited <code> | detach <pane> | mcp <repo>`;
 
 const home = serenityHome();
 
@@ -171,6 +171,12 @@ switch (command) {
 	case "hook":
 		await hook(arg);
 		break;
+	case "mcp": {
+		if (!arg) fail("usage: serenity mcp <repo>");
+		const { runMcpProxy } = await import("@serenity/daemon");
+		await runMcpProxy(home, arg);
+		break;
+	}
 	case "exited":
 		await exited(arg);
 		break;

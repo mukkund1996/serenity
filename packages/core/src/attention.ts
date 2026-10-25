@@ -1,4 +1,4 @@
-import type { Session } from "./domain";
+import type { Session, Suggestion } from "./domain";
 
 /** Category for sessions the master has not placed yet. */
 export const UNSORTED = "unsorted";
@@ -10,18 +10,30 @@ export interface CategoryGroup {
 	counts: { waiting: number; working: number; done: number };
 }
 
-function needRank(s: Session): number {
+function needRank(s: Session, suggested: Set<string>): number {
 	if (s.watched && s.status === "done") return 0;
 	if (s.status === "waiting") return 1;
 	if (s.status === "dead") return 2;
+	if (suggested.has(s.id)) return 3;
 	return -1;
 }
 
-/** The master's NEEDS YOU list: watched-and-finished, then waiting, then dead. */
-export function needsYou(sessions: Session[]): Session[] {
+/**
+ * The master's NEEDS YOU list: watched-and-finished, then waiting, then dead,
+ * then anything else with a pending suggestion.
+ */
+export function needsYou(
+	sessions: Session[],
+	suggestions: Suggestion[] = [],
+): Session[] {
+	const suggested = new Set(suggestions.map((g) => g.sessionId));
 	return sessions
-		.filter((s) => needRank(s) >= 0)
-		.sort((a, b) => needRank(a) - needRank(b) || a.updatedAt - b.updatedAt);
+		.filter((s) => needRank(s, suggested) >= 0)
+		.sort(
+			(a, b) =>
+				needRank(a, suggested) - needRank(b, suggested) ||
+				a.updatedAt - b.updatedAt,
+		);
 }
 
 function attentionOf(sessions: Session[]): number {

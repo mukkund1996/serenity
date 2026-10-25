@@ -5,6 +5,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connectRpc, RpcError, RpcPeer } from "../src/rpc";
 
+const EMPTY_STATE = {
+	repo: "/r",
+	sessions: [],
+	attachedSessionId: null,
+	suggestions: [],
+	conversation: [],
+	permissions: [],
+	master: { status: "idle" as const, error: null },
+};
+
 let server: Server | null = null;
 let dir = "";
 
@@ -25,11 +35,7 @@ test("requests, errors and notifications round-trip", async () => {
 	const path = await serve((peer) => {
 		peer.onRequest((method, params) => {
 			if (method === "hello") {
-				peer.notify("state.changed", {
-					repo: "/r",
-					sessions: [],
-					attachedSessionId: null,
-				});
+				peer.notify("state.changed", EMPTY_STATE);
 				return { daemonVersion: "x", pid: 1, echo: params };
 			}
 			throw new RpcError(-32602, "bad");
@@ -44,9 +50,7 @@ test("requests, errors and notifications round-trip", async () => {
 		echo: { clientVersion: "1" },
 	});
 	await expect(client.request("daemon.shutdown", {})).rejects.toThrow("bad");
-	expect(notes).toEqual([
-		["state.changed", { repo: "/r", sessions: [], attachedSessionId: null }],
-	]);
+	expect(notes).toEqual([["state.changed", EMPTY_STATE]]);
 	client.close();
 });
 

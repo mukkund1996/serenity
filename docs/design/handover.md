@@ -109,7 +109,7 @@ Status never relies on colour alone except idle and archived, which are delibera
 | `Enter` | attach · `Ctrl+g` back |
 | `o` | open PR |
 | `f` | watch (remind master when done) |
-| `n` `r` `x` | new · rename · remove |
+| `n` `r` `x` | new · rename · remove (`n` declines when the item has a suggestion; `N` always new — ADR 0012) |
 
 **Master and global**
 | Key | Action |

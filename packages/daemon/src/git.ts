@@ -56,6 +56,38 @@ export function siblingWorktreePath(
 	}
 }
 
+/** Number of changed or untracked files in a worktree. */
+export async function dirtyCount(dir: string): Promise<number> {
+	const out = await run(["git", "-C", dir, "status", "--porcelain"]);
+	return out ? out.split("\n").length : 0;
+}
+
+/** Commits on `branch` that `base` does not have. */
+export async function commitsNotIn(
+	repo: string,
+	base: string,
+	branch: string,
+): Promise<number> {
+	return Number(
+		await run(["git", "-C", repo, "rev-list", "--count", `${base}..${branch}`]),
+	);
+}
+
+export async function removeWorktree(
+	repo: string,
+	path: string,
+): Promise<void> {
+	await run(["git", "-C", repo, "worktree", "remove", path]);
+}
+
+/** `git branch -d`: refuses an unmerged branch. */
+export async function deleteBranch(
+	repo: string,
+	branch: string,
+): Promise<void> {
+	await run(["git", "-C", repo, "branch", "-d", branch]);
+}
+
 export async function addWorktree(
 	repo: string,
 	path: string,

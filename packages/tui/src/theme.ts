@@ -25,9 +25,15 @@ export function nameColor(status: SessionStatus): Color {
 
 /** The 1–2 sentence grey text on a card until the master writes summaries. */
 export function cardText(session: Session): string {
+	const ended =
+		session.status === "dead"
+			? "Session ended."
+			: session.status === "archived"
+				? "Archived."
+				: null;
+	if (ended) return session.summary ? `${ended} ${session.summary}` : ended;
 	if (session.summary) return session.summary;
 	if (session.status === "waiting" && session.ask) return session.ask;
-	if (session.status === "dead") return "Session ended.";
 	if (session.status === "working" && session.lastPrompt)
 		return `Working on: ${session.lastPrompt}`;
 	if (session.lastAssistantMessage) return session.lastAssistantMessage;

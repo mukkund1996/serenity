@@ -1,4 +1,8 @@
-import type { CreateSessionParams, SessionMode } from "@serenity/core";
+import type {
+	CleanupPlan,
+	CreateSessionParams,
+	SessionMode,
+} from "@serenity/core";
 import { Box, Text, useInput } from "ink";
 import { useState } from "react";
 import { Key, TitledBox } from "./components";
@@ -130,16 +134,25 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 	[
 		"MOVE",
 		[
-			["Tab ⇧Tab", "next / previous waiting"],
+			["Tab ⇧Tab", "next / previous in NEEDS YOU"],
 			["W A S D", "move between cards"],
 		],
 	],
 	[
 		"ON A NODE",
 		[
-			["i", "reply"],
+			["i", "reply · Tab recent replies"],
 			["Enter", "attach · Ctrl+g back"],
-			["n", "new session"],
+			["f", "watch · remind master when done"],
+			["x", "clean up / remove"],
+			["n N", "new session (n declines a suggestion)"],
+		],
+	],
+	[
+		"MASTER",
+		[
+			["y e n", "approve · edit · decline"],
+			["g", "message master"],
 		],
 	],
 ];
@@ -186,6 +199,107 @@ export function ShortcutsPanel() {
 				<Text color="gray">
 					<Key>q</Key> quits the map · sessions keep running
 				</Text>
+			</Box>
+		</TitledBox>
+	);
+}
+
+/** Confirm a cleanup (design 4b): every step, then the safety facts from git. */
+export function ConfirmDialog({
+	name,
+	plan,
+	fromMaster,
+	busy,
+	error,
+}: {
+	name: string;
+	plan: CleanupPlan;
+	fromMaster: boolean;
+	busy: boolean;
+	error: string | null;
+}) {
+	return (
+		<TitledBox
+			title={`Clean up ${name}?`}
+			titleColor="whiteBright"
+			borderStyle="double"
+			borderColor="white"
+			width={DIALOG_W}
+			fill="black"
+		>
+			{fromMaster ? <Text color="magenta">◆ requested by master</Text> : null}
+			<Box marginTop={1}>
+				<Text color="gray">This will:</Text>
+			</Box>
+			{plan.steps.map((step) => {
+				const keep = step.startsWith("keep");
+				return (
+					<Text key={step} wrap="truncate">
+						<Text color={keep ? "gray" : "red"}>{keep ? "–" : "✕"} </Text>
+						<Text color={keep ? "gray" : undefined}>{step}</Text>
+					</Text>
+				);
+			})}
+			{plan.safety.length ? (
+				<Box marginTop={1}>
+					<Text color={plan.safe ? "green" : "yellow"} wrap="truncate">
+						{plan.safety.join(" · ")}
+					</Text>
+				</Box>
+			) : null}
+			<Box marginTop={1} justifyContent="space-between">
+				<Text color="red" wrap="truncate">
+					{error ?? ""}
+				</Text>
+				<Text color="gray">
+					{busy ? (
+						"cleaning up…"
+					) : (
+						<>
+							<Key>y</Key> approve <Key>n</Key> cancel
+						</>
+					)}
+				</Text>
+			</Box>
+		</TitledBox>
+	);
+}
+
+/** Recent replies (design 4a): Tab in a reply opens it; the master's pick is first. */
+export function RecentReplies({
+	replies,
+	pick,
+	selected,
+}: {
+	replies: string[];
+	pick: string | null;
+	selected: number;
+}) {
+	return (
+		<TitledBox
+			title="recent replies"
+			titleColor="whiteBright"
+			borderStyle="single"
+			borderColor="white"
+			width={50}
+			fill="black"
+			right={<Text color="gray"> ↑↓ Enter Esc </Text>}
+		>
+			{replies.map((reply, i) => (
+				<Box key={reply} justifyContent="space-between">
+					<Text inverse={i === selected} wrap="truncate">
+						{reply === pick ? <Text color="magenta">◆ </Text> : "  "}
+						{reply}
+					</Text>
+					{reply === pick ? (
+						<Box flexShrink={0} marginLeft={1}>
+							<Text color="gray">master's pick</Text>
+						</Box>
+					) : null}
+				</Box>
+			))}
+			<Box marginTop={1}>
+				<Text color="gray">type to write your own</Text>
 			</Box>
 		</TitledBox>
 	);
