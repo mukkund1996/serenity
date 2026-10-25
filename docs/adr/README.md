@@ -13,7 +13,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0005](0005-daemon-and-json-rpc.md) | Background daemon, JSON-RPC over a unix socket, scoped per repo | Accepted |
 | [0006](0006-status-from-hooks.md) | Session status from Claude Code hooks only | Accepted |
 | [0007](0007-master-roles-and-models.md) | Master = Opus stream + Haiku/Sonnet one-shot workers via the claude CLI | Accepted |
-| [0008](0008-master-proposes-via-mcp.md) | Master only proposes, through serenity's MCP tools | Accepted |
+| [0008](0008-master-proposes-via-mcp.md) | Master only proposes; MCP tools for the Opus chat only | Accepted |
 | [0009](0009-storage-interface-sqlite.md) | SQLite behind a swappable storage interface | Accepted |
 | [0010](0010-worktrees-beside-repo.md) | New worktrees live beside the repo | Accepted |
 | [0011](0011-pr-status-via-gh.md) | PR status via `gh`, refreshed on events | Accepted |
@@ -24,6 +24,8 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 
 ## System at a glance
 
+All `claude` processes run on the user's own Claude login (0007).
+
 ```
  terminal ── tmux session "serenity-<repo>"
              ├─ pane: serenity TUI (Ink) ─────────┐
@@ -31,12 +33,12 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
                   │ hooks: `serenity hook <event>`│ unix socket
                   ▼                               ▼
              ┌──────────────── serenityd (one per machine, state keyed by repo) ───────────────┐
-             │ session registry · status reducer · tmux driver · git/worktree driver · gh poller │
+             │ session registry · status reducer · tmux driver · git/worktree driver · gh driver │
              │ storage (interface) ── SQLite                                                    │
-             │ MCP server (suggest / summarize / categorize / ask-permission)                  │
+             │ MCP server for the chat (suggest / set_category / request_permission)           │
              │ master supervisor                                                                │
-             │   ├─ Opus: long-lived `claude -p` stream-json  (chat, categories)              │
-             │   ├─ Haiku: one-shot per event (summary, finished vs idle)                      │
-             │   └─ Sonnet: one-shot per event (suggestions: reply/approve/cleanup/review)     │
+             │   ├─ Opus: long-lived `claude -p` stream-json  (chat; uses the MCP tools)       │
+             │   ├─ Haiku: one-shot per event → JSON (summary, ask, finished, category)        │
+             │   └─ Sonnet: one-shot per event → JSON (one suggestion)                         │
              └──────────────────────────────────────────────────────────────────────────────────┘
 ```
