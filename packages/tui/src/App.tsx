@@ -11,6 +11,7 @@ import {
 import { Box, Text, useApp, useInput, useWindowSize } from "ink";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { CanvasView, Key, MasterPanel, SessionMaster } from "./components";
+import { openUrl } from "./open-url";
 import {
 	ConfirmDialog,
 	NewSessionDialog,
@@ -346,6 +347,10 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							clientPane: tmuxPane,
 						}).catch(fail);
 					}
+					return;
+				case "o":
+					if (focused.pr) openUrl(focused.pr.url);
+					else setNotice(`${focused.name} has no PR yet`);
 					return;
 				case "f":
 					call("session.watch", {

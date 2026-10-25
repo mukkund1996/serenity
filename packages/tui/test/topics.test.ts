@@ -164,3 +164,36 @@ test("splitAtNewline treats a trailing return as submit", () => {
 	expect(splitAtNewline("hello\r")).toEqual({ text: "hello", submit: true });
 	expect(splitAtNewline("hel")).toEqual({ text: "hel", submit: false });
 });
+
+test("card row 1 shows the PR and its status word, or why it is unknown", () => {
+	const pr = {
+		number: 482,
+		url: "u",
+		title: "t",
+		state: "OPEN" as const,
+		isDraft: false,
+		checks: "failing" as const,
+		reviewDecision: null,
+		reviewRequests: [],
+		reviewed: false,
+		author: null,
+		headRefOid: "x",
+		baseRefName: "main",
+		files: [],
+	};
+	const text = drawTopics({
+		width: 140,
+		height: 30,
+		masterRow: 15,
+		groups: groupCategories([
+			makeSession({ id: "a", name: "a", pr }),
+			makeSession({ id: "b", name: "b", prError: "gh not logged in" }),
+			makeSession({ id: "c", name: "c" }),
+		]),
+		focusId: null,
+		replyText: null,
+	}).canvas.toString();
+	expect(text).toContain("PR #482 checks failing");
+	expect(text).toContain("PR unknown · gh not logged in");
+	expect(text).toContain("no PR yet");
+});

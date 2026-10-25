@@ -1,6 +1,8 @@
 import {
 	Canvas,
 	type CategoryGroup,
+	type PrTone,
+	prStatus,
 	type Session,
 	type Style,
 	truncate,
@@ -173,6 +175,42 @@ function cardBody(s: Session, width: number): Line[] {
 	return [you];
 }
 
+const TONE: Record<PrTone, Style> = {
+	merged: { fg: "cyan" },
+	good: { fg: "green" },
+	bad: { fg: "red" },
+	warn: { fg: "yellow" },
+	quiet: { fg: "gray" },
+};
+
+/** Card row 1 (design): "PR #482 checks passing", "no PR yet", or why it is unknown. */
+function drawPrLine(
+	canvas: Canvas,
+	s: Session,
+	x: number,
+	y: number,
+	width: number,
+): void {
+	if (s.pr) {
+		const status = prStatus(s.pr);
+		let col = canvas.text(x, y, "PR ", { fg: "gray" });
+		col = canvas.text(col, y, `#${s.pr.number}`, { underline: true });
+		canvas.text(
+			col,
+			y,
+			truncate(` ${status.text}`, width - (col - x)),
+			TONE[status.tone],
+		);
+	} else if (s.prError) {
+		canvas.text(x, y, truncate(`PR unknown · ${s.prError}`, width), {
+			fg: "gray",
+			dim: true,
+		});
+	} else {
+		canvas.text(x, y, "no PR yet", { fg: "gray", dim: true });
+	}
+}
+
 function drawCard(
 	canvas: Canvas,
 	s: Session,
@@ -212,7 +250,7 @@ function drawCard(
 	}
 
 	const inner = CARD_W - 4;
-	canvas.text(x + 2, y + 1, "no PR yet", { fg: "gray", dim: true });
+	drawPrLine(canvas, s, x + 2, y + 1, inner);
 	cardBody(s, inner).forEach((line, i) => {
 		let at = x + 2;
 		for (const run of line)

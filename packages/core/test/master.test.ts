@@ -224,6 +224,30 @@ test("the chat snapshot lists every session with what it needs", () => {
 		'- api-auth [backend] waiting on question · asks: 15m? · pending suggestion: Reply "yes"',
 	);
 	expect(text).toContain("- docs [unsorted] working · last prompt: write docs");
+	const withPr = chatSnapshot(
+		[
+			makeSession({
+				name: "pr",
+				pr: {
+					number: 7,
+					url: "u",
+					title: "t",
+					state: "MERGED",
+					isDraft: false,
+					checks: "passing",
+					reviewDecision: null,
+					reviewRequests: [],
+					reviewed: false,
+					author: null,
+					headRefOid: "x",
+					baseRefName: "main",
+					files: [],
+				},
+			}),
+		],
+		[],
+	);
+	expect(withPr).toContain("PR #7 merged");
 	expect(chatSnapshot([], [])).toBe("Sessions: none yet.");
 });
 
@@ -236,4 +260,39 @@ test("needsYou includes sessions with a pending suggestion, last", () => {
 			(s) => s.id,
 		),
 	).toEqual(["w", "d"]);
+});
+
+test("a done session whose PR merges asks for a suggestion again", () => {
+	const pr = {
+		number: 1,
+		url: "u",
+		title: "t",
+		state: "OPEN" as const,
+		isDraft: false,
+		checks: "passing" as const,
+		reviewDecision: null,
+		reviewRequests: [],
+		reviewed: false,
+		author: null,
+		headRefOid: "x",
+		baseRefName: "main",
+		files: [],
+	};
+	const doneOpen = makeSession({ status: "done", pr });
+	const merged = makeSession({
+		status: "done",
+		pr: { ...pr, state: "MERGED" },
+	});
+	expect(needsSuggestion(doneOpen, merged)).toBe(true);
+	expect(needsSuggestion(merged, merged)).toBe(false);
+	expect(
+		parseSuggestion(
+			{ kind: "cleanup", label: "Clean up", text: null },
+			doneOpen,
+		),
+	).toBeNull();
+	expect(
+		parseSuggestion({ kind: "cleanup", label: "Clean up", text: null }, merged)
+			?.kind,
+	).toBe("cleanup");
 });

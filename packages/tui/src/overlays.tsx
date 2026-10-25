@@ -143,6 +143,7 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 		[
 			["i", "reply · Tab recent replies"],
 			["Enter", "attach · Ctrl+g back"],
+			["o", "open PR"],
 			["f", "watch · remind master when done"],
 			["x", "clean up / remove"],
 			["n N", "new session (n declines a suggestion)"],

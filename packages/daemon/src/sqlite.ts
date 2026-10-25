@@ -47,11 +47,13 @@ const MIGRATIONS = [
 /** Fields added after a session row may have been written; filled in on read. */
 const SESSION_DEFAULTS: Pick<
 	Session,
-	"waitingOn" | "categoryCandidate" | "ownsBranch"
+	"waitingOn" | "categoryCandidate" | "ownsBranch" | "pr" | "prError"
 > = {
 	waitingOn: null,
 	categoryCandidate: null,
 	ownsBranch: false,
+	pr: null,
+	prError: null,
 };
 
 function readSession(data: string): Session {

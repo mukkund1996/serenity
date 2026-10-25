@@ -26,9 +26,11 @@ import {
 import { type ClaudeRunner, CliClaudeRunner } from "./claude";
 import { type CleanupFacts, cleanupPlan, plannedRemovals } from "./cleanup";
 import { run } from "./exec";
+import { Gh } from "./gh";
 import {
 	addWorktree,
 	branchExists,
+	branchSha,
 	commitsNotIn,
 	currentBranch,
 	defaultBase,
@@ -39,6 +41,7 @@ import {
 } from "./git";
 import { agentCommand, shellQuote, writeHookSettings } from "./hooks";
 import { type MasterModels, MasterSupervisor } from "./master";
+import { PrWatcher, workDir } from "./prs";
 import { Tmux } from "./tmux";
 
 export interface DaemonOptions {
@@ -49,6 +52,10 @@ export interface DaemonOptions {
 	claudeCommand?: string[];
 	/** Runs the master's claude processes; defaults to the CLI. */
 	runner?: ClaudeRunner;
+	/** Reads PRs; SERENITY_GH_BIN points the default at the E2E fake. */
+	gh?: Gh;
+	/** Fallback reviewers when CODEOWNERS names nobody; defaults to config. */
+	reviewers?: string[];
 	models?: MasterModels;
 	now?: () => number;
 	log?: (line: string) => void;
@@ -101,6 +108,8 @@ export class Daemon {
 	private readonly startupGraceMs: number;
 	private readonly timers = new Set<ReturnType<typeof setTimeout>>();
 	private readonly master: MasterSupervisor;
+	private readonly gh: Gh;
+	private readonly prs: PrWatcher;
 	private stopped: (() => void) | null = null;
 	readonly done: Promise<void>;
 
@@ -116,6 +125,7 @@ export class Daemon {
 		this.log =
 			opts.log ??
 			((line) => console.log(`${new Date().toISOString()} ${line}`));
+		const config = loadConfig();
 		this.master = new MasterSupervisor(
 			{
 				storage: opts.storage,
@@ -125,13 +135,27 @@ export class Daemon {
 				update: (session, patch) => this.update(session, patch),
 				mcpConfig: (repo) => this.mcpConfig(repo),
 				workerCwd: join(opts.home, "workers"),
-				models: opts.models ?? loadConfig().models,
+				models: opts.models ?? config.models,
 				debounceMs:
 					opts.workerDebounceMs ??
 					envNumber("SERENITY_WORKER_DEBOUNCE_MS", DEFAULT_WORKER_DEBOUNCE_MS),
 			},
 			opts.runner ?? new CliClaudeRunner(this.claudeCommand),
 		);
+		this.gh = opts.gh ?? new Gh();
+		this.prs = new PrWatcher({
+			storage: opts.storage,
+			gh: this.gh,
+			reviewers: opts.reviewers ?? config.reviewers,
+			change: (session, patch) => this.change(session, patch),
+			broadcast: (repo) => this.broadcast(repo),
+			propose: (session, kind, label, text, source) =>
+				this.master.propose(session, kind, label, text, source),
+			log: this.log,
+			debounceMs:
+				opts.workerDebounceMs ??
+				envNumber("SERENITY_WORKER_DEBOUNCE_MS", DEFAULT_WORKER_DEBOUNCE_MS),
+		});
 		this.done = new Promise((resolve) => {
 			this.stopped = resolve;
 		});
@@ -153,6 +177,7 @@ export class Daemon {
 	async stop(): Promise<void> {
 		for (const timer of this.timers) clearTimeout(timer);
 		this.master.stop();
+		this.prs.stop();
 		for (const peer of this.subscriptions.keys()) peer.close();
 		await new Promise<void>((resolve) =>
 			this.server ? this.server.close(() => resolve()) : resolve(),
@@ -224,6 +249,7 @@ export class Daemon {
 
 		"state.subscribe": ({ repo }, peer) => {
 			this.subscriptions.get(peer)?.add(repo);
+			this.prs.refreshRepo(repo);
 			return this.state(repo);
 		},
 
@@ -243,6 +269,7 @@ export class Daemon {
 			await this.tmux.bindDetachKey(this.detachCommand());
 			await this.tmux.joinRight(pane, clientPane, ATTACH_PERCENT);
 			this.attached.set(session.repo, { sessionId: session.id, clientPane });
+			this.prs.schedule(session.id, 0);
 			this.broadcast(session.repo);
 			return null;
 		},
@@ -304,6 +331,18 @@ export class Daemon {
 						);
 					// "1" picks "Yes" in Claude Code's numbered permission menu.
 					await this.tmux.pressKey(await this.requireLivePane(session), "1");
+				} else if (suggestion.kind === "review") {
+					if (session.pr?.state !== "OPEN")
+						throw new RpcError(
+							RpcErrorCode.InvalidParams,
+							`${session.name} has no open PR`,
+						);
+					await this.gh.requestReview(
+						workDir(session),
+						session.pr.number,
+						text ?? suggestion.text ?? "",
+					);
+					this.prs.schedule(session.id, 0);
 				} else {
 					await this.cleanup(session);
 				}
@@ -363,6 +402,8 @@ export class Daemon {
 				});
 				this.change(session, reduceHook(session, kind, payload));
 			});
+			// A turn ended: commits may have been pushed or a PR opened.
+			if (kind === "Stop") this.prs.schedule(session.id);
 			this.broadcast(session.repo);
 			return null;
 		},
@@ -454,6 +495,7 @@ export class Daemon {
 		}
 		if (await this.tmux.paneExists(attached.clientPane))
 			await this.tmux.selectPane(attached.clientPane);
+		this.prs.schedule(session.id, 0);
 		this.broadcast(session.repo);
 	}
 
@@ -473,7 +515,15 @@ export class Daemon {
 						() => null,
 					)
 				: null;
-		return { alive, dirty, unmerged, base };
+		// A squash-merged PR whose head is still the branch's commit (ADR 0011).
+		const pr = session.pr;
+		const prMerged =
+			pr?.state === "MERGED" &&
+			session.branch &&
+			(await branchSha(session.repo, session.branch)) === pr.headRefOid
+				? pr.number
+				: null;
+		return { alive, dirty, unmerged, base, prMerged };
 	}
 
 	/**
@@ -500,7 +550,7 @@ export class Daemon {
 			else await run(["git", "-C", session.repo, "worktree", "prune"]);
 		}
 		if (removals.deleteBranch && session.branch)
-			await deleteBranch(session.repo, session.branch);
+			await deleteBranch(session.repo, session.branch, removals.forceDelete);
 		this.log(`cleaned up ${session.name}`);
 		this.broadcast(session.repo);
 		return cleanupPlan(session, facts);
@@ -577,6 +627,8 @@ export class Daemon {
 			worktree,
 			branch,
 			ownsBranch: mode === "worktree",
+			pr: null,
+			prError: null,
 			tmuxPane: pane,
 			status: "idle",
 			summary: null,

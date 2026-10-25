@@ -80,12 +80,27 @@ export async function removeWorktree(
 	await run(["git", "-C", repo, "worktree", "remove", path]);
 }
 
-/** `git branch -d`: refuses an unmerged branch. */
+/**
+ * `git branch -d` refuses an unmerged branch; `force` (-D) is only used when
+ * the branch's merged PR shows nothing is lost (ADR 0011).
+ */
 export async function deleteBranch(
 	repo: string,
 	branch: string,
+	force = false,
 ): Promise<void> {
-	await run(["git", "-C", repo, "branch", "-d", branch]);
+	await run(["git", "-C", repo, "branch", force ? "-D" : "-d", branch]);
+}
+
+export async function branchSha(
+	repo: string,
+	branch: string,
+): Promise<string | null> {
+	try {
+		return await run(["git", "-C", repo, "rev-parse", `refs/heads/${branch}`]);
+	} catch {
+		return null;
+	}
 }
 
 export async function addWorktree(

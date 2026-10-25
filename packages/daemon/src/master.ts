@@ -219,7 +219,8 @@ export class MasterSupervisor {
 		if (changed) this.host.broadcast(session.repo);
 	}
 
-	private propose(
+	/** Creates a pending suggestion, replacing the session's earlier ones. */
+	propose(
 		session: Session,
 		kind: SuggestionKind,
 		label: string,
@@ -438,11 +439,20 @@ export function chatSuggestionProblem(
 		return session.waitingOn === "permission"
 			? null
 			: `${session.name} is not waiting on a permission prompt.`;
-	if (kind === "cleanup")
-		return session.status === "working"
-			? `${session.name} is still working.`
-			: null;
-	return `Unknown kind ${String(kind)}; use reply, approve or cleanup.`;
+	if (kind === "cleanup") {
+		if (session.status === "working")
+			return `${session.name} is still working.`;
+		if (session.pr?.state === "OPEN")
+			return `PR #${session.pr.number} is still open; clean up after it merges.`;
+		return null;
+	}
+	if (kind === "review") {
+		if (session.pr?.state !== "OPEN") return `${session.name} has no open PR.`;
+		return text
+			? null
+			: "A review request needs the reviewer's GitHub login as text.";
+	}
+	return `Unknown kind ${String(kind)}; use reply, approve, cleanup or review.`;
 }
 
 /** One line for the master's permission request: the command, the path, or the input. */

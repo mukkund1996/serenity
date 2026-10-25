@@ -5,6 +5,7 @@ export * from "./daemon-client";
 export * from "./domain";
 export * from "./master";
 export * from "./paths";
+export * from "./pr";
 export * from "./rpc";
 export * from "./self";
 export * from "./status";

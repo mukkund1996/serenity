@@ -1,4 +1,5 @@
 import type { Session, Suggestion, SuggestionKind } from "./domain";
+import { prStatus } from "./pr";
 
 /**
  * The master's model-facing logic (ADR 0007), kept pure: prompts, JSON
@@ -9,6 +10,13 @@ const SUMMARY_MAX = 160;
 const ASK_MAX = 100;
 const LABEL_MAX = 60;
 const CATEGORY_MAX = 20;
+
+/** "PR #482 checks passing", or what is known instead. */
+export function prLine(session: Session): string {
+	if (session.pr)
+		return `PR #${session.pr.number} ${prStatus(session.pr).text}`;
+	return session.prError ? `PR unknown (${session.prError})` : "no PR yet";
+}
 
 function clip(text: string, max: number): string {
 	const line = text.replace(/\s+/g, " ").trim();
@@ -138,14 +146,20 @@ export interface SuggestionResult {
 	text: string | null;
 }
 
-/** A session needs a suggestion when it starts to need the user. */
+/**
+ * A session needs a suggestion when it starts to need the user, or when its
+ * PR merges after it was already done (a cleanup becomes possible then).
+ */
 export function needsSuggestion(before: Session, after: Session): boolean {
 	const needs = (s: Session) => s.status === "waiting" || s.status === "done";
+	const justMerged =
+		after.pr?.state === "MERGED" && before.pr?.state !== "MERGED";
 	return (
 		needs(after) &&
 		(!needs(before) ||
 			before.status !== after.status ||
-			before.ask !== after.ask)
+			before.ask !== after.ask ||
+			justMerged)
 	);
 }
 
@@ -169,6 +183,7 @@ export function suggestionPrompt(session: Session): string {
 		`Status: ${session.status}${session.waitingOn ? ` (waiting on ${session.waitingOn})` : ""}`,
 		`It asks: ${session.ask ?? "(nothing)"}`,
 		`Summary: ${session.summary ?? "(none)"}`,
+		`Pull request: ${prLine(session)}`,
 		`The user's last prompt: ${session.lastPrompt ?? "(none)"}`,
 		`The agent's last reply: ${session.lastAssistantMessage ?? "(none)"}`,
 		"",
@@ -195,7 +210,11 @@ export function parseSuggestion(
 		return { kind: "approve", label, text: null };
 	if (r.kind === "reply" && text && session.waitingOn !== "permission")
 		return { kind: "reply", label, text };
-	if (r.kind === "cleanup" && session.status === "done")
+	if (
+		r.kind === "cleanup" &&
+		session.status === "done" &&
+		session.pr?.state !== "OPEN"
+	)
 		return { kind: "cleanup", label, text: null };
 	return null;
 }
@@ -222,6 +241,7 @@ export function chatSnapshot(
 			`- ${s.name} [${s.category ?? "unsorted"}] ${s.status}${s.waitingOn ? ` on ${s.waitingOn}` : ""}`,
 		];
 		if (s.ask) parts.push(`asks: ${s.ask}`);
+		if (s.pr || s.prError) parts.push(prLine(s));
 		if (s.summary) parts.push(`summary: ${s.summary}`);
 		else if (s.lastPrompt)
 			parts.push(`last prompt: ${clip(s.lastPrompt, 120)}`);

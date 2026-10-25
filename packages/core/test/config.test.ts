@@ -24,3 +24,11 @@ test("overrides only the models that are set", () => {
 		suggester: "sonnet",
 	});
 });
+
+test("reviewers are logins without the @", () => {
+	writeFileSync(
+		join(dir, "r.json"),
+		JSON.stringify({ reviewers: ["@alice", "bob", 3, " "] }),
+	);
+	expect(loadConfig(join(dir, "r.json")).reviewers).toEqual(["alice", "bob"]);
+});

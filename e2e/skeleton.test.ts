@@ -9,6 +9,7 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readFileSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -18,6 +19,7 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dir, "..");
 const MAIN = join(ROOT, "packages/cli/src/main.ts");
 const FAKE = join(ROOT, "e2e/fake-claude.ts");
+const FAKE_GH = join(ROOT, "e2e/fake-gh.ts");
 const SOCKET = `serenity-e2e-${process.pid}`;
 const MAP = "serenity-demo:map";
 const STEP_TIMEOUT = 20_000;
@@ -94,16 +96,51 @@ async function newSession(name: string): Promise<void> {
 	await until(() => !screen().includes("Working dir"), "the dialog to close");
 }
 
+/** Where the fake gh reads PR fixtures (<branch>.json) and logs edits. */
+const ghDir = () => join(dir, "gh");
+
+/** Commits in a worktree with a throwaway identity; returns the new commit. */
+function commitIn(worktree: string, file: string): string {
+	writeFileSync(join(worktree, file), `${file}\n`);
+	const git = (...args: string[]) =>
+		spawnSync(
+			"git",
+			[
+				"-C",
+				worktree,
+				"-c",
+				"user.name=e2e",
+				"-c",
+				"user.email=e2e@example.com",
+				...args,
+			],
+			{
+				encoding: "utf8",
+			},
+		);
+	git("add", file);
+	git("commit", "-q", "-m", file);
+	return git("rev-parse", "HEAD").stdout.trim();
+}
+
+function writePr(branch: string, pr: Record<string, unknown>): void {
+	writeFileSync(join(ghDir(), `${branch}.json`), JSON.stringify(pr));
+}
+
 beforeAll(() => {
 	dir = mkdtempSync(join(tmpdir(), "sre2e-"));
 	repo = join(dir, "repos", "demo");
 	const home = join(dir, "home");
 	mkdirSync(repo, { recursive: true });
 	mkdirSync(home);
+	mkdirSync(join(dir, "gh"));
 	writeFileSync(join(home, ".doctor-ok"), "e2e\n");
 	const git = (...args: string[]) =>
 		spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
 	git("init", "-q", "-b", "main");
+	mkdirSync(join(repo, ".github"));
+	writeFileSync(join(repo, ".github", "CODEOWNERS"), "* @alice\n");
+	git("add", ".");
 	git(
 		"-c",
 		"user.name=e2e",
@@ -123,6 +160,8 @@ beforeAll(() => {
 		SERENITY_SELF: JSON.stringify([process.execPath, MAIN]),
 		SERENITY_STARTUP_GRACE_MS: "300",
 		SERENITY_WORKER_DEBOUNCE_MS: "100",
+		SERENITY_GH_BIN: FAKE_GH,
+		SERENITY_FAKE_GH_DIR: ghDir(),
 	};
 	const envArgs = Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
 	tmux(
@@ -340,6 +379,72 @@ test(
 		).stdout;
 		expect(branches.trim()).toBe("");
 		await waitFor(/Archived\. Summary: Done: finish/);
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"a ready PR gets a reviewer from CODEOWNERS; y asks them through gh",
+	async () => {
+		await newSession("shipit");
+		writePr("shipit", {
+			number: 7,
+			url: "https://github.com/o/demo/pull/7",
+			title: "Ship it",
+			state: "OPEN",
+			isDraft: false,
+			statusCheckRollup: [
+				{ __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS" },
+			],
+			reviewDecision: "REVIEW_REQUIRED",
+			reviewRequests: [],
+			latestReviews: [],
+			author: { login: "me" },
+			headRefOid: "0",
+			baseRefName: "main",
+			files: [{ path: "src/x.ts" }],
+		});
+		keys("i");
+		type("open the pr\r");
+		await waitFor(/PR #7 checks passing/);
+		await waitFor(/◆ Request review from @alice/);
+		keys("y");
+		await until(
+			() =>
+				existsSync(join(ghDir(), "edits.log")) &&
+				readFileSync(join(ghDir(), "edits.log"), "utf8") === "7 alice\n",
+			"gh to be asked for alice",
+		);
+		await until(
+			() => !screen().includes("Request review"),
+			"the review suggestion to go",
+		);
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"a squash-merged PR finishes the session; cleanup deletes the branch git calls unmerged",
+	async () => {
+		const worktree = join(dir, "repos", "demo-shipit");
+		const head = commitIn(worktree, "feature.txt");
+		const pr = JSON.parse(readFileSync(join(ghDir(), "shipit.json"), "utf8"));
+		writePr("shipit", { ...pr, state: "MERGED", headRefOid: head });
+		keys("i");
+		type("after merge\r");
+		await waitFor(/PR #7 merged/);
+		await waitFor(/◆ Clean up the worktree/);
+		keys("y");
+		await until(
+			() => !existsSync(worktree),
+			"the shipit worktree to be removed",
+		);
+		const branches = spawnSync(
+			"git",
+			["-C", repo, "branch", "--list", "shipit"],
+			{ encoding: "utf8" },
+		).stdout;
+		expect(branches.trim()).toBe("");
 	},
 	STEP_TIMEOUT,
 );

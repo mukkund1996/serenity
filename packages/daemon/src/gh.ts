@@ -1,0 +1,125 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+	CODEOWNERS_PATHS,
+	PR_FIELDS,
+	type PrInfo,
+	parsePr,
+} from "@serenity/core";
+
+/** What reading a branch's PR gave: the PR, or why it could not be read. */
+export interface PrLookup {
+	pr: PrInfo | null;
+	/** Shown on the card: gh missing, not logged in. Null for "no PR". */
+	error: string | null;
+}
+
+const TIMEOUT_MS = 20_000;
+
+interface Output {
+	ok: boolean;
+	stdout: string;
+	stderr: string;
+}
+
+/**
+ * Thin `gh` driver (ADR 0011). SERENITY_GH_BIN points it at the E2E fake.
+ */
+export class Gh {
+	private me: Promise<string | null> | null = null;
+
+	constructor(
+		private readonly bin: string = process.env.SERENITY_GH_BIN ?? "gh",
+	) {}
+
+	private async run(args: string[], cwd: string): Promise<Output> {
+		let proc: ReturnType<typeof Bun.spawn>;
+		try {
+			proc = Bun.spawn([this.bin, ...args], {
+				cwd,
+				stdout: "pipe",
+				stderr: "pipe",
+				stdin: "ignore",
+				env: { ...process.env, GH_PROMPT_DISABLED: "1", NO_COLOR: "1" },
+			});
+		} catch {
+			return { ok: false, stdout: "", stderr: "gh: command not found" };
+		}
+		const timer = setTimeout(() => proc.kill(), TIMEOUT_MS);
+		const [stdout, stderr, code] = await Promise.all([
+			new Response(proc.stdout as ReadableStream).text(),
+			new Response(proc.stderr as ReadableStream).text(),
+			proc.exited,
+		]);
+		clearTimeout(timer);
+		return { ok: code === 0, stdout, stderr };
+	}
+
+	async prForBranch(cwd: string, branch: string): Promise<PrLookup> {
+		const out = await this.run(
+			["pr", "view", branch, "--json", PR_FIELDS],
+			cwd,
+		);
+		if (out.ok) {
+			try {
+				return { pr: parsePr(JSON.parse(out.stdout)), error: null };
+			} catch {
+				return { pr: null, error: "unreadable gh output" };
+			}
+		}
+		return { pr: null, error: classifyGhError(out.stderr) };
+	}
+
+	/** The logged-in GitHub user, asked once. */
+	currentUser(cwd: string): Promise<string | null> {
+		this.me ??= this.run(["api", "user", "--jq", ".login"], cwd).then((out) =>
+			out.ok ? out.stdout.trim() || null : null,
+		);
+		return this.me;
+	}
+
+	async requestReview(
+		cwd: string,
+		pr: number,
+		reviewer: string,
+	): Promise<void> {
+		const out = await this.run(
+			["pr", "edit", String(pr), "--add-reviewer", reviewer],
+			cwd,
+		);
+		if (!out.ok)
+			throw new Error(
+				`gh could not request ${reviewer}: ${firstLine(out.stderr)}`,
+			);
+	}
+}
+
+function firstLine(text: string): string {
+	const line = text.trim().split("\n")[0] ?? "";
+	return line.length > 80 ? `${line.slice(0, 79)}…` : line;
+}
+
+/**
+ * Null for the quiet cases (no PR yet, not a GitHub repo); otherwise a short
+ * reason for the card.
+ */
+export function classifyGhError(stderr: string): string | null {
+	if (/no pull requests found/i.test(stderr)) return null;
+	if (
+		/none of the git remotes|no git remotes|not a git repository/i.test(stderr)
+	)
+		return null;
+	if (/command not found|ENOENT/i.test(stderr)) return "gh not installed";
+	if (/gh auth login|not logged|authentication/i.test(stderr))
+		return "gh not logged in";
+	return firstLine(stderr) || "gh failed";
+}
+
+/** The repo's CODEOWNERS text, from the first place GitHub looks. */
+export function readCodeowners(dir: string): string | null {
+	for (const path of CODEOWNERS_PATHS) {
+		const full = join(dir, path);
+		if (existsSync(full)) return readFileSync(full, "utf8");
+	}
+	return null;
+}

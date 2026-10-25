@@ -10,12 +10,15 @@ export const MCP_TOOLS = [
 	{
 		name: "suggest",
 		description:
-			"Propose one action for a session. The user sees it in NEEDS YOU and it runs only if they press y. kind: reply (send text to the agent), approve (accept its permission prompt) or cleanup (stop it and remove its worktree).",
+			"Propose one action for a session. The user sees it in NEEDS YOU and it runs only if they press y. kind: reply (send text to the agent), approve (accept its permission prompt), cleanup (stop it and remove its worktree, after its PR merged) or review (ask the GitHub login in text to review its open PR).",
 		inputSchema: {
 			type: "object",
 			properties: {
 				session: { type: "string", description: "Session name" },
-				kind: { type: "string", enum: ["reply", "approve", "cleanup"] },
+				kind: {
+					type: "string",
+					enum: ["reply", "approve", "cleanup", "review"],
+				},
 				label: {
 					type: "string",
 					description:

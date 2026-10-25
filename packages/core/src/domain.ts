@@ -1,4 +1,6 @@
-export const VERSION = "0.2.0";
+import type { PrInfo } from "./pr";
+
+export const VERSION = "0.3.0";
 
 export type SessionStatus =
 	| "waiting"
@@ -20,6 +22,10 @@ export interface Session {
 	branch: string | null;
 	/** serenity created the branch, so cleanup may delete it once merged. */
 	ownsBranch: boolean;
+	/** The branch's pull request, from gh (ADR 0011); null when there is none. */
+	pr: PrInfo | null;
+	/** Why PR status could not be read (gh missing, not logged in), or null. */
+	prError: string | null;
 	tmuxPane: string | null;
 	status: SessionStatus;
 	/** ≤2 sentences, written by the master. */
@@ -79,7 +85,7 @@ export interface HookEvent {
 	at: number;
 }
 
-export type SuggestionKind = "reply" | "approve" | "cleanup";
+export type SuggestionKind = "reply" | "approve" | "cleanup" | "review";
 
 export type SuggestionStatus =
 	| "pending"
@@ -96,7 +102,7 @@ export interface Suggestion {
 	kind: SuggestionKind;
 	/** The ◆ line, e.g. 'Reply "yes, set it to 15m"'. */
 	label: string;
-	/** The text to send, for replies. */
+	/** The text to send for replies; the reviewer's login for reviews. */
 	text: string | null;
 	status: SuggestionStatus;
 	source: "worker" | "chat";

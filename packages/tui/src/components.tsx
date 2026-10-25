@@ -7,6 +7,7 @@ import type {
 	Session,
 	Suggestion,
 } from "@serenity/core";
+import { prLine } from "@serenity/core";
 import { Box, Text } from "ink";
 import { type ReactNode, useEffect, useState } from "react";
 import { askLine, cardText, glyph, nameColor } from "./theme";
@@ -435,6 +436,9 @@ export function SessionMaster({
 				<Text color="gray">nothing else needs you</Text>
 			)}
 			<SectionHeader label="ABOUT THIS SESSION" width={inner} />
+			<Text color="gray" wrap="truncate">
+				{prLine(session)}
+			</Text>
 			<Text color="white">{cardText(session)}</Text>
 			{suggestion ? (
 				<Box marginTop={1}>
