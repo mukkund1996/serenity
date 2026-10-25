@@ -1,0 +1,42 @@
+# Architecture decisions
+
+Each file records one decision: the context, what we chose, and what follows from it. A later ADR can supersede an earlier one; mark the old one `Superseded by NNNN` rather than editing history.
+
+The screen specs live on the design canvas ([source](https://claude.ai/artifact/8c7QCT22YmUoADtsrzU6i7)) and are copied into [`docs/design/handover.md`](../design/handover.md). Where an ADR and the handover disagree, the ADR wins.
+
+| # | Decision | Status |
+|---|----------|--------|
+| [0001](0001-product-scope-v1.md) | Product scope for v1 | Accepted |
+| [0002](0002-typescript-ink-on-bun.md) | TypeScript + Ink on Bun, shipped as a compiled binary | Accepted |
+| [0003](0003-hybrid-rendering.md) | Hybrid rendering: cell canvas for the map, Ink for panels | Accepted |
+| [0004](0004-sessions-in-tmux-panes.md) | Claude Code sessions run in tmux panes | Accepted |
+| [0005](0005-daemon-and-json-rpc.md) | Background daemon, JSON-RPC over a unix socket, scoped per repo | Accepted |
+| [0006](0006-status-from-hooks.md) | Session status from Claude Code hooks only | Accepted |
+| [0007](0007-master-roles-and-models.md) | Master = Opus stream + Haiku/Sonnet one-shot workers via the claude CLI | Accepted |
+| [0008](0008-master-proposes-via-mcp.md) | Master only proposes, through serenity's MCP tools | Accepted |
+| [0009](0009-storage-interface-sqlite.md) | SQLite behind a swappable storage interface | Accepted |
+| [0010](0010-worktrees-beside-repo.md) | New worktrees live beside the repo | Accepted |
+| [0011](0011-pr-status-via-gh.md) | PR status via `gh`, refreshed on events | Accepted |
+| [0012](0012-ux-decisions.md) | UX decisions not covered by the canvas | Accepted |
+| [0013](0013-testing-strategy.md) | Testing strategy | Accepted |
+| [0014](0014-distribution-and-release.md) | Distribution, release, licence, telemetry | Accepted |
+| [0015](0015-workflow-and-milestones.md) | Workflow and milestones | Accepted |
+
+## System at a glance
+
+```
+ terminal ── tmux session "serenity-<repo>"
+             ├─ pane: serenity TUI (Ink) ─────────┐
+             └─ panes: claude (one per session)   │ JSON-RPC over
+                  │ hooks: `serenity hook <event>`│ unix socket
+                  ▼                               ▼
+             ┌──────────────── serenityd (one per machine, state keyed by repo) ───────────────┐
+             │ session registry · status reducer · tmux driver · git/worktree driver · gh poller │
+             │ storage (interface) ── SQLite                                                    │
+             │ MCP server (suggest / summarize / categorize / ask-permission)                  │
+             │ master supervisor                                                                │
+             │   ├─ Opus: long-lived `claude -p` stream-json  (chat, categories)              │
+             │   ├─ Haiku: one-shot per event (summary, finished vs idle)                      │
+             │   └─ Sonnet: one-shot per event (suggestions: reply/approve/cleanup/review)     │
+             └──────────────────────────────────────────────────────────────────────────────────┘
+```
