@@ -27,7 +27,7 @@ import {
 	defaultBase,
 	siblingWorktreePath,
 } from "./git";
-import { shellQuote, writeHookSettings } from "./hooks";
+import { agentCommand, shellQuote, writeHookSettings } from "./hooks";
 import { Tmux } from "./tmux";
 
 export interface DaemonOptions {
@@ -38,11 +38,22 @@ export interface DaemonOptions {
 	claudeCommand?: string[];
 	now?: () => number;
 	log?: (line: string) => void;
+	/**
+	 * How long a new session may stay silent before it is shown as waiting on
+	 * Claude's startup prompt. SERENITY_STARTUP_GRACE_MS overrides it.
+	 */
+	startupGraceMs?: number;
 }
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,39}$/i;
 /** Width of the agent pane when attached: the right ⅔ (ADR 0004). */
 const ATTACH_PERCENT = 67;
+/**
+ * Claude fires no hooks until the folder trust prompt is answered, and every
+ * new worktree is an untrusted folder; silence after this long means it waits.
+ */
+const DEFAULT_STARTUP_GRACE_MS = 5000;
+const STARTUP_ASK = "confirm Claude's startup prompt (folder trust)";
 
 type Handlers = {
 	[M in Method]: (
@@ -64,6 +75,8 @@ export class Daemon {
 	private readonly claudeCommand: string[];
 	private readonly now: () => number;
 	private readonly log: (line: string) => void;
+	private readonly startupGraceMs: number;
+	private readonly timers = new Set<ReturnType<typeof setTimeout>>();
 	private stopped: (() => void) | null = null;
 	readonly done: Promise<void>;
 
@@ -73,6 +86,9 @@ export class Daemon {
 			process.env.SERENITY_CLAUDE_BIN ?? "claude",
 		];
 		this.now = opts.now ?? Date.now;
+		this.startupGraceMs =
+			opts.startupGraceMs ??
+			Number(process.env.SERENITY_STARTUP_GRACE_MS ?? DEFAULT_STARTUP_GRACE_MS);
 		this.log =
 			opts.log ??
 			((line) => console.log(`${new Date().toISOString()} ${line}`));
@@ -95,6 +111,7 @@ export class Daemon {
 	}
 
 	async stop(): Promise<void> {
+		for (const timer of this.timers) clearTimeout(timer);
 		for (const peer of this.subscriptions.keys()) peer.close();
 		await new Promise<void>((resolve) =>
 			this.server ? this.server.close(() => resolve()) : resolve(),
@@ -158,29 +175,14 @@ export class Daemon {
 		"session.create": (params) => this.createSession(params),
 
 		"session.reply": async ({ id, text }) => {
-			const session = this.requireSession(id);
-			if (
-				!session.tmuxPane ||
-				!(await this.tmux.paneExists(session.tmuxPane))
-			) {
-				throw new RpcError(
-					RpcErrorCode.InvalidParams,
-					`${session.name} has no live pane`,
-				);
-			}
-			await this.tmux.sendText(session.tmuxPane, text);
+			const pane = await this.requireLivePane(this.requireSession(id));
+			await this.tmux.sendText(pane, text);
 			return null;
 		},
 
 		"session.attach": async ({ id, clientPane }) => {
 			const session = this.requireSession(id);
-			const pane = session.tmuxPane;
-			if (!pane || !(await this.tmux.paneExists(pane))) {
-				throw new RpcError(
-					RpcErrorCode.InvalidParams,
-					`${session.name} has no live pane`,
-				);
-			}
+			const pane = await this.requireLivePane(session);
 			const current = this.attached.get(session.repo);
 			if (current) await this.detach(current.sessionId);
 			await this.tmux.bindDetachKey(this.detachCommand());
@@ -216,6 +218,14 @@ export class Daemon {
 			return null;
 		},
 
+		"session.exited": ({ sessionId, code }) => {
+			const session = this.opts.storage.sessions.get(sessionId);
+			if (!session) return null;
+			this.log(`${session.name} exited (code ${code ?? "unknown"})`);
+			this.markEnded(session);
+			return null;
+		},
+
 		"daemon.shutdown": () => {
 			setTimeout(() => void this.stop(), 10);
 			return null;
@@ -231,6 +241,35 @@ export class Daemon {
 		if (process.env.SERENITY_TMUX_SOCKET)
 			env.push(`SERENITY_TMUX_SOCKET=${process.env.SERENITY_TMUX_SOCKET}`);
 		return ["env", ...env, ...this.self, "detach"].map(shellQuote).join(" ");
+	}
+
+	/** The session's pane id; if the pane is gone, the session is marked ended. */
+	private async requireLivePane(session: Session): Promise<string> {
+		const pane = session.tmuxPane;
+		if (pane && (await this.tmux.paneExists(pane))) return pane;
+		this.markEnded(session);
+		throw new RpcError(RpcErrorCode.InvalidParams, `${session.name} has ended`);
+	}
+
+	private markEnded(session: Session): void {
+		if (this.attached.get(session.repo)?.sessionId === session.id)
+			this.attached.delete(session.repo);
+		if (session.status !== "dead" && session.status !== "archived")
+			this.update(session, { status: "dead", ask: null });
+		this.broadcast(session.repo);
+	}
+
+	/** After the grace period, a session that never said hello is waiting on Claude's startup prompt. */
+	private watchStartup(sessionId: string): void {
+		const timer = setTimeout(() => {
+			this.timers.delete(timer);
+			const session = this.opts.storage.sessions.get(sessionId);
+			if (!session || session.claudeSessionId || session.status !== "idle")
+				return;
+			this.update(session, { status: "waiting", ask: STARTUP_ASK });
+			this.broadcast(session.repo);
+		}, this.startupGraceMs);
+		this.timers.add(timer);
 	}
 
 	private async detach(sessionId: string): Promise<void> {
@@ -303,11 +342,11 @@ export class Daemon {
 			name,
 			cwd,
 			env: { SERENITY_SESSION_ID: id, SERENITY_HOME: this.opts.home },
-			command: [
-				...this.claudeCommand,
-				"--settings",
+			command: agentCommand(
+				this.claudeCommand,
 				hookSettingsPath(this.opts.home),
-			],
+				this.self,
+			),
 		});
 		await this.tmux.setPaneOption(pane, "@serenity_session", id);
 
@@ -333,6 +372,7 @@ export class Daemon {
 			updatedAt: at,
 		};
 		this.opts.storage.sessions.put(session);
+		this.watchStartup(id);
 		this.log(`created ${name} in ${cwd} (pane ${pane})`);
 		this.broadcast(repo);
 		return session;

@@ -6,6 +6,10 @@
  *   a line with "permission" → UserPromptSubmit, then a permission Notification;
  *                       the next line → PostToolUse, then Stop
  *   "exit"            → SessionEnd, then exit
+ *   "crash"           → exit 3 with no hook, like a crash
+ * In a folder whose name ends in "-untrusted" it first asks to trust the
+ * folder and, like Claude Code, fires no hooks until the answer is "y";
+ * any other answer exits silently.
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -38,12 +42,20 @@ function fire(event: string, extra: Record<string, unknown> = {}): void {
 	}
 }
 
+const lines = console[Symbol.asyncIterator]();
+if (process.cwd().endsWith("-untrusted")) {
+	process.stdout.write("Do you trust this folder? (y/n) ");
+	const answer = await lines.next();
+	if (answer.done || answer.value.trim() !== "y") process.exit(0);
+}
+
 fire("SessionStart", { source: "startup" });
 process.stdout.write("fake claude ready\n> ");
 
 let awaitingPermission = false;
-for await (const line of console) {
+for await (const line of { [Symbol.asyncIterator]: () => lines }) {
 	const text = line.trim();
+	if (text === "crash") process.exit(3);
 	if (text === "exit") {
 		fire("SessionEnd", { reason: "prompt_input_exit" });
 		process.exit(0);

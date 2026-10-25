@@ -69,6 +69,29 @@ async function until(
 	throw new Error(`timed out waiting for ${what}`);
 }
 
+/** Types a line into an agent's own pane, as if typed in Claude. */
+function typeInAgent(name: string, text: string): void {
+	tmux("send-keys", "-t", `serenity-demo:${name}`, "-l", text);
+	tmux("send-keys", "-t", `serenity-demo:${name}`, "Enter");
+}
+
+const endedCards = () => (screen().match(/Session ended\./g) ?? []).length;
+
+async function newSession(name: string): Promise<void> {
+	keys("n");
+	await waitFor(/New session/);
+	type(name);
+	await Bun.sleep(100);
+	keys("Enter");
+	await until(
+		() =>
+			tmux("list-windows", "-t", "=serenity-demo", "-F", "#{window_name}")
+				.split("\n")
+				.includes(name),
+		`a window for ${name}`,
+	);
+}
+
 beforeAll(() => {
 	dir = mkdtempSync(join(tmpdir(), "sre2e-"));
 	repo = join(dir, "repos", "demo");
@@ -96,6 +119,7 @@ beforeAll(() => {
 		SERENITY_TMUX_SOCKET: SOCKET,
 		SERENITY_CLAUDE_BIN: FAKE,
 		SERENITY_SELF: JSON.stringify([process.execPath, MAIN]),
+		SERENITY_STARTUP_GRACE_MS: "300",
 	};
 	const envArgs = Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
 	tmux(
@@ -208,11 +232,44 @@ test(
 );
 
 test(
-	"an agent that exits is shown as ended",
+	"a session stuck on Claude's trust prompt shows as waiting; answering starts it",
 	async () => {
-		tmux("send-keys", "-t", "serenity-demo:api-auth", "-l", "exit");
-		tmux("send-keys", "-t", "serenity-demo:api-auth", "Enter");
-		await waitFor(/Session ended\./);
+		await newSession("a-untrusted");
+		await waitFor(/confirm Claude's startup prompt/);
+		expect(screen()).toContain("WAITING");
+		typeInAgent("a-untrusted", "y");
+		await until(
+			() => !screen().includes("confirm Claude's startup prompt"),
+			"the startup ask to clear",
+		);
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"refusing the trust prompt ends the session instead of leaving it live",
+	async () => {
+		await newSession("b-untrusted");
+		typeInAgent("b-untrusted", "n");
+		await until(() => endedCards() === 1, "b-untrusted to show as ended");
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"a crash with no SessionEnd hook is shown as ended",
+	async () => {
+		typeInAgent("a-untrusted", "crash");
+		await until(() => endedCards() === 2, "a-untrusted to show as ended");
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"an agent that exits normally is shown as ended",
+	async () => {
+		typeInAgent("api-auth", "exit");
+		await until(() => endedCards() === 3, "api-auth to show as ended");
 	},
 	STEP_TIMEOUT,
 );

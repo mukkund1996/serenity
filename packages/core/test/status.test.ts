@@ -14,6 +14,7 @@ describe("reduceHook", () => {
 		);
 		expect(patch).toEqual({
 			status: "idle",
+			ask: null,
 			claudeSessionId: "c-1",
 			transcriptPath: "/t.jsonl",
 		});

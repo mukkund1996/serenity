@@ -22,7 +22,7 @@ usage:
   serenity version
 
 internal:
-  serenity daemon | tui | hook <Event> | detach <pane>`;
+  serenity daemon | tui | hook <Event> | exited <code> | detach <pane>`;
 
 const home = serenityHome();
 
@@ -109,6 +109,23 @@ async function hook(kind: string | undefined): Promise<void> {
 	process.exit(0);
 }
 
+/** `serenity exited <code>`: run by the agent's wrapper shell when claude exits. */
+async function exited(code: string | undefined): Promise<void> {
+	const sessionId = process.env.SERENITY_SESSION_ID;
+	if (!sessionId) process.exit(0);
+	const parsed = Number(code);
+	const peer = await connectDaemon(home);
+	await peer
+		?.request(
+			"session.exited",
+			{ sessionId, code: Number.isInteger(parsed) ? parsed : null },
+			{ timeoutMs: 1000 },
+		)
+		.catch(() => {});
+	peer?.close();
+	process.exit(0);
+}
+
 async function detach(pane: string | undefined): Promise<void> {
 	const peer = await connectDaemon(home);
 	if (!peer) fail("daemon is not running");
@@ -153,6 +170,9 @@ switch (command) {
 		break;
 	case "hook":
 		await hook(arg);
+		break;
+	case "exited":
+		await exited(arg);
 		break;
 	case "detach":
 		await detach(arg);

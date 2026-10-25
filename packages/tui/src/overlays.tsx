@@ -75,12 +75,12 @@ export function NewSessionDialog({
 			<Box width={13} flexShrink={0}>
 				<Text color="gray">{label}</Text>
 			</Box>
-			<Box backgroundColor="black" flexGrow={1}>
+			<Box backgroundColor={field === f ? "gray" : undefined} flexGrow={1}>
 				<Text wrap="truncate-start">
 					{values[f] ? (
 						<Text color="whiteBright">{values[f]}</Text>
 					) : (
-						<Text color="gray">{placeholder}</Text>
+						<Text color={field === f ? "black" : "gray"}>{placeholder}</Text>
 					)}
 					{field === f ? <Text color="whiteBright">█</Text> : null}
 				</Text>
@@ -92,6 +92,7 @@ export function NewSessionDialog({
 		<TitledBox
 			title="New session"
 			titleColor="whiteBright"
+			fill="black"
 			borderStyle="double"
 			borderColor="white"
 			width={DIALOG_W}
@@ -149,6 +150,7 @@ export function ShortcutsPanel() {
 		<TitledBox
 			title="Shortcuts"
 			titleColor="whiteBright"
+			fill="black"
 			borderStyle="single"
 			borderColor="white"
 			width={46}

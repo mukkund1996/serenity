@@ -37,6 +37,11 @@ export interface Methods {
 		params: { sessionId: string; kind: HookKind; payload: HookPayload };
 		result: null;
 	};
+	/** Sent by the agent's wrapper shell when claude exits, for any reason. */
+	"session.exited": {
+		params: { sessionId: string; code: number | null };
+		result: null;
+	};
 	"daemon.shutdown": { params: Record<string, never>; result: null };
 }
 

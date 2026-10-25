@@ -45,6 +45,7 @@ export function reduceHook(
 	switch (kind) {
 		case "SessionStart":
 			patch.status = "idle";
+			patch.ask = null;
 			break;
 		case "UserPromptSubmit":
 			patch.status = "working";

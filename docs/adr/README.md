@@ -11,7 +11,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0003](0003-hybrid-rendering.md) | Hybrid rendering: cell canvas for the map, Ink for panels | Accepted |
 | [0004](0004-sessions-in-tmux-panes.md) | Claude Code sessions run in tmux panes | Accepted |
 | [0005](0005-daemon-and-json-rpc.md) | Background daemon, JSON-RPC over a unix socket, scoped per repo | Accepted |
-| [0006](0006-status-from-hooks.md) | Session status from Claude Code hooks only | Accepted |
+| [0006](0006-status-from-hooks.md) | Session status from Claude Code hooks, plus an exit report | Accepted |
 | [0007](0007-master-roles-and-models.md) | Master = Opus stream + Haiku/Sonnet one-shot workers via the claude CLI | Accepted |
 | [0008](0008-master-proposes-via-mcp.md) | Master only proposes; MCP tools for the Opus chat only | Accepted |
 | [0009](0009-storage-interface-sqlite.md) | SQLite behind a swappable storage interface | Accepted |

@@ -48,6 +48,7 @@ export function TitledBox({
 	borderColor,
 	width,
 	right,
+	fill,
 	children,
 }: {
 	title: string;
@@ -56,6 +57,8 @@ export function TitledBox({
 	borderColor: Color;
 	width: number;
 	right?: ReactNode;
+	/** Background for an overlay, so what is behind it does not show through. */
+	fill?: Color;
 	children: ReactNode;
 }) {
 	return (
@@ -63,6 +66,8 @@ export function TitledBox({
 			<Box
 				borderStyle={borderStyle}
 				borderColor={ink(borderColor)}
+				backgroundColor={ink(fill)}
+				borderBackgroundColor={ink(fill)}
 				flexDirection="column"
 				paddingX={2}
 				width={width}
@@ -70,7 +75,9 @@ export function TitledBox({
 				{children}
 			</Box>
 			<Box position="absolute" marginLeft={2}>
-				<Text color={ink(titleColor)} bold>{` ${title} `}</Text>
+				<Text color={ink(titleColor)} backgroundColor={ink(fill)} bold>
+					{` ${title} `}
+				</Text>
 			</Box>
 			{right ? (
 				<Box

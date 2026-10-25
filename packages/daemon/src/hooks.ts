@@ -30,6 +30,29 @@ export function hookSettings(selfCommand: string[]): object {
 	return { hooks };
 }
 
+/**
+ * The command an agent pane runs: claude under a tiny `sh` parent that tells
+ * the daemon when claude exits, for any reason (crash, refused folder trust),
+ * which hooks cannot report. Ctrl+C stays with claude: it runs the terminal
+ * in raw mode, so the key never becomes a signal to the shell.
+ */
+export function agentCommand(
+	claude: string[],
+	settingsPath: string,
+	selfCommand: string[],
+): string[] {
+	const notify = [...selfCommand, "exited"].map(shellQuote).join(" ");
+	return [
+		"sh",
+		"-c",
+		`"$@"; ${notify} "$?"`,
+		"serenity-agent",
+		...claude,
+		"--settings",
+		settingsPath,
+	];
+}
+
 export function writeHookSettings(path: string, selfCommand: string[]): void {
 	writeFileSync(
 		path,
