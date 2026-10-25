@@ -13,6 +13,8 @@ export async function runTui(opts: {
 	const instance = render(
 		<App home={opts.home} repo={opts.repo} tmuxPane={tmuxPane} />,
 		{
+			// Ink draws only the last frame when CI is set; the map is useless that way.
+			interactive: true,
 			alternateScreen: true,
 			incrementalRendering: true,
 			exitOnCtrlC: true,
