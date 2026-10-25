@@ -9,7 +9,14 @@ import {
 	type Session,
 	type Suggestion,
 } from "@serenity/core";
-import { Box, Text, useApp, useInput, useWindowSize } from "ink";
+import {
+	Box,
+	type Key as InkKey,
+	Text,
+	useApp,
+	useInput,
+	useWindowSize,
+} from "ink";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
 	CanvasView,
@@ -81,6 +88,23 @@ function editText(
 	return { value: value + text, submit };
 }
 
+/**
+ * State that key handlers read through `ref`, which a set updates at once.
+ * Ink delivers each stdin chunk to the last rendered handler, so `i` and the
+ * text typed right after it can both arrive before React re-renders.
+ */
+function useLiveState<T>(
+	initial: T,
+): [T, (next: T) => void, { readonly current: T }] {
+	const [value, setValue] = useState(initial);
+	const ref = useRef(initial);
+	const set = (next: T) => {
+		ref.current = next;
+		setValue(next);
+	};
+	return [value, set, ref];
+}
+
 export function App({ home, repo, tmuxPane }: AppProps) {
 	const { exit } = useApp();
 	const { columns, rows } = useWindowSize();
@@ -89,10 +113,12 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const [node, setNode] = useState<string>(MASTER);
 	/** The element selected inside the node (arrow keys); null means its first. */
 	const [element, setElement] = useState<string | null>(null);
-	const [replyText, setReplyText] = useState<string | null>(null);
+	const [replyText, setReplyText, replyRef] = useLiveState<string | null>(null);
 	/** The suggestion whose reply is being edited (e), if any. */
-	const [replyEdit, setReplyEdit] = useState<string | null>(null);
-	const [masterText, setMasterText] = useState<string | null>(null);
+	const [, setReplyEdit, replyEditRef] = useLiveState<string | null>(null);
+	const [masterText, setMasterText, masterRef] = useLiveState<string | null>(
+		null,
+	);
 	const [sentReplies, setSentReplies] = useState<string[]>([]);
 	const [overlay, setOverlay] = useState<Overlay>(null);
 	const [notice, setNotice] = useState<string | null>(null);
@@ -299,8 +325,9 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		setSentReplies((list) =>
 			[text, ...list.filter((r) => r !== text)].slice(0, REPLY_HISTORY),
 		);
-		const sent = replyEdit
-			? call("suggestion.accept", { id: replyEdit, text })
+		const editing = replyEditRef.current;
+		const sent = editing
+			? call("suggestion.accept", { id: editing, text })
 			: call("session.reply", { id: target.id, text });
 		sent.catch(fail);
 	};
@@ -312,7 +339,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	};
 
 	useInput(
-		(input, key) => {
+		function onKey(input: string, key: InkKey) {
 			if (attached) {
 				if (key.escape || (key.ctrl && input === "g"))
 					call("session.detach", { id: attached.id }).catch(fail);
@@ -350,34 +377,36 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					});
 				if (key.return) return sendReply(list[overlay.selected] ?? "");
 				setOverlay(null);
-				const edit = editText(replyText ?? "", input, key);
+				const edit = editText(replyRef.current ?? "", input, key);
 				if (edit) setReplyText(edit.value);
 				return;
 			}
 
-			if (replyText !== null) {
+			const reply = replyRef.current;
+			if (reply !== null) {
 				if (key.escape) return endReply();
 				if (key.tab) {
 					if (recentReplies().length)
 						setOverlay({ kind: "replies", selected: 0 });
 					return;
 				}
-				if (key.return) return sendReply(replyText);
-				const edit = editText(replyText, input, key);
+				if (key.return) return sendReply(reply);
+				const edit = editText(reply, input, key);
 				if (!edit) return;
 				if (edit.submit) return sendReply(edit.value);
 				setReplyText(edit.value);
 				return;
 			}
 
-			if (masterText !== null) {
+			const toMaster = masterRef.current;
+			if (toMaster !== null) {
 				const send = (text: string) => {
 					setMasterText(null);
 					if (text.trim()) call("master.message", { repo, text }).catch(fail);
 				};
 				if (key.escape) return setMasterText(null);
-				if (key.return) return send(masterText);
-				const edit = editText(masterText, input, key);
+				if (key.return) return send(toMaster);
+				const edit = editText(toMaster, input, key);
 				if (!edit) return;
 				if (edit.submit) return send(edit.value);
 				setMasterText(edit.value);
@@ -386,6 +415,14 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 			if (overlay?.kind === "help") {
 				if (input === "?" || key.escape) setOverlay(null);
+				return;
+			}
+
+			// Keys typed before a render arrive as one chunk ("ifinish\r" when the
+			// text comes before i's reply box is listening); take them one by one.
+			const keys = [...input];
+			if (keys.length > 1 && !key.ctrl && !key.meta) {
+				for (const k of keys) onKey(k, { ...key, return: k === "\r" });
 				return;
 			}
 

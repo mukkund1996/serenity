@@ -123,6 +123,12 @@ function commitIn(worktree: string, file: string): string {
 	return git("rev-parse", "HEAD").stdout.trim();
 }
 
+/** Cleanup deletes the branch after it removes the worktree. */
+const hasBranch = (name: string) =>
+	spawnSync("git", ["-C", repo, "branch", "--list", name], {
+		encoding: "utf8",
+	}).stdout.trim() !== "";
+
 function writePr(branch: string, pr: Record<string, unknown>): void {
 	writeFileSync(join(ghDir(), `${branch}.json`), JSON.stringify(pr));
 }
@@ -373,14 +379,7 @@ test(
 			() => !existsSync(join(dir, "repos", "demo-tidy")),
 			"the tidy worktree to be removed",
 		);
-		const branches = spawnSync(
-			"git",
-			["-C", repo, "branch", "--list", "tidy"],
-			{
-				encoding: "utf8",
-			},
-		).stdout;
-		expect(branches.trim()).toBe("");
+		await until(() => !hasBranch("tidy"), "the tidy branch to be deleted");
 		await waitFor(/Archived\. Summary: Done: finish/);
 	},
 	STEP_TIMEOUT,
@@ -442,12 +441,7 @@ test(
 			() => !existsSync(worktree),
 			"the shipit worktree to be removed",
 		);
-		const branches = spawnSync(
-			"git",
-			["-C", repo, "branch", "--list", "shipit"],
-			{ encoding: "utf8" },
-		).stdout;
-		expect(branches.trim()).toBe("");
+		await until(() => !hasBranch("shipit"), "the shipit branch to be deleted");
 	},
 	STEP_TIMEOUT,
 );
