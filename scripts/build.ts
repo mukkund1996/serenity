@@ -21,12 +21,27 @@ const stubDevtools: BunPlugin = {
 };
 
 const [target, outfile = "dist/serenity"] = process.argv.slice(2);
+
+/** "<commit>[-dirty].<MMDD-HHMM>", so every build has its own BUILD_ID. */
+function buildStamp(): string {
+	const git = (...args: string[]) =>
+		Bun.spawnSync(["git", ...args])
+			.stdout.toString()
+			.trim();
+	const sha = git("rev-parse", "--short", "HEAD") || "nogit";
+	const dirty = git("status", "--porcelain") ? "-dirty" : "";
+	const now = new Date();
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${sha}${dirty}.${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+}
+
 const result = await Bun.build({
 	entrypoints: ["packages/cli/src/main.ts"],
 	compile: target
 		? { target: target as Bun.Build.CompileTarget, outfile }
 		: { outfile },
 	minify: true,
+	define: { SERENITY_BUILD: JSON.stringify(buildStamp()) },
 	plugins: [stubDevtools],
 });
 if (!result.success) {

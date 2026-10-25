@@ -13,6 +13,7 @@
 - The TUI is a thin client: it renders a state snapshot plus pushed deltas and sends commands.
 
 ## Consequences
-- Daemon version must match client version; the handshake checks and restarts an older daemon.
+- Daemon and client must be the same build (`BUILD_ID`: version + commit + build time); the handshake asks any other build to stop and starts a fresh daemon.
+- `serenity hook` and `serenity exited` start the daemon when it is down, so a restart or upgrade loses no hook events.
 - Contract tests pin the RPC schema (0013).
 - Crash safety: the daemon rebuilds in-memory state from storage on start and re-attaches to surviving tmux panes.

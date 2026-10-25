@@ -12,6 +12,10 @@
  *   "exit"            → SessionEnd, then exit
  *   In a folder whose name ends in "-untrusted" it first asks to trust the
  *   folder and fires no hooks until the answer is "y".
+ *   Like Claude Code, with CLAUDE_CONFIG_DIR set and inside tmux it keeps
+ *   `sessions/<pid>.json` (status, pane) and a transcript current, which is
+ *   what serenity reads for sessions it adopted (ADR 0016). `--resume <id>`
+ *   continues that session id.
  *
  * `-p --json-schema` (the master's Haiku/Sonnet workers): answers the summary
  * or suggestion schema from the prompt on stdin.
@@ -21,7 +25,14 @@
  * permission" its permission tool, through the real `serenity mcp` proxy.
  */
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import {
+	appendFileSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => {
@@ -174,7 +185,8 @@ async function interactive(): Promise<void> {
 	const settings = settingsPath
 		? JSON.parse(readFileSync(settingsPath, "utf8"))
 		: { hooks: {} };
-	const sessionId = `fake-${process.pid}`;
+	const sessionId = flag("--resume") ?? `fake-${process.pid}`;
+	const registry = claudeRegistry(sessionId);
 
 	const fire = (event: string, extra: Record<string, unknown> = {}) => {
 		const payload = JSON.stringify({
@@ -199,6 +211,7 @@ async function interactive(): Promise<void> {
 		: "ready";
 	const start = () => {
 		state = "ready";
+		registry.status("idle");
 		fire("SessionStart", { source: "startup" });
 		process.stdout.write("fake claude ready\r\n> ");
 	};
@@ -209,6 +222,7 @@ async function interactive(): Promise<void> {
 	const approve = () => {
 		state = "ready";
 		fire("PostToolUse", { tool_name: "Bash" });
+		registry.reply("Ran it.");
 		fire("Stop", { last_assistant_message: "Ran it." });
 		process.stdout.write("approved\r\n> ");
 	};
@@ -226,6 +240,7 @@ async function interactive(): Promise<void> {
 			process.exit(0);
 		}
 		fire("UserPromptSubmit", { prompt: text });
+		registry.prompt(text);
 		if (text.includes("permission")) {
 			state = "permission";
 			fire("PermissionRequest", {
@@ -233,11 +248,13 @@ async function interactive(): Promise<void> {
 				tool_input: { command: "touch x" },
 			});
 			process.stdout.write(
-				"Do you want to proceed?\r\n❯ 1. Yes\r\n  2. No\r\n",
+				"\r\n Bash command\r\n   touch x\r\n Do you want to proceed?\r\n❯ 1. Yes\r\n  2. No\r\n",
 			);
+			registry.status("waiting", "dialog open");
 			return;
 		}
 		const reply = text.includes("?") ? `Should I ${text}` : `Done: ${text}`;
+		registry.reply(reply);
 		fire("Stop", { last_assistant_message: reply });
 		process.stdout.write(`got: ${text}\r\n> `);
 	};
@@ -262,4 +279,69 @@ async function interactive(): Promise<void> {
 			}
 		}
 	}
+}
+
+/**
+ * Claude Code's own bookkeeping: `<config>/sessions/<pid>.json` and the
+ * transcript. A no-op outside tmux or without CLAUDE_CONFIG_DIR.
+ */
+function claudeRegistry(sessionId: string) {
+	const config = process.env.CLAUDE_CONFIG_DIR;
+	const pane = process.env.TMUX_PANE;
+	const where =
+		config && pane
+			? spawnSync(
+					"tmux",
+					[
+						"display-message",
+						"-p",
+						"-t",
+						pane,
+						"#{session_name}:#{window_id}.#{pane_id}",
+					],
+					{ encoding: "utf8" },
+				).stdout.trim()
+			: "";
+	if (!config || !where)
+		return { status: () => {}, prompt: () => {}, reply: () => {} };
+	const cwd = process.cwd();
+	const file = join(config, "sessions", `${process.pid}.json`);
+	const transcript = join(
+		config,
+		"projects",
+		cwd.replace(/[^a-zA-Z0-9]/g, "-"),
+		`${sessionId}.jsonl`,
+	);
+	mkdirSync(dirname(file), { recursive: true });
+	mkdirSync(dirname(transcript), { recursive: true });
+	process.on("exit", () => rmSync(file, { force: true }));
+	const log = (entry: object) =>
+		appendFileSync(transcript, `${JSON.stringify(entry)}\n`);
+	const status = (value: string, waitingFor?: string) =>
+		writeFileSync(
+			file,
+			JSON.stringify({
+				pid: process.pid,
+				sessionId,
+				cwd,
+				kind: "interactive",
+				tmux: where,
+				status: value,
+				waitingFor,
+			}),
+		);
+	return {
+		status,
+		prompt: (text: string) => {
+			log({ type: "last-prompt", lastPrompt: text });
+			status("busy");
+		},
+		reply: (text: string) => {
+			log({
+				type: "assistant",
+				message: { content: [{ type: "text", text }] },
+			});
+			status("idle");
+		},
+	};
 }

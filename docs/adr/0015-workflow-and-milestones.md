@@ -12,6 +12,7 @@
 2. ✓ **Master** — MCP server; Opus chat stream; Haiku summarizer + finished judgement; Sonnet suggester; NEEDS YOU; `y`/`e`/`n`; Reply (4a), Confirm (4b), permission prompt; categories; watch; spinner; failure chips.
 3. ✓ **PRs** — `gh` refresh on events, card PR line, `o`, review-request suggestion.
 4. **Map and navigation** — map zoom (1), category ranking and the "N more categories" node, expand (2b), WASD, `c`, `z`/`Z`, `[`/`]`, `/` search, rename / remove, shortcuts panel (4e).
+3½. ✓ **Dogfooding** — import running sessions (`I`, `U`; 0016), build ids, `install:local`, isolated `bun dev` ([dogfooding](../dogfooding.md)).
 5. **Release** — release-please, binary matrix, Homebrew tap, curl installer, README, LICENSE.
 
-**v1.1:** master expanded view (`M`). **Later:** Slack, importing sessions, richer event capture, keymap config.
+**v1.1:** master expanded view (`M`). **Later:** Slack, richer event capture, keymap config.

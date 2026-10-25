@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 import {
+	BUILD_ID,
 	type CleanupPlan,
 	type CreateSessionParams,
 	hookSettingsPath,
@@ -17,12 +18,13 @@ import {
 	RpcPeer,
 	reduceHook,
 	type Session,
+	STARTUP_ASK,
 	type Storage,
 	selfCommand,
 	socketPath,
 	tmuxSessionName,
-	VERSION,
 } from "@serenity/core";
+import { ClaudeObserver } from "./adopt";
 import { type ClaudeRunner, CliClaudeRunner } from "./claude";
 import { type CleanupFacts, cleanupPlan, plannedRemovals } from "./cleanup";
 import { run } from "./exec";
@@ -66,6 +68,8 @@ export interface DaemonOptions {
 	startupGraceMs?: number;
 	/** Quiet time before a summary or suggestion runs; SERENITY_WORKER_DEBOUNCE_MS overrides it. */
 	workerDebounceMs?: number;
+	/** Claude Code's config dir, where adoptable sessions are found; defaults to CLAUDE_CONFIG_DIR or ~/.claude. */
+	claudeConfigDir?: string;
 }
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,39}$/i;
@@ -76,7 +80,6 @@ const ATTACH_PERCENT = 67;
  * new worktree is an untrusted folder; silence after this long means it waits.
  */
 const DEFAULT_STARTUP_GRACE_MS = 5000;
-const STARTUP_ASK = "confirm Claude's startup prompt (folder trust)";
 /** A burst of hooks (tool calls, then Stop) yields one model call. */
 const DEFAULT_WORKER_DEBOUNCE_MS = 1500;
 /** Messages of the master conversation sent to clients. */
@@ -95,10 +98,13 @@ const envNumber = (name: string, fallback: number) =>
 export class Daemon {
 	private server: Server | null = null;
 	private readonly subscriptions = new Map<RpcPeer, Set<string>>();
-	/** repo → the attached session and the serenity pane it was joined into. */
+	/**
+	 * repo → the attached session and the map pane it was joined into. For an
+	 * adopted session, `clientTty` is the tmux client that was switched to it.
+	 */
 	private readonly attached = new Map<
 		string,
-		{ sessionId: string; clientPane: string }
+		{ sessionId: string; clientPane: string; clientTty?: string }
 	>();
 	private readonly tmux: Tmux;
 	private readonly self = selfCommand();
@@ -110,6 +116,7 @@ export class Daemon {
 	private readonly master: MasterSupervisor;
 	private readonly gh: Gh;
 	private readonly prs: PrWatcher;
+	private readonly observer: ClaudeObserver;
 	private stopped: (() => void) | null = null;
 	readonly done: Promise<void>;
 
@@ -156,6 +163,21 @@ export class Daemon {
 				opts.workerDebounceMs ??
 				envNumber("SERENITY_WORKER_DEBOUNCE_MS", DEFAULT_WORKER_DEBOUNCE_MS),
 		});
+		this.observer = new ClaudeObserver(
+			{
+				storage: opts.storage,
+				tmux: this.tmux,
+				now: this.now,
+				change: (session, patch) => this.change(session, patch),
+				broadcast: (repo) => this.broadcast(repo),
+				markEnded: (session) => this.markEnded(session),
+				bindDetachKey: async () => {
+					await this.tmux.bindDetachKey(this.detachCommand());
+				},
+				log: this.log,
+			},
+			opts.claudeConfigDir,
+		);
 		this.done = new Promise((resolve) => {
 			this.stopped = resolve;
 		});
@@ -171,13 +193,15 @@ export class Daemon {
 			this.server?.once("error", reject);
 			this.server?.listen(path, resolve);
 		});
-		this.log(`serenityd ${VERSION} listening on ${path} (pid ${process.pid})`);
+		this.observer.start();
+		this.log(`serenityd ${BUILD_ID} listening on ${path} (pid ${process.pid})`);
 	}
 
 	async stop(): Promise<void> {
 		for (const timer of this.timers) clearTimeout(timer);
 		this.master.stop();
 		this.prs.stop();
+		this.observer.stop();
 		for (const peer of this.subscriptions.keys()) peer.close();
 		await new Promise<void>((resolve) =>
 			this.server ? this.server.close(() => resolve()) : resolve(),
@@ -245,7 +269,7 @@ export class Daemon {
 	}
 
 	private readonly handlers: Handlers = {
-		hello: () => ({ daemonVersion: VERSION, pid: process.pid }),
+		hello: () => ({ daemonVersion: BUILD_ID, pid: process.pid }),
 
 		"state.subscribe": ({ repo }, peer) => {
 			this.subscriptions.get(peer)?.add(repo);
@@ -267,8 +291,24 @@ export class Daemon {
 			const current = this.attached.get(session.repo);
 			if (current) await this.detach(current.sessionId);
 			await this.tmux.bindDetachKey(this.detachCommand());
-			await this.tmux.joinRight(pane, clientPane, ATTACH_PERCENT);
-			this.attached.set(session.repo, { sessionId: session.id, clientPane });
+			if (session.origin === "adopted") {
+				// Its pane stays in the user's own window; go there (ADR 0016).
+				const clientTty = await this.tmux.clientShowing(clientPane);
+				if (!clientTty)
+					throw new RpcError(
+						RpcErrorCode.InvalidParams,
+						"no tmux client is showing the map",
+					);
+				await this.tmux.switchClient(clientTty, pane);
+				this.attached.set(session.repo, {
+					sessionId: session.id,
+					clientPane,
+					clientTty,
+				});
+			} else {
+				await this.tmux.joinRight(pane, clientPane, ATTACH_PERCENT);
+				this.attached.set(session.repo, { sessionId: session.id, clientPane });
+			}
 			this.prs.schedule(session.id, 0);
 			this.broadcast(session.repo);
 			return null;
@@ -284,6 +324,16 @@ export class Daemon {
 							.listAll()
 							.find((s) => s.tmuxPane === pane)?.id;
 			if (sessionId) await this.detach(sessionId);
+			return null;
+		},
+
+		"session.discover": ({ repo }) => this.observer.candidates(repo),
+
+		"session.adopt": ({ repo, claudeSessionIds }) =>
+			this.observer.adopt(repo, claudeSessionIds),
+
+		"session.upgrade": async ({ id }) => {
+			await this.upgrade(this.requireSession(id));
 			return null;
 		},
 
@@ -486,7 +536,16 @@ export class Daemon {
 		const attached = this.attached.get(session.repo);
 		if (attached?.sessionId !== sessionId) return;
 		this.attached.delete(session.repo);
-		if (session.tmuxPane && (await this.tmux.paneExists(session.tmuxPane))) {
+		if (attached.clientTty) {
+			// Adopted: its pane stays put; bring the client back to the map.
+			if (await this.tmux.paneExists(attached.clientPane))
+				await this.tmux
+					.switchClient(attached.clientTty, attached.clientPane)
+					.catch(() => {});
+		} else if (
+			session.tmuxPane &&
+			(await this.tmux.paneExists(session.tmuxPane))
+		) {
 			await this.tmux.park(
 				session.tmuxPane,
 				tmuxSessionName(session.repo),
@@ -542,8 +601,15 @@ export class Daemon {
 			waitingOn: null,
 			tmuxPane: null,
 		});
-		if (facts.alive && session.tmuxPane)
-			await this.tmux.killPane(session.tmuxPane).catch(() => {});
+		if (facts.alive && session.tmuxPane) {
+			if (session.tracking === "observed") {
+				// The user's own pane: stop claude, keep their shell and window.
+				await this.tmux
+					.unsetPaneOption(session.tmuxPane, "@serenity_session")
+					.catch(() => {});
+				if (session.claudePid) stopProcess(session.claudePid);
+			} else await this.tmux.killPane(session.tmuxPane).catch(() => {});
+		}
 		if (removals.removeWorktree && session.worktree) {
 			if (existsSync(session.worktree))
 				await removeWorktree(session.repo, session.worktree);
@@ -554,6 +620,42 @@ export class Daemon {
 		this.log(`cleaned up ${session.name}`);
 		this.broadcast(session.repo);
 		return cleanupPlan(session, facts);
+	}
+
+	/**
+	 * Restarts an adopted session in place with `claude --resume` under
+	 * serenity's hooks, for full status (ADR 0016). Only while Claude is idle,
+	 * so no turn is cut short.
+	 */
+	private async upgrade(session: Session): Promise<void> {
+		if (session.tracking !== "observed" || !session.claudeSessionId)
+			throw new RpcError(
+				RpcErrorCode.InvalidParams,
+				`${session.name} already reports through serenity's hooks`,
+			);
+		await this.observer.sweep();
+		const fresh = this.requireSession(session.id);
+		const pane = await this.requireLivePane(fresh);
+		if (fresh.status !== "idle" && fresh.status !== "done")
+			throw new RpcError(
+				RpcErrorCode.InvalidParams,
+				`${fresh.name} is busy; restart it once it is idle`,
+			);
+		this.observer.forget(fresh.id);
+		this.change(fresh, { tracking: "hooks", claudePid: null });
+		await this.tmux.respawnPane({
+			pane,
+			cwd: fresh.cwd,
+			env: { SERENITY_SESSION_ID: fresh.id, SERENITY_HOME: this.opts.home },
+			command: agentCommand(
+				[...this.claudeCommand, "--resume", fresh.claudeSessionId as string],
+				hookSettingsPath(this.opts.home),
+				this.self,
+			),
+		});
+		await this.tmux.setPaneOption(pane, "@serenity_session", fresh.id);
+		this.log(`restarted ${fresh.name} under serenity's hooks`);
+		this.broadcast(fresh.repo);
 	}
 
 	private async createSession(params: CreateSessionParams): Promise<Session> {
@@ -630,6 +732,9 @@ export class Daemon {
 			pr: null,
 			prError: null,
 			tmuxPane: pane,
+			origin: "spawned",
+			tracking: "hooks",
+			claudePid: null,
 			status: "idle",
 			summary: null,
 			ask: null,
@@ -649,4 +754,11 @@ export class Daemon {
 		this.broadcast(repo);
 		return session;
 	}
+}
+
+/** SIGTERM, ignoring a process that is already gone. */
+function stopProcess(pid: number): void {
+	try {
+		process.kill(pid, "SIGTERM");
+	} catch {}
 }

@@ -3,6 +3,7 @@ import {
 	type CleanupPlan,
 	type CreateSessionParams,
 	groupCategories,
+	type ImportCandidate,
 	type MasterState,
 	needsYou,
 	type Session,
@@ -14,6 +15,7 @@ import { CanvasView, Key, MasterPanel, SessionMaster } from "./components";
 import { openUrl } from "./open-url";
 import {
 	ConfirmDialog,
+	ImportDialog,
 	NewSessionDialog,
 	RecentReplies,
 	ShortcutsPanel,
@@ -40,6 +42,7 @@ type Overlay =
 			error: string | null;
 	  }
 	| { kind: "replies"; selected: number }
+	| { kind: "import"; candidates: ImportCandidate[] }
 	| null;
 
 export interface AppProps {
@@ -318,6 +321,12 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					return setMasterText("");
 				case "N":
 					return setOverlay({ kind: "new" });
+				case "I":
+					call("session.discover", { repo }).then((candidates) => {
+						if (candidates.length) setOverlay({ kind: "import", candidates });
+						else setNotice("no other claude sessions running in tmux here");
+					}, fail);
+					return;
 				case "n":
 					// On a suggestion, n declines it; anywhere else it starts a session.
 					if (focusedSuggestion)
@@ -361,6 +370,14 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				case "x":
 					void openConfirm(focused, null);
 					return;
+				case "U":
+					if (focused.tracking !== "observed")
+						return setNotice(`${focused.name} already reports through hooks`);
+					call("session.upgrade", { id: focused.id }).then(
+						() => setNotice(`restarted ${focused.name} with full tracking`),
+						fail,
+					);
+					return;
 				case "i":
 					setReplyEdit(null);
 					return setReplyText("");
@@ -373,8 +390,17 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				);
 			}
 		},
-		{ isActive: overlay?.kind !== "new" },
+		{ isActive: overlay?.kind !== "new" && overlay?.kind !== "import" },
 	);
+
+	const importSessions = async (claudeSessionIds: string[]) => {
+		const adopted = await call("session.adopt", { repo, claudeSessionIds });
+		setOverlay(null);
+		if (adopted[0]) setFocusId(adopted[0].id);
+		setNotice(
+			`imported ${adopted.length} ${adopted.length === 1 ? "session" : "sessions"}`,
+		);
+	};
 
 	const createSession = async (params: CreateSessionParams) => {
 		const session = await call("session.create", params);
@@ -474,6 +500,15 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					<NewSessionDialog
 						repo={repo}
 						onSubmit={createSession}
+						onClose={() => setOverlay(null)}
+					/>
+				</Centered>
+			) : null}
+			{overlay?.kind === "import" ? (
+				<Centered rows={rows}>
+					<ImportDialog
+						candidates={overlay.candidates}
+						onSubmit={importSessions}
 						onClose={() => setOverlay(null)}
 					/>
 				</Centered>

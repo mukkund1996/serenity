@@ -28,7 +28,12 @@ export function cleanupPlan(
 ): CleanupPlan {
 	const steps: string[] = [];
 	const safety: string[] = [];
-	if (facts.alive) steps.push(`stop the session ${session.name}`);
+	if (facts.alive)
+		steps.push(
+			session.tracking === "observed"
+				? `stop claude in ${session.name} · its tmux window stays`
+				: `stop the session ${session.name}`,
+		);
 
 	if (session.worktree) {
 		if (facts.dirty === 0) steps.push(`remove worktree ${session.worktree}`);

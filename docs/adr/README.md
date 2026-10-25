@@ -21,6 +21,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0013](0013-testing-strategy.md) | Testing strategy | Accepted |
 | [0014](0014-distribution-and-release.md) | Distribution, release, licence, telemetry | Accepted |
 | [0015](0015-workflow-and-milestones.md) | Workflow and milestones | Accepted |
+| [0016](0016-importing-running-sessions.md) | Importing Claude sessions already running in tmux | Accepted |
 
 ## System at a glance
 

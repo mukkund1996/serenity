@@ -81,7 +81,12 @@ export class PrWatcher {
 			const fresh = this.host.storage.sessions.get(sessionId);
 			if (!fresh || fresh.status === "archived") return;
 			const patch: Partial<Session> = { pr: lookup.pr, prError: lookup.error };
-			if (lookup.pr?.state === "MERGED" && fresh.status === "idle")
+			// Imported sessions often share a checkout, so its PR is not theirs alone.
+			if (
+				lookup.pr?.state === "MERGED" &&
+				fresh.status === "idle" &&
+				fresh.origin === "spawned"
+			)
 				patch.status = "done";
 			const changed =
 				JSON.stringify([fresh.pr, fresh.prError, fresh.status]) !==

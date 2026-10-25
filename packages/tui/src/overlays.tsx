@@ -1,12 +1,14 @@
 import type {
 	CleanupPlan,
 	CreateSessionParams,
+	ImportCandidate,
 	SessionMode,
 } from "@serenity/core";
 import { Box, Text, useInput } from "ink";
 import { useState } from "react";
 import { Key, TitledBox } from "./components";
 import { splitAtNewline } from "./text-input";
+import { glyph } from "./theme";
 
 const DIALOG_W = 64;
 const FIELDS = ["name", "cwd", "branch", "mode"] as const;
@@ -147,6 +149,8 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 			["f", "watch · remind master when done"],
 			["x", "clean up / remove"],
 			["n N", "new session (n declines a suggestion)"],
+			["I", "import claude sessions running in tmux"],
+			["U", "restart an imported session with hooks"],
 		],
 	],
 	[
@@ -194,7 +198,7 @@ export function ShortcutsPanel() {
 					<Text color="yellow">◐</Text> waiting <Text color="blue">●</Text> in
 					progress <Text color="green">✓</Text> finished
 				</Text>
-				<Text color="gray">name in grey = idle</Text>
+				<Text color="gray">name in grey = idle · ↗ imported</Text>
 			</Box>
 			<Box marginTop={1}>
 				<Text color="gray">
@@ -301,6 +305,111 @@ export function RecentReplies({
 			))}
 			<Box marginTop={1}>
 				<Text color="gray">type to write your own</Text>
+			</Box>
+		</TitledBox>
+	);
+}
+
+/**
+ * Import picker (ADR 0016): claude sessions running in tmux in this repo
+ * that the map does not track. All are ticked; Space toggles, Enter imports.
+ */
+export function ImportDialog({
+	candidates,
+	onSubmit,
+	onClose,
+}: {
+	candidates: ImportCandidate[];
+	onSubmit: (claudeSessionIds: string[]) => Promise<void>;
+	onClose: () => void;
+}) {
+	const [selected, setSelected] = useState(0);
+	const [chosen, setChosen] = useState(
+		() => new Set(candidates.map((c) => c.claudeSessionId)),
+	);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const toggle = (id: string) =>
+		setChosen((set) => {
+			const next = new Set(set);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
+
+	useInput((input, key) => {
+		if (busy) return;
+		if (key.escape) return onClose();
+		if (key.upArrow || input === "w")
+			return setSelected((i) => Math.max(0, i - 1));
+		if (key.downArrow || input === "s")
+			return setSelected((i) => Math.min(candidates.length - 1, i + 1));
+		const current = candidates[selected];
+		if (input === " " && current) return toggle(current.claudeSessionId);
+		if (input === "a")
+			return setChosen(
+				chosen.size === candidates.length
+					? new Set()
+					: new Set(candidates.map((c) => c.claudeSessionId)),
+			);
+		if (key.return) {
+			if (!chosen.size) return onClose();
+			setBusy(true);
+			setError(null);
+			onSubmit([...chosen]).catch((e: Error) => {
+				setBusy(false);
+				setError(e.message);
+			});
+		}
+	});
+
+	return (
+		<TitledBox
+			title="Import sessions"
+			titleColor="whiteBright"
+			borderStyle="single"
+			borderColor="white"
+			width={72}
+			fill="black"
+			right={<Text color="gray"> ↑↓ Space Enter Esc </Text>}
+		>
+			<Text color="gray">
+				Claude sessions running in your tmux, in this repo. They stay where they
+				are; Enter on a card jumps to their window.
+			</Text>
+			{candidates.map((c, i) => {
+				const g = glyph(c.status);
+				return (
+					<Box key={c.claudeSessionId} flexDirection="column" marginTop={1}>
+						<Box justifyContent="space-between">
+							<Text inverse={i === selected} wrap="truncate">
+								{chosen.has(c.claudeSessionId) ? "[x] " : "[ ] "}
+								{g ? <Text color={g.color}>{g.ch} </Text> : "  "}
+								<Text bold>{c.name}</Text>
+								{c.branch ? <Text color="gray"> · {c.branch}</Text> : null}
+							</Text>
+							<Box flexShrink={0} marginLeft={1}>
+								<Text color="gray">{c.location}</Text>
+							</Box>
+						</Box>
+						<Text color="gray" wrap="truncate">
+							{"      "}
+							{c.title ?? c.lastPrompt ?? "no prompt yet"}
+						</Text>
+					</Box>
+				);
+			})}
+			<Box marginTop={1} justifyContent="space-between">
+				<Text color="gray">
+					<Key>a</Key> all / none
+				</Text>
+				<Text color={error ? "red" : "gray"} wrap="truncate">
+					{error ??
+						(busy
+							? "importing…"
+							: `Enter imports ${chosen.size} of ${candidates.length}`)}
+				</Text>
 			</Box>
 		</TitledBox>
 	);

@@ -1,5 +1,11 @@
 import { connect as netConnect, type Socket } from "node:net";
-import type { HookKind, HookPayload, RepoState, Session } from "./domain";
+import type {
+	HookKind,
+	HookPayload,
+	ImportCandidate,
+	RepoState,
+	Session,
+} from "./domain";
 
 /**
  * JSON-RPC 2.0 over a unix socket, one JSON message per line (ADR 0005).
@@ -64,6 +70,14 @@ export interface Methods {
 		params: { sessionId: string; code: number | null };
 		result: null;
 	};
+	/** Claude sessions running in tmux in this repo that the map does not track (ADR 0016). */
+	"session.discover": { params: { repo: string }; result: ImportCandidate[] };
+	"session.adopt": {
+		params: { repo: string; claudeSessionIds: string[] };
+		result: Session[];
+	};
+	/** Restarts an adopted session with `claude --resume` under serenity's hooks. */
+	"session.upgrade": { params: { id: string }; result: null };
 	"session.watch": { params: { id: string; watched: boolean }; result: null };
 	"session.cleanupPlan": { params: { id: string }; result: CleanupPlan };
 	"session.cleanup": { params: { id: string }; result: null };

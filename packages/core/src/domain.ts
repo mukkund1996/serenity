@@ -1,6 +1,16 @@
 import type { PrInfo } from "./pr";
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.4.0";
+
+/** Set by scripts/build.ts: the commit and time of a compiled build. */
+declare const SERENITY_BUILD: string | undefined;
+
+/**
+ * This exact build, e.g. "0.4.0+3f2a9c1.1029-1650", or "0.4.0+dev" when run
+ * from source. Clients and daemon must match, so installing a new build
+ * replaces the running daemon on the next connect (docs/dogfooding.md).
+ */
+export const BUILD_ID = `${VERSION}+${typeof SERENITY_BUILD === "string" ? SERENITY_BUILD : "dev"}`;
 
 export type SessionStatus =
 	| "waiting"
@@ -27,6 +37,19 @@ export interface Session {
 	/** Why PR status could not be read (gh missing, not logged in), or null. */
 	prError: string | null;
 	tmuxPane: string | null;
+	/**
+	 * "spawned": serenity started it in its own tmux window. "adopted": a
+	 * claude the user already ran in their own tmux window (ADR 0016); its
+	 * pane stays there and attaching switches to it.
+	 */
+	origin: SessionOrigin;
+	/**
+	 * Where status comes from: serenity's hooks, or, for an adopted session
+	 * not yet restarted, Claude's own session file and transcript.
+	 */
+	tracking: SessionTracking;
+	/** The claude process of an observed session; null otherwise. */
+	claudePid: number | null;
 	status: SessionStatus;
 	/** ≤2 sentences, written by the master. */
 	summary: string | null;
@@ -46,6 +69,27 @@ export interface Session {
 }
 
 export type WaitingOn = "permission" | "question" | "startup";
+
+export type SessionOrigin = "spawned" | "adopted";
+
+export type SessionTracking = "hooks" | "observed";
+
+/** A claude found running in tmux that the map does not track yet (ADR 0016). */
+export interface ImportCandidate {
+	claudeSessionId: string;
+	pid: number;
+	tmuxPane: string;
+	/** Where it runs, e.g. "guide:0 modals". */
+	location: string;
+	/** The name it would get on the map. */
+	name: string;
+	/** Claude's own title for the conversation, if any. */
+	title: string | null;
+	lastPrompt: string | null;
+	cwd: string;
+	branch: string | null;
+	status: SessionStatus;
+}
 
 export const HOOK_KINDS = [
 	"SessionStart",

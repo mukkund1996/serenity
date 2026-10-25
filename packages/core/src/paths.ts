@@ -16,6 +16,11 @@ export const dbPath = (home: string) => join(home, "serenity.db");
 export const daemonLogPath = (home: string) => join(home, "daemon.log");
 export const hookSettingsPath = (home: string) =>
 	join(home, "claude-hooks.json");
+/** Claude Code's own config dir; CLAUDE_CONFIG_DIR moves it, as in Claude Code. */
+export function claudeConfigDir(env: NodeJS.ProcessEnv = process.env): string {
+	return env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
+}
+
 export const doctorMarkerPath = (home: string) => join(home, ".doctor-ok");
 
 /** tmux session that hosts the map and parks the agents of one repo. */

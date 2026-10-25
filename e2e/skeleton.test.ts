@@ -162,6 +162,7 @@ beforeAll(() => {
 		SERENITY_WORKER_DEBOUNCE_MS: "100",
 		SERENITY_GH_BIN: FAKE_GH,
 		SERENITY_FAKE_GH_DIR: ghDir(),
+		CLAUDE_CONFIG_DIR: join(dir, "claude"),
 	};
 	const envArgs = Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
 	tmux(
@@ -190,7 +191,9 @@ afterAll(() => {
 		env: { ...process.env, ...env },
 	});
 	spawnSync("tmux", ["-L", SOCKET, "kill-server"]);
-	if (dir) rmSync(dir, { recursive: true, force: true });
+	// SERENITY_E2E_KEEP=1 keeps the temp dir (daemon.log, the db) for debugging.
+	if (process.env.SERENITY_E2E_KEEP) console.log(`kept ${dir}`);
+	else if (dir) rmSync(dir, { recursive: true, force: true });
 });
 
 test(
@@ -445,6 +448,79 @@ test(
 			{ encoding: "utf8" },
 		).stdout;
 		expect(branches.trim()).toBe("");
+	},
+	STEP_TIMEOUT,
+);
+
+/** A claude the user started in their own tmux session, without serenity. */
+const MINE = "mywork:polish";
+
+test(
+	"I imports a claude already running in the user's own tmux window",
+	async () => {
+		tmux(
+			"new-session",
+			"-d",
+			"-s",
+			"mywork",
+			"-n",
+			"polish",
+			"-c",
+			repo,
+			"-e",
+			`CLAUDE_CONFIG_DIR=${env.CLAUDE_CONFIG_DIR}`,
+			"--",
+			process.execPath,
+			FAKE,
+		);
+		await waitFor(/fake claude ready/, MINE);
+		keys("I");
+		await waitFor(/Import sessions/);
+		await waitFor(/\[x\] +polish/);
+		keys("Enter");
+		await waitFor(/imported 1 session/);
+		// It stays in the user's window: nothing moved into serenity's session.
+		expect(
+			tmux("list-windows", "-t", "=mywork", "-F", "#{window_name}").trim(),
+		).toBe("polish");
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"an imported session follows Claude's own status, permission prompts included",
+	async () => {
+		tmux("send-keys", "-t", MINE, "-l", "tidy the cards?");
+		tmux("send-keys", "-t", MINE, "Enter");
+		// Its card sits behind "+1 more"; NEEDS YOU shows it either way.
+		await waitFor(/◐ polish[^\n]*\n[^\n]*Should I tidy the cards\?/);
+		tmux("send-keys", "-t", MINE, "-l", "permission please");
+		tmux("send-keys", "-t", MINE, "Enter");
+		await waitFor(/wants to run touch x/);
+		await waitFor(/◆ Approve: run it/);
+		keys("y");
+		await waitFor(/approved/, MINE);
+		await until(
+			() => !screen().includes("Approve: run it"),
+			"the approval to be used",
+		);
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"U restarts an imported session in place under serenity's hooks",
+	async () => {
+		const pane = tmux("display-message", "-p", "-t", MINE, "#{pane_id}").trim();
+		keys("U");
+		await waitFor(/restarted polish with full tracking/);
+		await waitFor(/fake claude ready/, MINE);
+		expect(tmux("display-message", "-p", "-t", MINE, "#{pane_id}").trim()).toBe(
+			pane,
+		);
+		tmux("send-keys", "-t", MINE, "-l", "via hooks now");
+		tmux("send-keys", "-t", MINE, "Enter");
+		await waitFor(/✓ polish/);
 	},
 	STEP_TIMEOUT,
 );

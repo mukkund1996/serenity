@@ -99,6 +99,16 @@ describe("PrWatcher", () => {
 		expect(storage.sessions.get("s1")?.status).toBe("done");
 	});
 
+	test("an imported session shows the merge but is not finished by it", async () => {
+		put({ id: "s1", status: "idle", origin: "adopted", tracking: "observed" });
+		gh.lookup = { pr: pr({ state: "MERGED" }), error: null };
+		await watcher.refresh("s1");
+		expect(storage.sessions.get("s1")).toMatchObject({
+			status: "idle",
+			pr: { state: "MERGED" },
+		});
+	});
+
 	test("a busy session keeps its status", async () => {
 		put({ id: "s1", status: "working" });
 		gh.lookup = { pr: pr({ state: "MERGED" }), error: null };

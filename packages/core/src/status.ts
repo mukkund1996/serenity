@@ -8,12 +8,15 @@ const WAITING_NOTIFICATIONS = new Set([
 	"agent_needs_input",
 ]);
 
-const ONE_LINE_MAX = 200;
+export const ONE_LINE_MAX = 200;
 
 /** Enough of the agent's reply for the summarizer; cards cut it further. */
-const REPLY_MAX = 2000;
+export const REPLY_MAX = 2000;
 
-function oneLine(text: string | undefined, max = ONE_LINE_MAX): string | null {
+export function oneLine(
+	text: string | null | undefined,
+	max = ONE_LINE_MAX,
+): string | null {
 	if (!text) return null;
 	const line = text.replace(/\s+/g, " ").trim();
 	if (!line) return null;

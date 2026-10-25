@@ -1,9 +1,29 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { run } from "./exec";
 
 export function currentBranch(dir: string): Promise<string> {
 	return run(["git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD"]);
+}
+
+/**
+ * The repository a directory belongs to, as its shared git dir: the same for
+ * the main checkout and every worktree. Null outside git.
+ */
+export async function commonDir(dir: string): Promise<string | null> {
+	try {
+		const path = await run([
+			"git",
+			"-C",
+			dir,
+			"rev-parse",
+			"--path-format=absolute",
+			"--git-common-dir",
+		]);
+		return realpathSync(path);
+	} catch {
+		return null;
+	}
 }
 
 export async function branchExists(

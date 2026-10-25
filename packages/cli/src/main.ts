@@ -2,12 +2,14 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import {
+	BUILD_ID,
 	connectDaemon,
 	doctorMarkerPath,
 	ensureDaemon,
 	isHookKind,
 	selfCommand,
 	serenityHome,
+	socketPath,
 	tmuxSessionName,
 	VERSION,
 } from "@serenity/core";
@@ -19,6 +21,7 @@ usage:
   serenity            open the map for the git repo you are in
   serenity doctor     check tmux, claude, git and gh
   serenity stop       stop the background daemon
+  serenity restart    restart it (sessions keep running)
   serenity version
 
 internal:
@@ -101,7 +104,8 @@ async function hook(kind: string | undefined): Promise<void> {
 	try {
 		payload = JSON.parse(raw);
 	} catch {}
-	const peer = await connectDaemon(home);
+	// Start the daemon if it is down (a restart, a new build), so no event is lost.
+	const peer = await ensureDaemon(home, 3000).catch(() => null);
 	await peer
 		?.request("hook.event", { sessionId, kind, payload }, { timeoutMs: 1000 })
 		.catch(() => {});
@@ -114,7 +118,7 @@ async function exited(code: string | undefined): Promise<void> {
 	const sessionId = process.env.SERENITY_SESSION_ID;
 	if (!sessionId) process.exit(0);
 	const parsed = Number(code);
-	const peer = await connectDaemon(home);
+	const peer = await ensureDaemon(home, 3000).catch(() => null);
 	await peer
 		?.request(
 			"session.exited",
@@ -156,6 +160,8 @@ async function stopDaemon(): Promise<void> {
 		.request("daemon.shutdown", {}, { timeoutMs: 2000 })
 		.catch(() => {});
 	peer.close();
+	for (let i = 0; i < 40 && existsSync(socketPath(home)); i++)
+		await Bun.sleep(50);
 	console.log("daemon stopped");
 }
 
@@ -195,10 +201,16 @@ switch (command) {
 	case "stop":
 		await stopDaemon();
 		break;
+	case "restart": {
+		await stopDaemon();
+		(await ensureDaemon(home)).close();
+		console.log(`daemon running ${BUILD_ID}`);
+		break;
+	}
 	case "version":
 	case "--version":
 	case "-v":
-		console.log(VERSION);
+		console.log(BUILD_ID);
 		break;
 	case "help":
 	case "--help":

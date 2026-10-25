@@ -237,6 +237,7 @@ function drawCard(
 	canvas.text(col, y, " ");
 
 	const chips: Array<{ text: string; style: Style }> = [];
+	if (s.origin === "adopted") chips.push({ text: " ↗ ", style: DIM });
 	if (s.watched) chips.push({ text: " ⚑ ", style: { fg: "white" } });
 	if (s.status === "waiting")
 		chips.push({

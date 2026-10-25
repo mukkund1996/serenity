@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync } from "node:fs";
-import { VERSION } from "./domain";
+import { BUILD_ID } from "./domain";
 import { daemonLogPath, socketPath } from "./paths";
 import { connectRpc, type RpcPeer } from "./rpc";
 import { selfCommand } from "./self";
@@ -18,11 +18,11 @@ export async function connectDaemon(home: string): Promise<RpcPeer | null> {
 	try {
 		const hello = await peer.request(
 			"hello",
-			{ clientVersion: VERSION },
+			{ clientVersion: BUILD_ID },
 			{ timeoutMs: 1000 },
 		);
-		if (hello.daemonVersion === VERSION) return peer;
-		// An older daemon: ask it to go, and wait for its socket to disappear.
+		if (hello.daemonVersion === BUILD_ID) return peer;
+		// Another build: ask it to go, and wait for its socket to disappear.
 		await peer
 			.request("daemon.shutdown", {}, { timeoutMs: 1000 })
 			.catch(() => {});

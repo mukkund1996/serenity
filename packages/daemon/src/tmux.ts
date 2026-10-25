@@ -133,6 +133,73 @@ export class Tmux {
 		]);
 	}
 
+	/** Where a pane is, e.g. { session: "guide", window: "0", windowName: "modals" }. */
+	async describePane(
+		pane: string,
+	): Promise<{ session: string; window: string; windowName: string }> {
+		// tmux prints a tab as "_"; session names cannot contain ":".
+		const out = await this.cmd([
+			"display-message",
+			"-p",
+			"-t",
+			pane,
+			"#{session_name}:#{window_index}:#{window_name}",
+		]);
+		const [session = "", window = "", ...name] = out.split(":");
+		return { session, window, windowName: name.join(":") };
+	}
+
+	/** The visible text of a pane. */
+	capturePane(pane: string): Promise<string> {
+		return this.cmd(["capture-pane", "-p", "-t", pane]);
+	}
+
+	/** The tty of a tmux client currently showing `pane`, if any. */
+	async clientShowing(pane: string): Promise<string | null> {
+		const out = await this.cmd([
+			"list-clients",
+			"-F",
+			"#{client_tty} #{pane_id}",
+		]).catch(() => "");
+		for (const line of out.split("\n")) {
+			const [tty, current] = line.split(" ");
+			if (tty && current === pane) return tty;
+		}
+		return null;
+	}
+
+	/** Shows `pane` (its session, window and pane) on client `tty`. */
+	async switchClient(tty: string, pane: string): Promise<void> {
+		await this.cmd(["switch-client", "-c", tty, "-t", pane]);
+	}
+
+	unsetPaneOption(pane: string, option: string): Promise<string> {
+		return this.cmd(["set-option", "-p", "-u", "-t", pane, option]);
+	}
+
+	/** Replaces whatever runs in `pane` with `command`, keeping the pane in place. */
+	respawnPane(opts: {
+		pane: string;
+		cwd: string;
+		env: Record<string, string>;
+		command: string[];
+	}): Promise<string> {
+		const env = Object.entries(opts.env).flatMap(([key, value]) => [
+			"-e",
+			`${key}=${value}`,
+		]);
+		return this.cmd([
+			"respawn-pane",
+			"-k",
+			"-t",
+			opts.pane,
+			"-c",
+			opts.cwd,
+			...env,
+			...opts.command,
+		]);
+	}
+
 	/** Presses one key (no Enter), e.g. "1" to pick the first option of a menu. */
 	async pressKey(pane: string, key: string): Promise<void> {
 		await this.cmd(["send-keys", "-t", pane, key]);
