@@ -24,7 +24,7 @@ describe("cleanupPlan", () => {
 				"stop the session studio-editor",
 				"remove worktree /r/demo-studio-editor",
 				"delete branch studio-editor · merged into main",
-				"keep the node on the map, archived inside studio",
+				"keep it in the archive under studio · H lists it",
 			],
 			safety: ["no uncommitted changes", "no commits missing from main"],
 			safe: true,
@@ -49,7 +49,7 @@ describe("cleanupPlan", () => {
 		expect(plan.steps).toEqual([
 			"keep worktree /r/demo-studio-editor",
 			"keep branch studio-editor",
-			"keep the node on the map, archived inside studio",
+			"keep it in the archive under studio · H lists it",
 		]);
 		expect(plan.safety).toEqual([
 			"3 uncommitted changes",

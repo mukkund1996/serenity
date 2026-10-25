@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { groupTopics, needsYou, UNSORTED } from "../src/attention";
+import {
+	archivedTopics,
+	groupTopics,
+	needsYou,
+	UNSORTED,
+} from "../src/attention";
 import { makeSession } from "../test-support";
 
 describe("needsYou", () => {
@@ -30,5 +35,61 @@ describe("groupTopics", () => {
 			"studio",
 		]);
 		expect(groups[0]?.counts).toEqual({ waiting: 1, working: 0, done: 0 });
+	});
+
+	test("leaves archived sessions out; an all-archived topic is gone", () => {
+		const groups = groupTopics([
+			makeSession({ id: "1", topic: "studio", status: "working" }),
+			makeSession({ id: "2", topic: "studio", status: "archived" }),
+			makeSession({ id: "3", topic: "infra", status: "archived" }),
+		]);
+		expect(groups.map((g) => g.name)).toEqual(["studio"]);
+		expect(groups[0]?.sessions.map((s) => s.id)).toEqual(["1"]);
+	});
+});
+
+describe("groupTopics card order", () => {
+	test("waiting, then working, then finished, then idle and ended", () => {
+		const [group] = groupTopics([
+			makeSession({ id: "dead", topic: "x", status: "dead" }),
+			makeSession({ id: "done", topic: "x", status: "done" }),
+			makeSession({ id: "idle", topic: "x", status: "idle" }),
+			makeSession({ id: "work", topic: "x", status: "working" }),
+			makeSession({ id: "wait", topic: "x", status: "waiting" }),
+		]);
+		expect(group?.sessions.map((s) => s.id)).toEqual([
+			"wait",
+			"work",
+			"done",
+			"idle",
+			"dead",
+		]);
+	});
+});
+
+describe("archivedTopics", () => {
+	test("archived sessions only, topics by name, newest first", () => {
+		const groups = archivedTopics([
+			makeSession({ id: "live", topic: "studio", status: "idle" }),
+			makeSession({
+				id: "old",
+				topic: "studio",
+				status: "archived",
+				updatedAt: 1,
+			}),
+			makeSession({
+				id: "new",
+				topic: "studio",
+				status: "archived",
+				updatedAt: 2,
+			}),
+			makeSession({ id: "loose", topic: null, status: "archived" }),
+			makeSession({ id: "api", topic: "api", status: "archived" }),
+		]);
+		expect(groups.map((g) => [g.name, g.sessions.map((s) => s.id)])).toEqual([
+			["api", ["api"]],
+			["studio", ["new", "old"]],
+			[UNSORTED, ["loose"]],
+		]);
 	});
 });

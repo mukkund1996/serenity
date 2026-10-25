@@ -54,6 +54,8 @@ const CHAT_ALLOWED = [
 	"Bash(gh pr list *)",
 	"mcp__serenity__suggest",
 	"mcp__serenity__set_topic",
+	"mcp__serenity__archive_session",
+	"mcp__serenity__open_session",
 ].join(",");
 export const PERMISSION_TOOL = "mcp__serenity__request_permission";
 

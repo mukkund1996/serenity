@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { groupTopics } from "@serenity/core";
 import { makeSession } from "@serenity/core/testing";
 import { splitAtNewline } from "../src/text-input";
-import { drawTopics, moveFocus, stepTopic } from "../src/topics";
+import { drawTopics, holdOrder, moveFocus, stepTopic } from "../src/topics";
 
 const sessions = [
 	makeSession({
@@ -52,11 +52,11 @@ describe("drawTopics", () => {
 		expect(cards.map((c) => c.sessionId)).toEqual([
 			"a1",
 			"a2",
-			"i1",
 			"c1",
 			"c2",
 			"c3",
 			"c4",
+			"i1",
 			"d1",
 		]);
 	});
@@ -153,7 +153,7 @@ describe("drawTopics", () => {
 
 	test("cards sit side by side when there is room", () => {
 		const { cards } = draw(null, 160);
-		const infra = cards.filter((c) => ["i1", "c1", "c2"].includes(c.sessionId));
+		const infra = cards.filter((c) => ["c1", "c2", "c3"].includes(c.sessionId));
 		expect(new Set(infra.map((c) => c.y)).size).toBe(1);
 	});
 
@@ -243,7 +243,7 @@ describe("stepTopic", () => {
 			"infra",
 			"discovery",
 		]);
-		expect(stepTopic(groups, "a2", 1)).toBe("i1");
+		expect(stepTopic(groups, "a2", 1)).toBe("c1");
 		expect(stepTopic(groups, "c3", 1)).toBe("d1");
 		expect(stepTopic(groups, "d1", 1)).toBe("a1");
 		expect(stepTopic(groups, "a1", -1)).toBe("d1");
@@ -288,4 +288,32 @@ test("card row 1 shows the PR and its status word, or why it is unknown", () => 
 	expect(text).toContain("PR #482 checks failing");
 	expect(text).toContain("PR unknown · gh not logged in");
 	expect(text).toContain("no PR yet");
+});
+
+describe("holdOrder", () => {
+	const groups = groupTopics([
+		makeSession({ id: "w", topic: "x", status: "waiting" }),
+		makeSession({ id: "d", topic: "x", status: "done" }),
+		makeSession({ id: "n", topic: "x", status: "working" }),
+		makeSession({ id: "y", topic: "y", status: "done" }),
+		makeSession({ id: "z", topic: "y", status: "waiting" }),
+	]);
+	const drawn = new Map([
+		["x", ["d", "w"]],
+		["y", ["y", "z"]],
+	]);
+
+	test("the focused topic keeps its drawn order; new cards join at the end", () => {
+		const held = holdOrder(groups, drawn, "x");
+		expect(held.find((g) => g.name === "x")?.sessions.map((s) => s.id)).toEqual(
+			["d", "w", "n"],
+		);
+		expect(held.find((g) => g.name === "y")?.sessions.map((s) => s.id)).toEqual(
+			["z", "y"],
+		);
+	});
+
+	test("with nothing focused every topic takes its fresh order", () => {
+		expect(holdOrder(groups, drawn, null)).toBe(groups);
+	});
 });

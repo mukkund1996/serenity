@@ -37,7 +37,7 @@ All `claude` processes run on the user's own Claude login (0007).
              ┌──────────────── serenityd (one per machine, state keyed by repo) ───────────────┐
              │ session registry · status reducer · tmux driver · git/worktree driver · gh driver │
              │ storage (interface) ── SQLite                                                    │
-             │ MCP server for the chat (suggest / set_topic / request_permission)           │
+             │ MCP server for the chat (suggest / set_topic / archive / open / permission)     │
              │ master supervisor                                                                │
              │   ├─ Opus: long-lived `claude -p` stream-json  (chat; uses the MCP tools)       │
              │   ├─ Haiku: one-shot per event → JSON (summary, ask, finished, topic)        │

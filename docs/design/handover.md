@@ -45,7 +45,7 @@ Copied from the design canvas "Agent Mind Map CLI — Screens" ([source](https:/
 | finished | `✓` green |
 | idle | no glyph · name in grey-blue |
 | dead | no glyph · resume via the master |
-| archived | no glyph · name in faint grey, stays in its topic |
+| archived | off the map; `H` lists archived sessions under their topic (ADR 0012) |
 
 Only these three glyphs exist. PR status is words only: checks failing (red), checks running, checks passing (green), approved (green), merged (cyan), draft. Topic labels show counts as `infra · ◐1 ●5 ✓1` or `quiet`.
 
@@ -108,12 +108,14 @@ Status never relies on colour alone except idle and archived, which are delibera
 | `o` | open PR |
 | `f` | watch (remind master when done) |
 | `n` `r` `x` | new · rename · remove (`n` declines when the item has a suggestion; `N` always new — ADR 0012) |
+| `K` | kill the agent: stop it and archive it; worktree and branch stay (ADR 0012) |
 
 **Master and global**
 | Key | Action |
 |-----|--------|
 | `g` · `M` | message master · expand master (v1.1) |
 | `y` `e` `n` | approve · edit / inspect · decline a suggestion |
+| `H` | archived sessions, nested under their topic |
 | `?` | shortcuts panel (`Ctrl+g ?` inside a session) |
 | `q` | quit the map; sessions keep running |
 

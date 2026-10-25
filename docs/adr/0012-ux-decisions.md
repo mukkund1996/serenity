@@ -23,6 +23,10 @@ The canvas's colours, frames, status language, card anatomy and keymap are final
 | Arrow keys | `↑` `↓` select an element inside the focused node, marked `▸`. Master: its permission requests, NEEDS YOU items, then the input. Card: the card itself, the PR row, the master's suggestion (shown on the focused card), the input row. `Enter` acts on the selection: attach (card, NEEDS YOU item), open PR, accept the suggestion, start typing. |
 | `y e n` target | The selected NEEDS YOU item when the master has focus, or the focused card's suggestion. `Tab` / `⇧Tab` focus the master and cycle through its requests, then NEEDS YOU. |
 | `e` | Reply: edit the text in the card's input, Enter sends. Cleanup: open Confirm. Approve: attach to inspect the prompt first. |
+| Archived sessions | Off the map; a topic whose sessions are all archived is gone from the map and from the topics the summarizer reuses. `H` opens the archived list, nested under each topic, newest first; `↑↓` scroll, `H` or `Esc` close. |
+| Card order | Inside a topic: waiting on you, in progress, finished, then idle and ended. The topic holding focus keeps the order it was drawn in, so cards do not move under the cursor; it re-sorts once focus leaves. |
+| `K` (kill) | Stops the agent after a `y`/`n` confirm and archives it. Unlike `x` it never touches the worktree or branch. Users do not create, rename or delete topics; only the master does. |
+| Shortcuts panel | A fixed handful of rows; related keys share a row (`K x`, `N I`), so new keys do not grow it. |
 | Conversation | The latest exchange (your message, the master's reply), a few lines each; the full history is `M` (v1.1). |
 
 ## Consequences

@@ -43,6 +43,26 @@ export const MCP_TOOLS = [
 		},
 	},
 	{
+		name: "archive_session",
+		description:
+			"Kill a session: stop its agent if it is running and archive it, which takes it off the map. Its worktree and branch stay. Use only when the user asks to kill, stop or archive that session.",
+		inputSchema: {
+			type: "object",
+			properties: { session: { type: "string" } },
+			required: ["session"],
+		},
+	},
+	{
+		name: "open_session",
+		description:
+			"Open a session's full agent view beside the user's map, as Enter on its card does. Use only when the user asks to open, show or go to a session.",
+		inputSchema: {
+			type: "object",
+			properties: { session: { type: "string" } },
+			required: ["session"],
+		},
+	},
+	{
 		name: "request_permission",
 		description: "Asks the user in serenity whether a tool call may run.",
 		inputSchema: {

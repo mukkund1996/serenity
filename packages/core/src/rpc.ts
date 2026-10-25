@@ -46,7 +46,11 @@ export interface Methods {
 		params: { clientVersion: string };
 		result: { daemonVersion: string; pid: number };
 	};
-	"state.subscribe": { params: { repo: string }; result: RepoState };
+	/** clientPane: the map's tmux pane, where the master's open_session attaches. */
+	"state.subscribe": {
+		params: { repo: string; clientPane?: string };
+		result: RepoState;
+	};
 	"session.create": { params: CreateSessionParams; result: Session };
 	"session.reply": { params: { id: string; text: string }; result: null };
 	"session.attach": {
@@ -81,6 +85,7 @@ export interface Methods {
 	"session.watch": { params: { id: string; watched: boolean }; result: null };
 	"session.cleanupPlan": { params: { id: string }; result: CleanupPlan };
 	"session.cleanup": { params: { id: string }; result: null };
+	"session.kill": { params: { id: string }; result: null };
 	/** Runs a pending suggestion; `text` overrides a reply's text (the e key). */
 	"suggestion.accept": { params: { id: string; text?: string }; result: null };
 	"suggestion.decline": { params: { id: string }; result: null };
