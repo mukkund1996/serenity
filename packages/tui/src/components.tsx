@@ -69,7 +69,7 @@ export function TitledBox({
 }: {
 	title: string;
 	titleColor: Color;
-	borderStyle: "round" | "single" | "double";
+	borderStyle: "round" | "single" | "double" | "bold";
 	borderColor: Color;
 	width: number;
 	right?: ReactNode;
@@ -146,12 +146,18 @@ function Spinner() {
 	return <Text color="magenta">{SPINNER[frame]}</Text>;
 }
 
-/** The master's input row; `text` is null until `g` focuses it. */
-function MasterInput({ text }: { text: string | null }) {
+/** The master's input row; `text` is null until `g` (or Enter on it) opens it. */
+function MasterInput({
+	text,
+	selected = false,
+}: {
+	text: string | null;
+	selected?: boolean;
+}) {
 	return (
 		<Box
-			borderStyle="single"
-			borderColor={text === null ? "gray" : "whiteBright"}
+			borderStyle={selected ? "bold" : "single"}
+			borderColor={text === null && !selected ? "gray" : "whiteBright"}
 			marginTop={1}
 		>
 			<Text wrap="truncate-start">
@@ -193,10 +199,13 @@ function NeedItem({
 	session,
 	suggestion,
 	selected,
+	replyText,
 }: {
 	session: Session;
 	suggestion: Suggestion | undefined;
 	selected: boolean;
+	/** Reply being typed to this session, shown under it while selected. */
+	replyText: string | null;
 }) {
 	const g = glyph(session.status);
 	return (
@@ -226,6 +235,17 @@ function NeedItem({
 					<Box flexShrink={0} marginLeft={1}>
 						<Chips keys="yen" />
 					</Box>
+				</Box>
+			) : null}
+			{selected && replyText !== null ? (
+				<Box paddingLeft={4}>
+					<Text
+						color="whiteBright"
+						backgroundColor="black"
+						wrap="truncate-start"
+					>
+						› {replyText}█
+					</Text>
 				</Box>
 			) : null}
 		</Box>
@@ -299,9 +319,14 @@ function clipLines(text: string, lines: number): string {
 /** How many NEEDS YOU items fit; the rest are summarised as "+N more". */
 const MAX_NEED_ITEMS = 5;
 
-export type MasterFocus = string | null;
+/** The master's input, as an element the arrow keys can select. */
+export const MASTER_INPUT = "input";
 
-/** Master panel in the topics zoom: NEEDS YOU, the latest exchange, the input. */
+/**
+ * Master panel in the topics zoom: NEEDS YOU, the latest exchange, the input.
+ * When it is the focused node its frame turns heavy white and `selected`
+ * (a `perm:<id>`, a session id, or MASTER_INPUT) carries the cursor.
+ */
 export function MasterPanel({
 	width,
 	sessions,
@@ -311,8 +336,10 @@ export function MasterPanel({
 	conversation,
 	master,
 	calmCategories,
-	focusId,
+	focused,
+	selected,
 	inputText,
+	replyText,
 }: {
 	width: number;
 	sessions: Session[];
@@ -322,8 +349,10 @@ export function MasterPanel({
 	conversation: MasterMessage[];
 	master: MasterState;
 	calmCategories: number;
-	focusId: MasterFocus;
+	focused: boolean;
+	selected: string | null;
 	inputText: string | null;
+	replyText: string | null;
 }) {
 	const inner = width - 6;
 	const count = needs.length + permissions.length;
@@ -331,13 +360,21 @@ export function MasterPanel({
 		...permissions.map((p) => ({ kind: "permission" as const, p })),
 		...needs.map((s) => ({ kind: "session" as const, s })),
 	];
-	const shown = items.slice(0, MAX_NEED_ITEMS);
+	// Slide the window so the selected item is always on screen.
+	const at = items.findIndex((item) =>
+		item.kind === "permission"
+			? selected === `perm:${item.p.id}`
+			: selected === item.s.id,
+	);
+	const start = Math.max(0, at - MAX_NEED_ITEMS + 1);
+	const shown = items.slice(start, start + MAX_NEED_ITEMS);
+	const hiddenCount = items.length - shown.length;
 	return (
 		<TitledBox
 			title="◆ master"
 			titleColor="magenta"
-			borderStyle="round"
-			borderColor="magenta"
+			borderStyle={focused ? "bold" : "round"}
+			borderColor={focused ? "whiteBright" : "magenta"}
 			width={width}
 			right={master.status === "thinking" ? <Spinner /> : undefined}
 		>
@@ -377,7 +414,7 @@ export function MasterPanel({
 									<PermissionItem
 										key={item.p.id}
 										permission={item.p}
-										selected={focusId === `perm:${item.p.id}`}
+										selected={selected === `perm:${item.p.id}`}
 									/>
 								) : (
 									<NeedItem
@@ -386,14 +423,13 @@ export function MasterPanel({
 										suggestion={suggestions.find(
 											(g) => g.sessionId === item.s.id,
 										)}
-										selected={focusId === item.s.id}
+										selected={selected === item.s.id}
+										replyText={replyText}
 									/>
 								),
 							)}
-							{items.length > shown.length ? (
-								<Text color="gray">
-									+{items.length - shown.length} more · Tab cycles
-								</Text>
+							{hiddenCount > 0 ? (
+								<Text color="gray">+{hiddenCount} more · ↑↓ scroll</Text>
 							) : null}
 						</>
 					) : null}
@@ -401,7 +437,7 @@ export function MasterPanel({
 					<Conversation messages={conversation.slice(-2)} />
 				</>
 			)}
-			<MasterInput text={inputText} />
+			<MasterInput text={inputText} selected={selected === MASTER_INPUT} />
 		</TitledBox>
 	);
 }

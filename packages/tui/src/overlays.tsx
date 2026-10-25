@@ -136,15 +136,16 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 	[
 		"MOVE",
 		[
+			["W A S D", "move between master and cards"],
+			["↑ ↓", "select inside master or card"],
 			["Tab ⇧Tab", "next / previous in NEEDS YOU"],
-			["W A S D", "move between cards"],
 		],
 	],
 	[
 		"ON A NODE",
 		[
 			["i", "reply · Tab recent replies"],
-			["Enter", "attach · Ctrl+g back"],
+			["Enter", "act on ▸ (attach) · Ctrl+g"],
 			["o", "open PR"],
 			["f", "watch · remind master when done"],
 			["x", "clean up / remove"],
