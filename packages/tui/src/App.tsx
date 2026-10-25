@@ -156,7 +156,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	if (columns < MIN_COLUMNS || rows < MIN_ROWS) {
 		return (
 			<Box
-				width={columns}
+				width="100%"
 				height={rows}
 				alignItems="center"
 				justifyContent="center"
@@ -175,7 +175,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	return (
 		<Box
 			flexDirection="column"
-			width={columns}
+			width="100%"
 			height={rows}
 			overflow="hidden"
 			position="relative"
@@ -185,7 +185,6 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				needs={needs.length}
 				connected={connected}
 				zoom="topics"
-				columns={columns}
 			/>
 			<Box height={bodyHeight}>
 				<Box
@@ -203,7 +202,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				</Box>
 				<CanvasView canvas={topics.canvas} />
 			</Box>
-			<Box width={columns} justifyContent="space-between" paddingX={2}>
+			<Box width="100%" justifyContent="space-between" paddingX={2}>
 				{notice ? (
 					<Text color="red" wrap="truncate">
 						{notice}
@@ -220,7 +219,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			{overlay === "new" ? (
 				<Box
 					position="absolute"
-					width={columns}
+					width="100%"
 					height={rows}
 					alignItems="center"
 					justifyContent="center"
@@ -235,7 +234,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			{overlay === "help" ? (
 				<Box
 					position="absolute"
-					width={columns}
+					width="100%"
 					height={rows - 1}
 					alignItems="flex-end"
 					justifyContent="flex-end"
@@ -252,17 +251,15 @@ function Header({
 	needs,
 	connected,
 	zoom,
-	columns,
 }: {
 	repo: string;
 	needs: number;
 	connected: boolean;
 	zoom: string;
-	columns: number;
 }) {
 	return (
 		<Box
-			width={columns}
+			width="100%"
 			backgroundColor="black"
 			justifyContent="space-between"
 			paddingX={1}
@@ -304,9 +301,9 @@ function SessionZoom({
 	const others = needsYou(sessions).filter((s) => s.id !== session.id);
 	// This pane is narrow; every line is clipped to it so nothing wraps or scrolls.
 	return (
-		<Box flexDirection="column" width={columns} height={rows} overflow="hidden">
+		<Box flexDirection="column" width="100%" height={rows} overflow="hidden">
 			<Box
-				width={columns}
+				width="100%"
 				height={1}
 				backgroundColor="black"
 				justifyContent="space-between"

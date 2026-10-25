@@ -8,7 +8,14 @@ const ink = (color: Color | undefined) =>
 
 export function CanvasView({ canvas }: { canvas: Canvas }) {
 	return (
-		<Box flexDirection="column" width={canvas.width} height={canvas.height}>
+		<Box
+			flexDirection="column"
+			width={canvas.width}
+			height={canvas.height}
+			flexShrink={1}
+			minWidth={0}
+			overflow="hidden"
+		>
 			{canvas.rows().map((runs, y) => (
 				// biome-ignore lint/suspicious/noArrayIndexKey: rows are positional
 				<Text key={y} wrap="truncate">
