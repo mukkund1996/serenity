@@ -177,7 +177,7 @@ export class ClaudeObserver {
 				id: randomUUID(),
 				repo,
 				name: c.name,
-				category: null,
+				topic: null,
 				cwd: c.cwd,
 				worktree: null,
 				branch: c.branch,
@@ -192,7 +192,7 @@ export class ClaudeObserver {
 				summary: null,
 				ask: null,
 				waitingOn: null,
-				categoryCandidate: null,
+				topicCandidate: null,
 				lastPrompt: null,
 				lastAssistantMessage: null,
 				transcriptPath: transcriptPathFor(

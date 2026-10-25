@@ -4,7 +4,7 @@ import { cleanupPlan, plannedRemovals } from "../src/cleanup";
 
 const session = makeSession({
 	name: "studio-editor",
-	category: "studio",
+	topic: "studio",
 	worktree: "/r/demo-studio-editor",
 	branch: "studio-editor",
 	ownsBranch: true,

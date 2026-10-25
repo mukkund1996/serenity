@@ -12,7 +12,7 @@ The canvas's colours, frames, status language, card anatomy and keymap are final
 | Colours | 16-colour ANSI, mapped as in the handover's colour table, so the user's terminal theme applies. |
 | Master expanded (`M`) | Deferred to v1.1. |
 | Watch (`f`) | `⚑` appears on the card; no toast. |
-| WASD in an expanded category (2b) | Moves between cards inside the category; `Esc` leaves it. |
+| WASD in an expanded topic (2b) | Superseded by 0017: there is no expanded topic. WASD moves between nodes (see Focus). |
 | Keymap | Fixed in v1; no rebinding. |
 | Failures | By severity: daemon or master down → red chip in the header; per-session problems (gh error, pane gone) → on that card. |
 | Master busy | Spinner next to `◆ master`. |

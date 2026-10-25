@@ -1,19 +1,19 @@
 import {
 	Canvas,
-	type CategoryGroup,
 	type PrTone,
 	prStatus,
 	type Session,
 	type Style,
+	type TopicGroup,
 	truncate,
 	wrap,
 } from "@serenity/core";
 import { cardText, glyph, nameColor } from "./theme";
 
 /**
- * Draws the topics zoom's right-hand side (design screen 2): the two
- * categories that need the most attention as bubbles of 40-col cards, the
- * rest in a dashed node, all linked back to the master on the left edge.
+ * Draws the topics zoom's right-hand side (design screen 2): every topic as a
+ * bubble of 40-col cards, neediest first, all linked back to the master on the
+ * left edge. When they don't fit, the stack scrolls to the focused card.
  */
 
 export const CARD_W = 40;
@@ -23,9 +23,6 @@ const CARD_GAP_X = 2;
 const PAD_X = 3;
 const TRUNK_X = 2;
 const BUBBLE_X = 6;
-const MAX_CATEGORIES = 2;
-const MAX_CARDS = 3;
-const NODE_W = 50;
 
 export interface CardBox {
 	sessionId: string;
@@ -40,7 +37,7 @@ export interface TopicsInput {
 	height: number;
 	/** Canvas row where the master's link leaves the panel. */
 	masterRow: number;
-	groups: CategoryGroup[];
+	groups: TopicGroup[];
 	focusId: string | null;
 	/** The element selected inside the focused card (arrow keys). */
 	focusElement?: CardElement;
@@ -121,7 +118,7 @@ class Links {
 	}
 }
 
-function counts(group: CategoryGroup): Array<{ text: string; style: Style }> {
+function counts(group: TopicGroup): Array<{ text: string; style: Style }> {
 	const out: Array<{ text: string; style: Style }> = [];
 	if (group.counts.waiting)
 		out.push({ text: `◐${group.counts.waiting}`, style: { fg: "yellow" } });
@@ -314,22 +311,20 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 	const links = new Links();
 	const linkRows: number[] = [];
 
-	const visible = input.groups.slice(0, MAX_CATEGORIES);
-	const hidden = input.groups.slice(MAX_CATEGORIES);
 	const room = input.width - BUBBLE_X - 1 - PAD_X * 2 + CARD_GAP_X;
 	const maxCols = Math.max(1, Math.floor(room / (CARD_W + CARD_GAP_X)));
 
 	// Bubbles are drawn after their links so frames win where they meet.
 	const drawBubbles: Array<() => void> = [];
-	// Laid out from row 0, then shifted so the stack centres on the master's row.
+	// Laid out from row 0, then shifted to centre on the master's row, or on
+	// the focused card when the stack is taller than the canvas.
 	let offset = 0;
+	let focusMid: number | null = null;
 	let y = 0;
-	for (const group of visible) {
-		const shown = group.sessions.slice(0, MAX_CARDS);
-		const more = group.sessions.length - shown.length;
-		const cols = Math.min(maxCols, shown.length);
+	for (const group of input.groups) {
+		const cols = Math.min(maxCols, group.sessions.length);
 		const rowHeights: number[] = [];
-		shown.forEach((s, i) => {
+		group.sessions.forEach((s, i) => {
 			const row = Math.floor(i / cols);
 			const h = cardHeight(
 				s.id === input.focusId,
@@ -341,9 +336,15 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 			rowHeights.reduce((a, b) => a + b, 0) +
 			Math.max(0, rowHeights.length - 1);
 		const bubbleW = cols * CARD_W + (cols - 1) * CARD_GAP_X + PAD_X * 2;
-		const bubbleH = 2 + 1 + cardsH + 1 + (more > 0 ? 1 : 0);
+		const bubbleH = 2 + 1 + cardsH + 1;
 		const rel = y;
 		linkRows.push(rel + 2);
+		const at = group.sessions.findIndex((s) => s.id === input.focusId);
+		if (at >= 0) {
+			const row = Math.floor(at / cols);
+			const above = rowHeights.slice(0, row).reduce((a, b) => a + b + 1, 0);
+			focusMid = rel + 2 + above + Math.floor((rowHeights[row] ?? 0) / 2);
+		}
 		drawBubbles.push(() => {
 			const top = rel + offset;
 			canvas.frame(BUBBLE_X, top, bubbleW, bubbleH, "rounded", DIM);
@@ -356,7 +357,7 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 			let rowY = top + 2;
 			rowHeights.forEach((rowH, row) => {
 				for (let c = 0; c < cols; c++) {
-					const s = shown[row * cols + c];
+					const s = group.sessions[row * cols + c];
 					if (!s) continue;
 					const cx = BUBBLE_X + PAD_X + c * (CARD_W + CARD_GAP_X);
 					const h = drawCard(
@@ -376,45 +377,25 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 				}
 				rowY += rowH + 1;
 			});
-			if (more > 0)
-				canvas.text(BUBBLE_X + PAD_X, rowY - 1, `+${more} more`, {
-					fg: "white",
-				});
 		});
 		y += bubbleH + 1;
 	}
 
-	if (hidden.length > 0) {
-		const rel = y;
-		const h = hidden.length + 2;
-		linkRows.push(rel + 1);
-		y += h + 1;
-		drawBubbles.push(() => {
-			const top = rel + offset;
-			canvas.frame(BUBBLE_X, top, NODE_W, h, "dashed", DIM);
-			canvas.text(
-				BUBBLE_X + 2,
-				top,
-				` ${hidden.length} more ${hidden.length === 1 ? "category" : "categories"} `,
-				{
-					fg: "white",
-				},
-			);
-			hidden.forEach((group, i) => {
-				const row = top + 1 + i;
-				canvas.text(BUBBLE_X + 2, row, truncate(group.name, 13));
-				let col = BUBBLE_X + 16;
-				for (const c of counts(group))
-					col = canvas.text(col, row, `${c.text} `, c.style);
-			});
-		});
-	}
-
 	const total = Math.max(0, y - 1);
-	offset = Math.max(
-		0,
-		Math.min(input.masterRow - Math.floor(total / 2), input.height - total),
-	);
+	const centre = focusMid ?? 0;
+	offset =
+		total <= input.height
+			? Math.max(
+					0,
+					Math.min(
+						input.masterRow - Math.floor(total / 2),
+						input.height - total,
+					),
+				)
+			: Math.min(
+					0,
+					Math.max(Math.floor(input.height / 2) - centre, input.height - total),
+				);
 	for (let i = 0; i < linkRows.length; i++)
 		linkRows[i] = (linkRows[i] as number) + offset;
 
@@ -428,9 +409,24 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 		for (const row of linkRows)
 			canvas.text(BUBBLE_X - 1, row, "●", { fg: "magenta" });
 	}
+	if (offset < 0) canvas.text(TRUNK_X, 0, "▲", { fg: "magenta" });
+	if (total + offset > input.height)
+		canvas.text(TRUNK_X, input.height - 1, "▼", { fg: "magenta" });
 	for (const draw of drawBubbles) draw();
 
 	return { canvas, cards };
+}
+
+/** First card of the next (`step` 1) or previous (-1) topic, wrapping around. */
+export function stepTopic(
+	groups: TopicGroup[],
+	fromId: string | null,
+	step: 1 | -1,
+): string | null {
+	if (!groups.length) return null;
+	const at = groups.findIndex((g) => g.sessions.some((s) => s.id === fromId));
+	const next = at < 0 ? 0 : (at + step + groups.length) % groups.length;
+	return groups[next]?.sessions[0]?.id ?? null;
 }
 
 /** A focusable box on the map: a card, or the master panel. */

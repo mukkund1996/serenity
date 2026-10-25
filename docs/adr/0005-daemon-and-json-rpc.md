@@ -7,7 +7,7 @@
 
 ## Decision
 - **serenityd**, one per machine, owns: session registry, status reducer, master supervisor, tmux and git drivers, `gh` calls, storage, and the MCP server.
-- All state is **keyed by repo** (repo root path). Each repo gets its own master stream and categories.
+- All state is **keyed by repo** (repo root path). Each repo gets its own master stream and topics.
 - **Start:** `serenity` auto-starts the daemon if its socket is missing. No launchd/systemd service in v1.
 - **IPC:** JSON-RPC 2.0 over a unix socket under `$XDG_RUNTIME_DIR` (fallback `~/.local/state/serenity`). Requests for commands; server-pushed notifications for state changes. Method and payload types live in `packages/core` and are shared by client and daemon.
 - The TUI is a thin client: it renders a state snapshot plus pushed deltas and sends commands.

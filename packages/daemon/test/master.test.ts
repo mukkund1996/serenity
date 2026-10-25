@@ -76,14 +76,14 @@ beforeEach(() => {
 });
 
 describe("summaries", () => {
-	test("a reply triggers a Haiku summary that sets summary, category and status", async () => {
+	test("a reply triggers a Haiku summary that sets summary, topic and status", async () => {
 		put({ id: "a", status: "working", lastPrompt: "rotate tokens" });
 		runner.answers.push(
 			{
 				summary: "Refresh tokens rotate now.",
 				ask: null,
 				finished: true,
-				category: "Backend",
+				topic: "Backend",
 			},
 			{ kind: "cleanup", label: "Clean up the worktree", text: null },
 		);
@@ -93,7 +93,7 @@ describe("summaries", () => {
 		expect(runner.calls[0]?.prompt).toContain("Done. Tests pass.");
 		expect(storage.sessions.get("a")).toMatchObject({
 			summary: "Refresh tokens rotate now.",
-			category: "backend",
+			topic: "backend",
 			status: "done",
 		});
 		// Becoming done needs the user, so Sonnet proposes a cleanup.
@@ -112,7 +112,7 @@ describe("summaries", () => {
 			summary: "s",
 			ask: null,
 			finished: false,
-			category: "x",
+			topic: "x",
 		});
 		change("a", { lastAssistantMessage: "y" });
 		await settle();
@@ -227,13 +227,13 @@ describe("chat", () => {
 		expect(missing.text).toContain("No session named nope");
 	});
 
-	test("set_category moves a session at once", async () => {
-		put({ id: "a", name: "api-auth", category: "backend" });
-		await master.handleTool(REPO, "set_category", {
+	test("set_topic moves a session at once", async () => {
+		put({ id: "a", name: "api-auth", topic: "backend" });
+		await master.handleTool(REPO, "set_topic", {
 			session: "api-auth",
-			category: "Infra",
+			topic: "Infra",
 		});
-		expect(storage.sessions.get("a")?.category).toBe("infra");
+		expect(storage.sessions.get("a")?.topic).toBe("infra");
 	});
 
 	test("a permission request waits for the user's answer", async () => {

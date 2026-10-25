@@ -1,9 +1,9 @@
 import type { Session, Suggestion } from "./domain";
 
-/** Category for sessions the master has not placed yet. */
+/** Topic for sessions the master has not placed yet. */
 export const UNSORTED = "unsorted";
 
-export interface CategoryGroup {
+export interface TopicGroup {
 	name: string;
 	sessions: Session[];
 	attention: number;
@@ -46,11 +46,11 @@ function attentionOf(sessions: Session[]): number {
 	return score;
 }
 
-/** Groups sessions by category, most attention first, then by name. */
-export function groupCategories(sessions: Session[]): CategoryGroup[] {
+/** Groups sessions by topic, most attention first, then by name. */
+export function groupTopics(sessions: Session[]): TopicGroup[] {
 	const byName = new Map<string, Session[]>();
 	for (const s of sessions) {
-		const name = s.category ?? UNSORTED;
+		const name = s.topic ?? UNSORTED;
 		const list = byName.get(name) ?? [];
 		list.push(s);
 		byName.set(name, list);

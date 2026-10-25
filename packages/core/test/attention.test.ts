@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { groupCategories, needsYou, UNSORTED } from "../src/attention";
+import { groupTopics, needsYou, UNSORTED } from "../src/attention";
 import { makeSession } from "../test-support";
 
 describe("needsYou", () => {
@@ -15,13 +15,13 @@ describe("needsYou", () => {
 	});
 });
 
-describe("groupCategories", () => {
-	test("ranks by attention, then name; null category is unsorted", () => {
-		const groups = groupCategories([
-			makeSession({ id: "1", category: "studio", status: "working" }),
-			makeSession({ id: "2", category: "infra", status: "waiting" }),
-			makeSession({ id: "3", category: null, status: "dead" }),
-			makeSession({ id: "4", category: "backend", status: "idle" }),
+describe("groupTopics", () => {
+	test("ranks by attention, then name; null topic is unsorted", () => {
+		const groups = groupTopics([
+			makeSession({ id: "1", topic: "studio", status: "working" }),
+			makeSession({ id: "2", topic: "infra", status: "waiting" }),
+			makeSession({ id: "3", topic: null, status: "dead" }),
+			makeSession({ id: "4", topic: "backend", status: "idle" }),
 		]);
 		expect(groups.map((g) => g.name)).toEqual([
 			"infra",

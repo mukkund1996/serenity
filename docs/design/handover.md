@@ -11,14 +11,14 @@ Copied from the design canvas "Agent Mind Map CLI — Screens" ([source](https:/
 ## Screens
 | Artboard | What it specifies |
 |----------|-------------------|
-| `1 · Zoom: map` | Lowest zoom. Master box in the centre (status line, latest message to or from the master, input). Categories as rounded bubbles around it, joined by right-angle links. One line per agent: cursor `▸`, glyph, name, `⚑` if watched. Waiting rows are inverse yellow. At most ~5 agents per bubble, then `+N more`. No PR info here. |
-| `2 · Zoom: topics` | Default view. Master panel docked left and vertically centred on its trunk. Only the **2 categories that need the most attention** are shown. Bubbles are a grid of 40-col cards and size to their content (one column when it fits). Calm categories collapse into the dashed `N more categories` node at the bottom; Enter on one brings it in and the first category steps out. |
-| `2b · infra expanded` | `+` on a category grows it to up to 9 agents (3×3), then `+N more`; `]` shows the next ones, `Esc` collapses. The other categories move into the node. |
+| `1 · Zoom: map` | Lowest zoom. Master box in the centre (status line, latest message to or from the master, input). Topics as rounded bubbles around it, joined by right-angle links. One line per agent: cursor `▸`, glyph, name, `⚑` if watched. Waiting rows are inverse yellow. At most ~5 agents per bubble, then `+N more`. No PR info here. |
+| `2 · Zoom: topics` | Default view. Master panel docked left and vertically centred on its trunk. Every topic is shown, neediest first, with all of its cards (ADR 0017). Bubbles are a grid of 40-col cards and size to their content (one column when it fits). A stack taller than the screen scrolls to the focused card. |
+| `2b · infra expanded` | Dropped (ADR 0017): every card is already shown. |
 | `3 · Zoom: session` | The real Claude Code pane, untouched, in the right ⅔, framed in the status colour with name, PR and WAITING chip on its top border. Master floats left (not full height): "about this session" with a one-key suggested reply, then the other sessions that need you. `Ctrl+g` back to the map. |
 | `4a · Reply` | `i` focuses the card's input row. `Tab` in the input opens recent replies; the master's pick is first and highlighted. |
 | `4b · Confirm` | Opens on `x`, on `e` for a cleanup suggestion, or when `y` is pressed but something is unsafe. Lists every step plus a safety line (uncommitted changes, unpushed commits, PR merged). |
 | `4c · Slack draft` | **v2.** Only when the master decides a message is worth sending. Destination, why, editable text. Nothing is sent without `y`. |
-| `4d · New session` | Name, working dir, new worktree or existing branch. No category field: the master places the node. |
+| `4d · New session` | Name, working dir, new worktree or existing branch. No topic field: the master places the node. |
 | `4e · Shortcuts` | `?` toggles a small panel at the bottom right. The only place the full keymap and legend live. |
 
 ## Master behaviour
@@ -26,14 +26,13 @@ Copied from the design canvas "Agent Mind Map CLI — Screens" ([source](https:/
 - Order: watched-and-finished first, then waiting, then others that need an action.
 - Suggestion kinds: reply to the agent, approve a request, clean up, request a review from a teammate (v1: via `gh`; Slack note is v2).
 - **Watch** (`f`) is only a reminder flag: when the agent finishes it jumps to the top of NEEDS YOU.
-- The master assigns and moves categories itself; the user never defines them.
+- The master assigns and moves topics itself; the user never defines them.
 - Below the list: the latest exchange with the master and its input. No activity log on screen; history belongs behind `M` (v1.1).
 
-## Which categories show (topics zoom)
+## Which topics show (topics zoom)
 - Rank by attention: waiting sessions, then dead or failing PRs, then finished-and-watched.
-- Show the top 2. The rest are listed in the dashed node, ranked the same way, with their counts.
-- Selecting a category in the node swaps it in for the first visible one.
-- A category shows at most 3 cards collapsed, 9 expanded; the rest are `+N more` and cycle with `]`.
+- Show every topic and every card (ADR 0017). There is no "N more topics" node.
+- `[` / `]` jump to the previous / next topic, wrapping around.
 
 ## Zoom levels
 `map` › `topics` › `session`. The current level is always shown top right (`zoom: topics`). `Esc` goes one level up; inside a session use `Ctrl+g` because Esc belongs to Claude Code.
@@ -46,9 +45,9 @@ Copied from the design canvas "Agent Mind Map CLI — Screens" ([source](https:/
 | finished | `✓` green |
 | idle | no glyph · name in grey-blue |
 | dead | no glyph · resume via the master |
-| archived | no glyph · name in faint grey, stays in its category |
+| archived | no glyph · name in faint grey, stays in its topic |
 
-Only these three glyphs exist. PR status is words only: checks failing (red), checks running, checks passing (green), approved (green), merged (cyan), draft. Category labels show counts as `infra · ◐1 ●5 ✓1` or `quiet`.
+Only these three glyphs exist. PR status is words only: checks failing (red), checks running, checks passing (green), approved (green), merged (cyan), draft. Topic labels show counts as `infra · ◐1 ●5 ✓1` or `quiet`.
 
 ## Card anatomy (topics zoom, 40 cols)
 - Top border: `◐ name` on the left; `⚑` and/or WAITING chip on the right.
@@ -65,8 +64,7 @@ Header: `◆ mindmap  <repo>` · centred inverse-yellow `4 need you` · `zoom: �
 |---------|------------|
 | agent card | `┌─┐ │ └─┘` |
 | focused card | `┏━┓ ┃ ┗━┛` white |
-| category bubble, master | `╭─╮ │ ╰─╯` |
-| more-categories node | `┌╌┐ ╎ └╌┘` |
+| topic bubble, master | `╭─╮ │ ╰─╯` |
 | dialogs | `╔═╗ ║ ╚═╝` + 1-cell black drop shadow |
 | links from master | `─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴`, end dot `●` |
 
@@ -95,11 +93,11 @@ Status never relies on colour alone except idle and archived, which are delibera
 | Key | Action |
 |-----|--------|
 | `Tab` `⇧Tab` | next / previous waiting |
-| `W A S D` | move around the map (inside an expanded category: between its cards) |
+| `W A S D` | move around the map |
 | `c` | center on master |
 | `z` `Z` | topics / map zoom |
-| `+` · `Esc` | expand category · one level up |
-| `[` `]` | previous / next agents in a category |
+| `Esc` | one level up |
+| `[` `]` | previous / next topic |
 | `/` | search nodes |
 
 **On a node**
@@ -122,7 +120,7 @@ Status never relies on colour alone except idle and archived, which are delibera
 ## Data model sketch
 ```
 Session {
-  id, name, category, tmuxPane, worktree, branch
+  id, name, topic, tmuxPane, worktree, branch
   status: waiting | working | idle | done | dead | archived
   pr?: { number, url, state, checks, reviews }
   summary        // ≤ 2 sentences, written by master
@@ -132,7 +130,7 @@ Session {
   suggestion?: { kind: reply | approve | cleanup | review,
                  label, actions: [y, e, n] }
 }
-Category { name, sessions[], attention }   // master-owned
+Topic { name, sessions[], attention }   // master-owned
 Master   { status, conversation[], needsYou: Session[] }
 ```
 
@@ -147,5 +145,5 @@ Master   { status, conversation[], needsYou: Session[] }
 | Failures | Header chip or on-card, by severity (ADR 0012) |
 | Watch confirmation | `⚑` only (ADR 0012) |
 | What counts as "finished" | `Stop` hook + Haiku judgement (ADR 0006, 0007) |
-| WASD in an expanded category | Moves between its cards (ADR 0012) |
+| WASD in an expanded topic | No expanded topic any more (ADR 0017) |
 | Master permission prompt | Needs a design (ADR 0008) |

@@ -48,7 +48,6 @@ const MIGRATIONS = [
 const SESSION_DEFAULTS: Pick<
 	Session,
 	| "waitingOn"
-	| "categoryCandidate"
 	| "ownsBranch"
 	| "pr"
 	| "prError"
@@ -57,7 +56,6 @@ const SESSION_DEFAULTS: Pick<
 	| "claudePid"
 > = {
 	waitingOn: null,
-	categoryCandidate: null,
 	ownsBranch: false,
 	pr: null,
 	prError: null,
@@ -66,8 +64,23 @@ const SESSION_DEFAULTS: Pick<
 	claudePid: null,
 };
 
+/** Rows written before "category" was renamed to "topic". */
+type StoredSession = Omit<Session, "topic" | "topicCandidate"> &
+	Partial<Pick<Session, "topic" | "topicCandidate">> & {
+		category?: string | null;
+		categoryCandidate?: string | null;
+	};
+
 function readSession(data: string): Session {
-	return { ...SESSION_DEFAULTS, ...(JSON.parse(data) as Session) };
+	const { category, categoryCandidate, ...row } = JSON.parse(
+		data,
+	) as StoredSession;
+	return {
+		...SESSION_DEFAULTS,
+		...row,
+		topic: row.topic ?? category ?? null,
+		topicCandidate: row.topicCandidate ?? categoryCandidate ?? null,
+	};
 }
 
 interface MessageRow {

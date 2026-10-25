@@ -4,8 +4,8 @@ import {
 	applySummary,
 	chatSnapshot,
 	needsSuggestion,
-	nextCategory,
-	normalizeCategory,
+	nextTopic,
+	normalizeTopic,
 	parseSuggestion,
 	parseSummary,
 	suggestionPrompt,
@@ -13,49 +13,43 @@ import {
 } from "../src/master";
 import { makeSession, makeSuggestion } from "../test-support";
 
-describe("categories", () => {
+describe("topics", () => {
 	test("normalize to a short lowercase topic", () => {
-		expect(normalizeCategory("  Guide App!! ")).toBe("guide app");
-		expect(normalizeCategory("")).toBeNull();
-		expect(normalizeCategory(42)).toBeNull();
-		expect(normalizeCategory("a".repeat(40))?.length).toBe(20);
+		expect(normalizeTopic("  Guide App!! ")).toBe("guide app");
+		expect(normalizeTopic("")).toBeNull();
+		expect(normalizeTopic(42)).toBeNull();
+		expect(normalizeTopic("a".repeat(40))?.length).toBe(20);
 	});
 
 	test("are sticky: a change needs the same proposal twice in a row", () => {
-		const none = { category: null, categoryCandidate: null };
-		expect(nextCategory(none, "backend")).toEqual({
-			category: "backend",
-			categoryCandidate: null,
+		const none = { topic: null, topicCandidate: null };
+		expect(nextTopic(none, "backend")).toEqual({
+			topic: "backend",
+			topicCandidate: null,
 		});
-		const backend = { category: "backend", categoryCandidate: null };
-		expect(nextCategory(backend, "infra")).toEqual({
-			category: "backend",
-			categoryCandidate: "infra",
-		});
-		expect(
-			nextCategory(
-				{ category: "backend", categoryCandidate: "infra" },
-				"infra",
-			),
-		).toEqual({
-			category: "infra",
-			categoryCandidate: null,
+		const backend = { topic: "backend", topicCandidate: null };
+		expect(nextTopic(backend, "infra")).toEqual({
+			topic: "backend",
+			topicCandidate: "infra",
 		});
 		expect(
-			nextCategory(
-				{ category: "backend", categoryCandidate: "infra" },
-				"backend",
-			),
+			nextTopic({ topic: "backend", topicCandidate: "infra" }, "infra"),
 		).toEqual({
-			category: "backend",
-			categoryCandidate: null,
+			topic: "infra",
+			topicCandidate: null,
 		});
-		expect(nextCategory(backend, null)).toEqual(backend);
+		expect(
+			nextTopic({ topic: "backend", topicCandidate: "infra" }, "backend"),
+		).toEqual({
+			topic: "backend",
+			topicCandidate: null,
+		});
+		expect(nextTopic(backend, null)).toEqual(backend);
 	});
 });
 
 describe("summaries", () => {
-	test("the prompt carries the exchange and existing categories", () => {
+	test("the prompt carries the exchange and existing topics", () => {
 		const prompt = summaryPrompt(
 			makeSession({
 				lastPrompt: "rotate tokens",
@@ -75,16 +69,16 @@ describe("summaries", () => {
 			summary: "x".repeat(400),
 			ask: "  ",
 			finished: true,
-			category: "Backend",
+			topic: "Backend",
 		});
 		expect(parsed?.summary.length).toBe(160);
 		expect(parsed?.ask).toBeNull();
-		expect(parsed?.category).toBe("backend");
+		expect(parsed?.topic).toBe("backend");
 	});
 
 	test("a question is not finished", () => {
 		expect(
-			parseSummary({ summary: "s", ask: "15m?", finished: true, category: "x" })
+			parseSummary({ summary: "s", ask: "15m?", finished: true, topic: "x" })
 				?.finished,
 		).toBe(false);
 	});
@@ -96,20 +90,20 @@ describe("summaries", () => {
 				summary: "s",
 				ask: "15m?",
 				finished: false,
-				category: "auth",
+				topic: "auth",
 			}),
 		).toMatchObject({
 			status: "waiting",
 			waitingOn: "question",
 			ask: "15m?",
-			category: "auth",
+			topic: "auth",
 		});
 		expect(
 			applySummary(idle, {
 				summary: "s",
 				ask: null,
 				finished: true,
-				category: null,
+				topic: null,
 			}),
 		).toMatchObject({
 			status: "done",
@@ -118,7 +112,7 @@ describe("summaries", () => {
 			summary: "s",
 			ask: "late?",
 			finished: false,
-			category: null,
+			topic: null,
 		});
 		expect(working.status).toBeUndefined();
 		expect(working.summary).toBe("s");
@@ -205,7 +199,7 @@ test("the chat snapshot lists every session with what it needs", () => {
 	const a = makeSession({
 		id: "a",
 		name: "api-auth",
-		category: "backend",
+		topic: "backend",
 		status: "waiting",
 		waitingOn: "question",
 		ask: "15m?",

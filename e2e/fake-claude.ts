@@ -78,7 +78,7 @@ function answerSchema(prompt: string, schema: string): unknown {
 			summary: `Summary: ${reply}`,
 			ask: reply.includes("?") ? reply : null,
 			finished: reply.startsWith("Done"),
-			category: "backend",
+			topic: "backend",
 		};
 	}
 	if (prompt.includes("waiting on permission"))
