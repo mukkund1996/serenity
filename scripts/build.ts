@@ -33,4 +33,7 @@ if (!result.success) {
 	for (const log of result.logs) console.error(log);
 	process.exit(1);
 }
+// Bun leaves its compile scratch (.<hash>.bun-build, ~90 MB each) behind.
+for (const scratch of new Bun.Glob(".*.bun-build").scanSync({ dot: true }))
+	await Bun.file(scratch).delete();
 console.log(`built ${outfile}${target ? ` for ${target}` : ""}`);
