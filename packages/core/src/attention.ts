@@ -46,8 +46,7 @@ function attentionOf(sessions: Session[]): number {
 	return score;
 }
 
-/** Groups sessions by topic, most attention first, then by name. */
-export function groupTopics(sessions: Session[]): TopicGroup[] {
+function byTopic(sessions: Session[]): Map<string, Session[]> {
 	const byName = new Map<string, Session[]>();
 	for (const s of sessions) {
 		const name = s.topic ?? UNSORTED;
@@ -55,10 +54,30 @@ export function groupTopics(sessions: Session[]): TopicGroup[] {
 		list.push(s);
 		byName.set(name, list);
 	}
+	return byName;
+}
+
+/** Card order inside a topic: waiting on you, in progress, finished, then the rest. */
+const CARD_RANK: Record<Session["status"], number> = {
+	waiting: 0,
+	working: 1,
+	done: 2,
+	idle: 3,
+	dead: 4,
+	archived: 5,
+};
+
+/**
+ * The map's topics, most attention first, then by name, each with its
+ * cards in CARD_RANK order. Archived sessions are left out, so a topic
+ * holding only archived ones is gone.
+ */
+export function groupTopics(sessions: Session[]): TopicGroup[] {
+	const byName = byTopic(sessions.filter((s) => s.status !== "archived"));
 	return [...byName]
 		.map(([name, list]) => ({
 			name,
-			sessions: list,
+			sessions: list.sort((a, b) => CARD_RANK[a.status] - CARD_RANK[b.status]),
 			attention: attentionOf(list),
 			counts: {
 				waiting: list.filter((s) => s.status === "waiting").length,
@@ -67,4 +86,17 @@ export function groupTopics(sessions: Session[]): TopicGroup[] {
 			},
 		}))
 		.sort((a, b) => b.attention - a.attention || a.name.localeCompare(b.name));
+}
+
+/** The archived list (H): archived sessions under their topic, newest first. */
+export function archivedTopics(
+	sessions: Session[],
+): Array<{ name: string; sessions: Session[] }> {
+	const byName = byTopic(sessions.filter((s) => s.status === "archived"));
+	return [...byName]
+		.map(([name, list]) => ({
+			name,
+			sessions: list.sort((a, b) => b.updatedAt - a.updatedAt),
+		}))
+		.sort((a, b) => a.name.localeCompare(b.name));
 }

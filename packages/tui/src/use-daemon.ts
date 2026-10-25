@@ -20,7 +20,11 @@ export interface DaemonConnection {
 }
 
 /** Subscribes to one repo's state and keeps reconnecting if the daemon goes away. */
-export function useDaemon(home: string, repo: string): DaemonConnection {
+export function useDaemon(
+	home: string,
+	repo: string,
+	clientPane?: string,
+): DaemonConnection {
 	const [state, setState] = useState<RepoState | null>(null);
 	const [connected, setConnected] = useState(false);
 	const peerRef = useRef<RpcPeer | null>(null);
@@ -56,7 +60,7 @@ export function useDaemon(home: string, repo: string): DaemonConnection {
 				retry();
 			});
 			try {
-				setState(await peer.request("state.subscribe", { repo }));
+				setState(await peer.request("state.subscribe", { repo, clientPane }));
 				setConnected(true);
 				failures = 0;
 			} catch {
@@ -70,7 +74,7 @@ export function useDaemon(home: string, repo: string): DaemonConnection {
 			clearTimeout(timer);
 			peerRef.current?.close();
 		};
-	}, [home, repo]);
+	}, [home, repo, clientPane]);
 
 	const call = useCallback(
 		<M extends Method>(method: M, params: Params<M>): Promise<Result<M>> => {

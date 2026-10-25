@@ -52,7 +52,12 @@ function change(id: string, patch: Partial<Session>): Session {
 	return after;
 }
 
+let killed: string[];
+let opened: string[];
+
 beforeEach(() => {
+	killed = [];
+	opened = [];
 	storage = createMemoryStorage();
 	runner = new FakeRunner();
 	master = new MasterSupervisor(
@@ -65,6 +70,13 @@ beforeEach(() => {
 				const next = { ...session, ...patch, updatedAt: ++now };
 				storage.sessions.put(next);
 				return next;
+			},
+			kill: async (session) => {
+				killed.push(session.name);
+				storage.sessions.put({ ...session, status: "archived" });
+			},
+			open: async (session) => {
+				opened.push(session.name);
 			},
 			mcpConfig: () => "{}",
 			workerCwd: "/tmp",
@@ -234,6 +246,29 @@ describe("chat", () => {
 			topic: "Infra",
 		});
 		expect(storage.sessions.get("a")?.topic).toBe("infra");
+	});
+
+	test("archive_session kills the session once; archived stays archived", async () => {
+		put({ id: "a", name: "api-auth", status: "working" });
+		const first = await master.handleTool(REPO, "archive_session", {
+			session: "api-auth",
+		});
+		expect(first.text).toBe("Stopped and archived api-auth.");
+		const again = await master.handleTool(REPO, "archive_session", {
+			session: "api-auth",
+		});
+		expect(again.text).toContain("already archived");
+		expect(killed).toEqual(["api-auth"]);
+		expect(storage.sessions.get("a")?.status).toBe("archived");
+	});
+
+	test("open_session attaches the session beside the map", async () => {
+		put({ id: "a", name: "api-auth" });
+		const result = await master.handleTool(REPO, "open_session", {
+			session: "api-auth",
+		});
+		expect(result.text).toBe("Opened api-auth beside the map.");
+		expect(opened).toEqual(["api-auth"]);
 	});
 
 	test("a permission request waits for the user's answer", async () => {

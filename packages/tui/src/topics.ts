@@ -479,3 +479,26 @@ export function moveFocus(
 	}
 	return best?.id ?? from.id;
 }
+
+/**
+ * Keeps the topic that holds focus in the order it was last drawn, so
+ * cards do not move under the cursor; new cards join at the end. Other
+ * topics take their fresh order (waiting, in progress, finished).
+ */
+export function holdOrder(
+	groups: TopicGroup[],
+	drawn: Map<string, string[]>,
+	held: string | null,
+): TopicGroup[] {
+	const before = held ? drawn.get(held) : undefined;
+	if (!before) return groups;
+	const at = (s: Session) => {
+		const i = before.indexOf(s.id);
+		return i === -1 ? before.length : i;
+	};
+	return groups.map((g) =>
+		g.name === held
+			? { ...g, sessions: [...g.sessions].sort((a, b) => at(a) - at(b)) }
+			: g,
+	);
+}

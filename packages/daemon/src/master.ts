@@ -35,6 +35,10 @@ export interface MasterHost {
 	broadcast(repo: string): void;
 	/** Saves a patch to a session and returns the result. */
 	update(session: Session, patch: Partial<Session>): Session;
+	/** Stops a session's agent and archives it (the user's `K`). */
+	kill(session: Session): Promise<void>;
+	/** Attaches a session beside the user's map, as Enter on its card does. */
+	open(session: Session): Promise<void>;
 	/** `--mcp-config` JSON for a repo's chat; its server is `serenity mcp <repo>`. */
 	mcpConfig(repo: string): string;
 	/** Where one-shot workers run; not the user's repo, so nothing there is loaded. */
@@ -151,6 +155,8 @@ export class MasterSupervisor {
 			...new Set(
 				this.host.storage.sessions
 					.listByRepo(session.repo)
+					// A topic whose sessions are all archived has left the map.
+					.filter((s) => s.status !== "archived")
 					.map((s) => s.topic)
 					.filter((c): c is string => !!c),
 			),
@@ -347,6 +353,18 @@ export class MasterSupervisor {
 			this.host.update(session, { topic, topicCandidate: null });
 			this.host.broadcast(repo);
 			return { text: `Moved ${session.name} to ${topic}.` };
+		}
+
+		if (name === "archive_session") {
+			if (session.status === "archived")
+				return { text: `${session.name} is already archived.` };
+			await this.host.kill(session);
+			return { text: `Stopped and archived ${session.name}.` };
+		}
+
+		if (name === "open_session") {
+			await this.host.open(session);
+			return { text: `Opened ${session.name} beside the map.` };
 		}
 
 		if (name === "suggest") {

@@ -1,14 +1,16 @@
-import type {
-	CleanupPlan,
-	CreateSessionParams,
-	ImportCandidate,
-	SessionMode,
+import {
+	archivedTopics,
+	type CleanupPlan,
+	type CreateSessionParams,
+	type ImportCandidate,
+	type Session,
+	type SessionMode,
 } from "@serenity/core";
 import { Box, Text, useInput } from "ink";
 import { useState } from "react";
 import { Key, TitledBox } from "./components";
 import { splitAtNewline } from "./text-input";
-import { glyph } from "./theme";
+import { cardText, glyph } from "./theme";
 
 const DIALOG_W = 64;
 const FIELDS = ["name", "cwd", "branch", "mode"] as const;
@@ -132,34 +134,25 @@ export function NewSessionDialog({
 	);
 }
 
+/**
+ * Kept to a fixed handful of rows: related keys share one, so a new key
+ * joins a row rather than growing the panel. The footer covers WASD and Tab.
+ */
 const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
-	[
-		"MOVE",
-		[
-			["W A S D", "move between master and cards"],
-			["↑ ↓", "select inside master or card"],
-			["Tab ⇧Tab", "next / previous in NEEDS YOU"],
-			["[ ]", "previous / next topic"],
-		],
-	],
 	[
 		"ON A NODE",
 		[
-			["i", "reply · Tab recent replies"],
-			["Enter", "act on ▸ (attach) · Ctrl+g"],
-			["o", "open PR"],
-			["f", "watch · remind master when done"],
-			["x", "clean up / remove"],
-			["n N", "new session (n declines a suggestion)"],
-			["I", "import claude sessions running in tmux"],
-			["U", "restart an imported session with hooks"],
+			["i Enter", "reply · act on ▸ (attach)"],
+			["o f", "open PR · watch"],
+			["K x", "kill agent · clean up"],
 		],
 	],
 	[
-		"MASTER",
+		"MAP",
 		[
+			["N I", "new session · import from tmux"],
+			["H", "archived sessions"],
 			["y e n", "approve · edit · decline"],
-			["g", "message master"],
 		],
 	],
 ];
@@ -200,7 +193,9 @@ export function ShortcutsPanel() {
 					<Text color="yellow">◐</Text> waiting <Text color="blue">●</Text> in
 					progress <Text color="green">✓</Text> finished
 				</Text>
-				<Text color="gray">name in grey = idle · ↗ imported</Text>
+				<Text color="gray">
+					name in grey = idle · ↗ imported (U: full tracking)
+				</Text>
 			</Box>
 			<Box marginTop={1}>
 				<Text color="gray">
@@ -268,6 +263,129 @@ export function ConfirmDialog({
 					)}
 				</Text>
 			</Box>
+		</TitledBox>
+	);
+}
+
+/** Confirm a kill (K): the agent stops, its worktree and branch stay. */
+export function KillDialog({
+	session,
+	busy,
+	error,
+}: {
+	session: Session;
+	busy: boolean;
+	error: string | null;
+}) {
+	return (
+		<TitledBox
+			title={`Kill ${session.name}?`}
+			titleColor="whiteBright"
+			borderStyle="double"
+			borderColor="white"
+			width={DIALOG_W}
+			fill="black"
+		>
+			<Box marginTop={1}>
+				<Text color="gray">This will:</Text>
+			</Box>
+			<Text wrap="truncate">
+				<Text color="red">✕ </Text>
+				{session.tracking === "observed"
+					? `stop claude in ${session.name} · its tmux window stays`
+					: `stop the session ${session.name}`}
+			</Text>
+			<Text color="gray" wrap="truncate">
+				– archive it · H lists it
+			</Text>
+			{session.worktree || session.branch ? (
+				<Text color="gray" wrap="truncate">
+					– keep {session.worktree ? "its worktree and branch" : "its branch"} ·{" "}
+					<Key>x</Key> cleans those up
+				</Text>
+			) : null}
+			<Box marginTop={1} justifyContent="space-between">
+				<Text color="red" wrap="truncate">
+					{error ?? ""}
+				</Text>
+				<Text color="gray">
+					{busy ? (
+						"stopping…"
+					) : (
+						<>
+							<Key>y</Key> kill <Key>n</Key> cancel
+						</>
+					)}
+				</Text>
+			</Box>
+		</TitledBox>
+	);
+}
+
+/** One row of the archived list: a topic, or a session under it. */
+type ArchivedRow = { topic: string } | { session: Session };
+
+export function archivedRows(sessions: Session[]): ArchivedRow[] {
+	return archivedTopics(sessions).flatMap((group) => [
+		{ topic: group.name },
+		...group.sessions.map((session) => ({ session })),
+	]);
+}
+
+/** Archived sessions (H), nested under their topic; ↑↓ scroll. */
+export function ArchivedList({
+	rows,
+	scroll,
+	height,
+	width,
+}: {
+	rows: ArchivedRow[];
+	scroll: number;
+	/** Rows of the list shown at once. */
+	height: number;
+	width: number;
+}) {
+	const shown = rows.slice(scroll, scroll + height);
+	const below = rows.length - scroll - shown.length;
+	return (
+		<TitledBox
+			title="Archived"
+			titleColor="whiteBright"
+			borderStyle="single"
+			borderColor="white"
+			width={width}
+			fill="black"
+			right={<Text color="gray"> ↑↓ H Esc </Text>}
+		>
+			{rows.length === 0 ? (
+				<Box marginTop={1}>
+					<Text color="gray">Nothing archived yet.</Text>
+				</Box>
+			) : (
+				<Box flexDirection="column" marginTop={1}>
+					<Text color="gray">{scroll > 0 ? `↑ ${scroll} more` : " "}</Text>
+					{shown.map((row) =>
+						"topic" in row ? (
+							<Text key={`c:${row.topic}`} color="white" wrap="truncate">
+								{row.topic}
+							</Text>
+						) : (
+							<Text key={row.session.id} wrap="truncate">
+								{"  "}
+								<Text color="gray" bold>
+									{row.session.name}
+								</Text>
+								<Text color="gray">
+									{row.session.branch ? ` · ${row.session.branch}` : ""} ·{" "}
+									{cardText(row.session).replace(/^Archived\. ?/, "") ||
+										"archived"}
+								</Text>
+							</Text>
+						),
+					)}
+					<Text color="gray">{below > 0 ? `↓ ${below} more` : " "}</Text>
+				</Box>
+			)}
 		</TitledBox>
 	);
 }

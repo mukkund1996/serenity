@@ -98,6 +98,8 @@ const envNumber = (name: string, fallback: number) =>
 export class Daemon {
 	private server: Server | null = null;
 	private readonly subscriptions = new Map<RpcPeer, Set<string>>();
+	/** Each map's tmux pane, given when it subscribes; the master attaches there. */
+	private readonly mapPanes = new Map<RpcPeer, string>();
 	/**
 	 * repo → the attached session and the map pane it was joined into. For an
 	 * adopted session, `clientTty` is the tmux client that was switched to it.
@@ -140,6 +142,8 @@ export class Daemon {
 				log: this.log,
 				broadcast: (repo) => this.broadcast(repo),
 				update: (session, patch) => this.update(session, patch),
+				kill: (session) => this.kill(session),
+				open: (session) => this.open(session),
 				mcpConfig: (repo) => this.mcpConfig(repo),
 				workerCwd: join(opts.home, "workers"),
 				models: opts.models ?? config.models,
@@ -213,7 +217,10 @@ export class Daemon {
 
 	private accept(peer: RpcPeer): void {
 		this.subscriptions.set(peer, new Set());
-		peer.onClose(() => this.subscriptions.delete(peer));
+		peer.onClose(() => {
+			this.subscriptions.delete(peer);
+			this.mapPanes.delete(peer);
+		});
 		peer.onRequest((method, params) => {
 			const handler = this.handlers[method as Method] as
 				| ((p: unknown, peer: RpcPeer) => unknown)
@@ -271,8 +278,9 @@ export class Daemon {
 	private readonly handlers: Handlers = {
 		hello: () => ({ daemonVersion: BUILD_ID, pid: process.pid }),
 
-		"state.subscribe": ({ repo }, peer) => {
+		"state.subscribe": ({ repo, clientPane }, peer) => {
 			this.subscriptions.get(peer)?.add(repo);
+			if (clientPane) this.mapPanes.set(peer, clientPane);
 			this.prs.refreshRepo(repo);
 			return this.state(repo);
 		},
@@ -286,34 +294,7 @@ export class Daemon {
 		},
 
 		"session.attach": async ({ id, clientPane }) => {
-			const session = this.requireSession(id);
-			const pane = await this.requireLivePane(session);
-			const current = this.attached.get(session.repo);
-			if (current) await this.detach(current.sessionId);
-			await this.tmux.bindDetachKey(this.detachCommand());
-			await this.tmux
-				.enableClaudeKeys()
-				.catch((e: Error) => this.log(`tmux claude keys: ${e.message}`));
-			if (session.origin === "adopted") {
-				// Its pane stays in the user's own window; go there (ADR 0016).
-				const clientTty = await this.tmux.clientShowing(clientPane);
-				if (!clientTty)
-					throw new RpcError(
-						RpcErrorCode.InvalidParams,
-						"no tmux client is showing the map",
-					);
-				await this.tmux.switchClient(clientTty, pane);
-				this.attached.set(session.repo, {
-					sessionId: session.id,
-					clientPane,
-					clientTty,
-				});
-			} else {
-				await this.tmux.joinRight(pane, clientPane, ATTACH_PERCENT);
-				this.attached.set(session.repo, { sessionId: session.id, clientPane });
-			}
-			this.prs.schedule(session.id, 0);
-			this.broadcast(session.repo);
+			await this.attach(this.requireSession(id), clientPane);
 			return null;
 		},
 
@@ -355,6 +336,11 @@ export class Daemon {
 
 		"session.cleanup": async ({ id }) => {
 			await this.cleanup(this.requireSession(id));
+			return null;
+		},
+
+		"session.kill": async ({ id }) => {
+			await this.kill(this.requireSession(id));
 			return null;
 		},
 
@@ -590,29 +576,12 @@ export class Daemon {
 
 	/**
 	 * Stops the agent, removes its worktree and its merged branch when nothing
-	 * would be lost, and keeps the node on the map as archived (design 4b).
+	 * would be lost, and archives the node (design 4b).
 	 */
 	private async cleanup(session: Session): Promise<CleanupPlan> {
 		const facts = await this.cleanupFacts(session);
 		const removals = plannedRemovals(session, facts);
-		if (this.attached.get(session.repo)?.sessionId === session.id)
-			await this.detach(session.id);
-		// Archive first, so the exit that killing the pane causes changes nothing.
-		this.change(session, {
-			status: "archived",
-			ask: null,
-			waitingOn: null,
-			tmuxPane: null,
-		});
-		if (facts.alive && session.tmuxPane) {
-			if (session.tracking === "observed") {
-				// The user's own pane: stop claude, keep their shell and window.
-				await this.tmux
-					.unsetPaneOption(session.tmuxPane, "@serenity_session")
-					.catch(() => {});
-				if (session.claudePid) stopProcess(session.claudePid);
-			} else await this.tmux.killPane(session.tmuxPane).catch(() => {});
-		}
+		await this.stopAgent(session, facts.alive);
 		if (removals.removeWorktree && session.worktree) {
 			if (existsSync(session.worktree))
 				await removeWorktree(session.repo, session.worktree);
@@ -623,6 +592,83 @@ export class Daemon {
 		this.log(`cleaned up ${session.name}`);
 		this.broadcast(session.repo);
 		return cleanupPlan(session, facts);
+	}
+
+	/** Joins the session's pane beside the map pane, or switches to an adopted one. */
+	private async attach(session: Session, clientPane: string): Promise<void> {
+		const pane = await this.requireLivePane(session);
+		const current = this.attached.get(session.repo);
+		if (current) await this.detach(current.sessionId);
+		await this.tmux.bindDetachKey(this.detachCommand());
+		await this.tmux
+			.enableClaudeKeys()
+			.catch((e: Error) => this.log(`tmux claude keys: ${e.message}`));
+		if (session.origin === "adopted") {
+			// Its pane stays in the user's own window; go there (ADR 0016).
+			const clientTty = await this.tmux.clientShowing(clientPane);
+			if (!clientTty)
+				throw new RpcError(
+					RpcErrorCode.InvalidParams,
+					"no tmux client is showing the map",
+				);
+			await this.tmux.switchClient(clientTty, pane);
+			this.attached.set(session.repo, {
+				sessionId: session.id,
+				clientPane,
+				clientTty,
+			});
+		} else {
+			await this.tmux.joinRight(pane, clientPane, ATTACH_PERCENT);
+			this.attached.set(session.repo, { sessionId: session.id, clientPane });
+		}
+		this.prs.schedule(session.id, 0);
+		this.broadcast(session.repo);
+	}
+
+	/** The master's open_session: attach beside a map showing this repo. */
+	private async open(session: Session): Promise<void> {
+		const pane = [...this.mapPanes].find(([peer]) =>
+			this.subscriptions.get(peer)?.has(session.repo),
+		)?.[1];
+		if (!pane)
+			throw new RpcError(
+				RpcErrorCode.InvalidParams,
+				"no serenity map inside tmux is showing this repo",
+			);
+		await this.attach(session, pane);
+	}
+
+	/**
+	 * Stops the agent and archives its node, which leaves the map for the
+	 * archived list. Its worktree and branch stay; cleanup removes those.
+	 */
+	private async kill(session: Session): Promise<void> {
+		const alive =
+			!!session.tmuxPane && (await this.tmux.paneExists(session.tmuxPane));
+		await this.stopAgent(session, alive);
+		this.log(`killed ${session.name}`);
+		this.broadcast(session.repo);
+	}
+
+	private async stopAgent(session: Session, alive: boolean): Promise<void> {
+		if (this.attached.get(session.repo)?.sessionId === session.id)
+			await this.detach(session.id);
+		// Archive first, so the exit that killing the pane causes changes nothing.
+		this.change(session, {
+			status: "archived",
+			ask: null,
+			waitingOn: null,
+			tmuxPane: null,
+		});
+		if (alive && session.tmuxPane) {
+			if (session.tracking === "observed") {
+				// The user's own pane: stop claude, keep their shell and window.
+				await this.tmux
+					.unsetPaneOption(session.tmuxPane, "@serenity_session")
+					.catch(() => {});
+				if (session.claudePid) stopProcess(session.claudePid);
+			} else await this.tmux.killPane(session.tmuxPane).catch(() => {});
+		}
 	}
 
 	/**

@@ -8,6 +8,7 @@ import {
 	needsYou,
 	type Session,
 	type Suggestion,
+	UNSORTED,
 } from "@serenity/core";
 import {
 	Box,
@@ -27,8 +28,11 @@ import {
 } from "./components";
 import { openUrl } from "./open-url";
 import {
+	ArchivedList,
+	archivedRows,
 	ConfirmDialog,
 	ImportDialog,
+	KillDialog,
 	NewSessionDialog,
 	RecentReplies,
 	ShortcutsPanel,
@@ -38,6 +42,7 @@ import {
 	type CardElement,
 	cardElements,
 	drawTopics,
+	holdOrder,
 	moveFocus,
 	type NodeBox,
 	stepTopic,
@@ -61,6 +66,8 @@ type Overlay =
 			busy: boolean;
 			error: string | null;
 	  }
+	| { kind: "kill"; sessionId: string; busy: boolean; error: string | null }
+	| { kind: "archived"; scroll: number }
 	| { kind: "replies"; selected: number }
 	| { kind: "import"; candidates: ImportCandidate[] }
 	| null;
@@ -109,7 +116,7 @@ function useLiveState<T>(
 export function App({ home, repo, tmuxPane }: AppProps) {
 	const { exit } = useApp();
 	const { columns, rows } = useWindowSize();
-	const { state, connected, call } = useDaemon(home, repo);
+	const { state, connected, call } = useDaemon(home, repo, tmuxPane);
 	/** The focused node: MASTER or a session card's id (WASD). */
 	const [node, setNode] = useState<string>(MASTER);
 	/** The element selected inside the node (arrow keys); null means its first. */
@@ -124,13 +131,30 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const [overlay, setOverlay] = useState<Overlay>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 
-	const sessions = state?.sessions ?? [];
+	const allSessions = state?.sessions ?? [];
+	/** Archived sessions are off the map; `H` lists them. */
+	const sessions = useMemo(
+		() => allSessions.filter((s) => s.status !== "archived"),
+		[allSessions],
+	);
 	const suggestions = state?.suggestions ?? [];
 	const permissions = state?.permissions ?? [];
 	const master: MasterState = state?.master ?? { status: "idle", error: null };
 	const attached =
-		sessions.find((s) => s.id === state?.attachedSessionId) ?? null;
-	const groups = useMemo(() => groupTopics(sessions), [sessions]);
+		allSessions.find((s) => s.id === state?.attachedSessionId) ?? null;
+	/** Each topic's card order as last drawn; the focused one keeps it. */
+	const drawn = useRef(new Map<string, string[]>());
+	const heldTopic =
+		node === MASTER
+			? null
+			: (sessions.find((s) => s.id === node)?.topic ?? UNSORTED);
+	const groups = useMemo(() => {
+		const next = holdOrder(groupTopics(sessions), drawn.current, heldTopic);
+		drawn.current = new Map(
+			next.map((g) => [g.name, g.sessions.map((s) => s.id)]),
+		);
+		return next;
+	}, [sessions, heldTopic]);
 	const needs = useMemo(
 		() => needsYou(sessions, suggestions),
 		[sessions, suggestions],
@@ -163,6 +187,9 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const focusedSuggestion = suggestionFor(focused?.id);
 
 	const bodyHeight = rows - 2;
+	/** Rows of the archived list shown at once: the screen less its frame, padding and hints. */
+	const archivedHeight = Math.max(3, rows - 8);
+	const archived = useMemo(() => archivedRows(allSessions), [allSessions]);
 	const masterWidth = Math.max(34, Math.min(56, columns - 52));
 	const masterRow = Math.floor(bodyHeight / 2);
 	const topics = useMemo(
@@ -207,12 +234,13 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	useEffect(() => {
 		if (node === MASTER || topics.cards.some((c) => c.sessionId === node))
 			return;
-		if (node === arriving.current && !sessions.some((s) => s.id === node))
+		// All sessions: one archived as soon as it arrived has still arrived.
+		if (node === arriving.current && !allSessions.some((s) => s.id === node))
 			return;
 		arriving.current = null;
 		setNode(MASTER);
 		setElement(null);
-	}, [topics, node, sessions]);
+	}, [topics, node, allSessions]);
 
 	useEffect(() => {
 		if (!notice) return;
@@ -363,6 +391,32 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				return;
 			}
 
+			if (overlay?.kind === "kill") {
+				if (overlay.busy) return;
+				if (input === "n" || key.escape) return setOverlay(null);
+				if (input !== "y") return;
+				setOverlay({ ...overlay, busy: true, error: null });
+				call("session.kill", { id: overlay.sessionId }).then(
+					() => setOverlay(null),
+					(e: Error) =>
+						setOverlay({ ...overlay, busy: false, error: e.message }),
+				);
+				return;
+			}
+
+			if (overlay?.kind === "archived") {
+				if (input === "H" || key.escape) return setOverlay(null);
+				const last = Math.max(0, archived.length - archivedHeight);
+				if (key.upArrow || input === "w")
+					setOverlay({ ...overlay, scroll: Math.max(0, overlay.scroll - 1) });
+				if (key.downArrow || input === "s")
+					setOverlay({
+						...overlay,
+						scroll: Math.min(last, overlay.scroll + 1),
+					});
+				return;
+			}
+
 			if (overlay?.kind === "replies") {
 				const list = recentReplies();
 				if (key.escape) return setOverlay(null);
@@ -463,6 +517,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					return setMasterText("");
 				case "N":
 					return setOverlay({ kind: "new" });
+				case "H":
+					return setOverlay({ kind: "archived", scroll: 0 });
 				case "I":
 					call("session.discover", { repo }).then((candidates) => {
 						if (candidates.length) setOverlay({ kind: "import", candidates });
@@ -514,6 +570,13 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				case "x":
 					void openConfirm(focused, null);
 					return;
+				case "K":
+					return setOverlay({
+						kind: "kill",
+						sessionId: focused.id,
+						busy: false,
+						error: null,
+					});
 				case "U":
 					if (focused.tracking !== "observed")
 						return setNotice(`${focused.name} already reports through hooks`);
@@ -580,8 +643,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 	const calm = groups.filter((g) => g.attention === 0).length;
 	const confirmSession =
-		overlay?.kind === "confirm"
-			? sessions.find((s) => s.id === overlay.sessionId)
+		overlay?.kind === "confirm" || overlay?.kind === "kill"
+			? allSessions.find((s) => s.id === overlay.sessionId)
 			: undefined;
 	return (
 		<Box
@@ -663,6 +726,25 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 						fromMaster={!!overlay.suggestionId}
 						busy={overlay.busy}
 						error={overlay.error}
+					/>
+				</Centered>
+			) : null}
+			{overlay?.kind === "kill" && confirmSession ? (
+				<Centered rows={rows}>
+					<KillDialog
+						session={confirmSession}
+						busy={overlay.busy}
+						error={overlay.error}
+					/>
+				</Centered>
+			) : null}
+			{overlay?.kind === "archived" ? (
+				<Centered rows={rows}>
+					<ArchivedList
+						rows={archived}
+						scroll={overlay.scroll}
+						height={archivedHeight}
+						width={Math.min(80, columns - 4)}
 					/>
 				</Centered>
 			) : null}

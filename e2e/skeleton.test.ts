@@ -380,7 +380,39 @@ test(
 			"the tidy worktree to be removed",
 		);
 		await until(() => !hasBranch("tidy"), "the tidy branch to be deleted");
-		await waitFor(/Archived\. Summary: Done: finish/);
+		// Archived sessions leave the map; H lists them under their topic.
+		await until(
+			() => !screen().includes("Done: finish"),
+			"tidy to leave the map",
+		);
+		keys("H");
+		await waitFor(/tidy · tidy · Summary: Done: finish/);
+		keys("Escape");
+		await until(() => !screen().includes("Archived"), "the list to close");
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"K kills a session but keeps its worktree; it moves to the archived list",
+	async () => {
+		await newSession("doomed");
+		keys("K");
+		await waitFor(/Kill doomed\?/);
+		keys("y");
+		await until(
+			() =>
+				!tmux("list-windows", "-t", "=serenity-demo", "-F", "#{window_name}")
+					.split("\n")
+					.includes("doomed"),
+			"the doomed window to close",
+		);
+		await until(() => !screen().includes("doomed"), "doomed to leave the map");
+		expect(existsSync(join(dir, "repos", "demo-doomed"))).toBe(true);
+		keys("H");
+		await waitFor(/doomed · doomed/);
+		keys("Escape");
+		await until(() => !screen().includes("Archived"), "the list to close");
 	},
 	STEP_TIMEOUT,
 );
