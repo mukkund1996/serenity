@@ -82,6 +82,10 @@ async function launch(): Promise<void> {
 	tmux(["select-window", "-t", `=${session}:map`]);
 	// The map is the whole screen; parked agent windows stay out of sight.
 	tmux(["set-option", "-t", `=${session}:`, "status", "off"]);
+	// tmux reads a client's terminal features when it attaches, so `extkeys`
+	// has to be in place before this attach for Shift+Enter to reach Claude.
+	const { Tmux } = await import("@serenity/daemon");
+	await new Tmux().enableClaudeKeys().catch(() => {});
 	const attached = tmux(
 		["-u", "attach-session", "-t", `=${session}`],
 		"inherit",
