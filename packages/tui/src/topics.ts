@@ -18,8 +18,9 @@ import { cardText, glyph, nameColor } from "./theme";
  */
 
 export const CARD_W = 40;
-const CARD_H = 5;
-const FOCUSED_CARD_H = 6;
+/** Text rows under a card's PR line: as many as its text needs, up to 4. */
+const BODY_MAX = 4;
+const CARD_INNER = CARD_W - 4;
 const CARD_GAP_X = 2;
 const PAD_X = 3;
 const TRUNK_X = 2;
@@ -58,9 +59,14 @@ export function cardElements(hasSuggestion: boolean): CardElement[] {
 		: ["card", "pr", "reply"];
 }
 
-function cardHeight(focused: boolean, suggestion: string | null): number {
-	if (!focused) return CARD_H;
-	return FOCUSED_CARD_H + (suggestion ? 1 : 0);
+/** Frame, PR line and text; a focused card adds its suggestion and input rows. */
+function cardHeight(
+	s: Session,
+	focused: boolean,
+	suggestion: string | null,
+): number {
+	const body = Math.max(1, cardBody(s, CARD_INNER).length);
+	return 3 + body + (focused ? 1 + (suggestion ? 1 : 0) : 0);
 }
 
 export interface TopicsLayout {
@@ -152,14 +158,35 @@ function labelled(
 	];
 }
 
+/** "label text" wrapped to `lines` rows, the label leading the first. */
+function labelledLines(
+	label: string,
+	text: string,
+	labelStyle: Style,
+	textStyle: Style,
+	width: number,
+	lines: number,
+): Line[] {
+	const n = [...label].length;
+	return wrap(`${label}${text}`, width, lines).map(
+		(t, i): Line =>
+			i === 0
+				? [
+						{ text: label, style: labelStyle },
+						{ text: [...t].slice(n).join(""), style: textStyle },
+					]
+				: [{ text: t, style: textStyle }],
+	);
+}
+
 /**
- * The card's two text rows. Until the master writes summaries (milestone 2)
- * they show the latest exchange in order: your prompt, then Claude's reply,
- * or what it is doing now.
+ * The card's text, up to BODY_MAX rows and no more than it needs: the
+ * master's summary, or until there is one the latest exchange in order:
+ * your prompt, then Claude's reply, or what it is doing now.
  */
 function cardBody(s: Session, width: number): Line[] {
 	const plain = (text: string) =>
-		wrap(text, width, 2).map((t): Line => [{ text: t, style: DIM }]);
+		wrap(text, width, BODY_MAX).map((t): Line => [{ text: t, style: DIM }]);
 	if (s.summary || !s.lastPrompt) return plain(cardText(s));
 	const you = labelled(
 		"you › ",
@@ -171,12 +198,9 @@ function cardBody(s: Session, width: number): Line[] {
 	if (s.status === "waiting")
 		return [
 			you,
-			[
-				{
-					text: truncate(s.ask ?? "needs you", width),
-					style: { fg: "yellow" },
-				},
-			],
+			...wrap(s.ask ?? "needs you", width, BODY_MAX - 1).map(
+				(t): Line => [{ text: t, style: { fg: "yellow" } }],
+			),
 		];
 	if (s.status === "working")
 		return [you, [{ text: "working…", style: { fg: "blue" } }]];
@@ -185,12 +209,13 @@ function cardBody(s: Session, width: number): Line[] {
 	if (s.lastAssistantMessage)
 		return [
 			you,
-			labelled(
+			...labelledLines(
 				"claude › ",
 				s.lastAssistantMessage,
 				DIM,
 				{ fg: "white" },
 				width,
+				BODY_MAX - 1,
 			),
 		];
 	return [you];
@@ -246,7 +271,7 @@ function drawCard(
 	focus: CardFocus | null,
 ): number {
 	const focused = focus !== null;
-	const h = cardHeight(focused, focus?.suggestion ?? null);
+	const h = cardHeight(s, focused, focus?.suggestion ?? null);
 	const frameStyle: Style = focused
 		? { fg: "whiteBright", bold: true }
 		: s.status === "waiting"
@@ -277,9 +302,10 @@ function drawCard(
 		canvas.text(right, y, chip.text, chip.style);
 	}
 
-	const inner = CARD_W - 4;
+	const inner = CARD_INNER;
+	const body = cardBody(s, inner);
 	drawPrLine(canvas, s, x + 2, y + 1, inner);
-	cardBody(s, inner).forEach((line, i) => {
+	body.forEach((line, i) => {
 		let at = x + 2;
 		for (const run of line)
 			at = canvas.text(at, y + 2 + i, run.text, run.style);
@@ -288,7 +314,7 @@ function drawCard(
 	const cursor = (row: number) =>
 		canvas.text(x + 1, row, "▸", { fg: "whiteBright", bold: true });
 	if (focus.element === "pr") cursor(y + 1);
-	let inputRow = y + 4;
+	let inputRow = y + 2 + Math.max(1, body.length);
 	if (focus.suggestion) {
 		const chips = " y e n";
 		let col = canvas.text(x + 2, inputRow, "◆ ", { fg: "magenta" });
@@ -341,6 +367,7 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 		group.sessions.forEach((s, i) => {
 			const row = Math.floor(i / cols);
 			const h = cardHeight(
+				s,
 				s.id === input.focusId,
 				input.focusSuggestion ?? null,
 			);

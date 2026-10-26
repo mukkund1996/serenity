@@ -179,6 +179,33 @@ describe("drawTopics", () => {
 		expect(rows[(a1?.y ?? 0) - 3]).toMatch(/┬/);
 	});
 
+	test("a card grows to fit its summary, up to four rows, and no more", () => {
+		const card = (summary: string) => {
+			const layout = drawTopics({
+				width: 60,
+				height: 20,
+				masterRow: 10,
+				groups: groupTopics([makeSession({ id: "x", summary })]),
+				focusId: null,
+				replyText: null,
+			});
+			return {
+				h: layout.cards[0]?.h,
+				text: layout.canvas.toString(),
+			};
+		};
+		const short = card("Rotates refresh tokens.");
+		expect(short.h).toBe(4);
+		const long = card(
+			"Rotates refresh tokens on every use and revokes the old family when a stolen token is replayed; tests cover the replay path end to end.",
+		);
+		expect(long.h).toBe(7);
+		expect(long.text).toContain("end to end.");
+		const huge = card("word ".repeat(80));
+		expect(huge.h).toBe(7);
+		expect(huge.text).toContain("…");
+	});
+
 	test("nothing to draw without sessions", () => {
 		const layout = drawTopics({
 			width: 60,
@@ -240,7 +267,8 @@ describe("focused card elements", () => {
 
 	test("the master's suggestion gets its own row above the input", () => {
 		const { canvas, cards } = drawFocused("card", 'Reply "ok"');
-		expect(cards[0]?.h).toBe(7);
+		// Frame, PR line, one row of text, the suggestion and the input.
+		expect(cards[0]?.h).toBe(6);
 		const rows = canvas.toString().split("\n");
 		const pick = rows.findIndex((r) => r.includes('◆ Reply "ok"'));
 		expect(pick).toBeGreaterThan(-1);

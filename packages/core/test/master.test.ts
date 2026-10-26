@@ -89,7 +89,7 @@ describe("summaries", () => {
 			finished: true,
 			topic: "Backend",
 		});
-		expect(parsed?.summary.length).toBe(160);
+		expect(parsed?.summary.length).toBe(130);
 		expect(parsed?.ask).toBeNull();
 		expect(parsed?.topic).toBe("backend");
 	});

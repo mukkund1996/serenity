@@ -30,7 +30,12 @@ import {
 	SessionMaster,
 } from "./components";
 import { drawMap, type MasterItem, rowElements } from "./map";
-import { MAX_ARCHIVED, planMaster } from "./master-layout";
+import {
+	MAX_ARCHIVED,
+	needLines,
+	planMaster,
+	suggestionLines,
+} from "./master-layout";
 import { openUrl } from "./open-url";
 import {
 	ArchivedList,
@@ -44,6 +49,7 @@ import {
 	ShortcutsPanel,
 } from "./overlays";
 import { splitAtNewline } from "./text-input";
+import { askLine } from "./theme";
 import {
 	type CardElement,
 	cardElements,
@@ -184,7 +190,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		suggestions.find((g) => g.sessionId === id);
 	const onMaster = node === MASTER;
 	const bodyHeight = rows - 2;
-	const masterWidth = Math.max(38, Math.min(64, columns - 50));
+	const masterWidth = Math.max(38, Math.min(72, columns - 50));
+	const masterInner = masterWidth - 6;
 
 	const github = state?.github ?? { user: null, reviewRequests: [] };
 	const mine = useMemo(
@@ -201,15 +208,20 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	// Planned with the raw selection: only its place in NEEDS YOU matters here.
 	const plan = planMaster({
 		height: bodyHeight,
-		inner: masterWidth - 6,
+		inner: masterInner,
 		empty: sessions.length === 0,
 		needs: [
-			...permissions.map((p) => ({ id: `${PERM}${p.id}`, rows: 2 })),
+			...permissions.map((p) => ({
+				id: `${PERM}${p.id}`,
+				rows: 1 + needLines(p.detail, masterInner).length,
+			})),
 			...needs.map((s) => ({
 				id: s.id,
 				rows:
-					2 +
-					(suggestionFor(s.id) ? 1 : 0) +
+					1 +
+					needLines(askLine(s), masterInner).length +
+					suggestionLines(suggestionFor(s.id)?.label ?? "", masterInner)
+						.length +
 					(onMaster && element === s.id && replyText !== null ? 1 : 0),
 			})),
 		],
