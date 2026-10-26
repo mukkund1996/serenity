@@ -40,6 +40,8 @@ export function agentCommand(
 	claude: string[],
 	settingsPath: string,
 	selfCommand: string[],
+	/** A first prompt; after `--` so one starting with "-" is not a flag. */
+	prompt?: string,
 ): string[] {
 	const notify = [...selfCommand, "exited"].map(shellQuote).join(" ");
 	return [
@@ -50,6 +52,7 @@ export function agentCommand(
 		...claude,
 		"--settings",
 		settingsPath,
+		...(prompt ? ["--", prompt] : []),
 	];
 }
 
