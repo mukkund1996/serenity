@@ -27,15 +27,11 @@ import {
 	MasterPanel,
 	MY_PR_ROW,
 	REVIEW_ROW,
+	SessionCounts,
 	SessionMaster,
 } from "./components";
 import { drawMap, type MasterItem, rowElements } from "./map";
-import {
-	MAX_ARCHIVED,
-	needLines,
-	planMaster,
-	suggestionLines,
-} from "./master-layout";
+import { needLines, planMaster, suggestionLines } from "./master-layout";
 import { openUrl } from "./open-url";
 import {
 	ArchivedList,
@@ -198,13 +194,6 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		() => myPullRequests(sessions, github.user),
 		[sessions, github.user],
 	);
-	const archivedSessions = useMemo(
-		() =>
-			allSessions
-				.filter((s) => s.status === "archived")
-				.sort((a, b) => b.updatedAt - a.updatedAt),
-		[allSessions],
-	);
 	// Planned with the raw selection: only its place in NEEDS YOU matters here.
 	const plan = planMaster({
 		height: bodyHeight,
@@ -229,7 +218,6 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		conversation: state?.conversation ?? [],
 		reviews: github.reviewRequests,
 		mine,
-		archived: archivedSessions.slice(0, MAX_ARCHIVED),
 	});
 	/** The URL of a PR row selected in the master: a review request or one of mine. */
 	const linkOf = (id: string | null): string | null => {
@@ -728,10 +716,12 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					return exit();
 				case "?":
 					return setOverlay({ kind: "help" });
-				// z zooms out to the map, Z zooms in to topics.
+				// z zooms out to the map; Z zooms in to topics, and from a
+				// card in topics on into its session.
 				case "z":
 					return setZoom("map");
 				case "Z":
+					if (zoom === "topics" && card) return attach(card);
 					return setZoom("topics");
 				case "c":
 					return focusNode(MASTER);
@@ -897,6 +887,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				needs={needs.length + permissions.length}
 				connected={connected}
 				masterError={!!master.error}
+				sessions={sessions}
 				zoom={zoom}
 			/>
 			<Box height={bodyHeight}>
@@ -917,7 +908,6 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							master={master}
 							calmTopics={calm}
 							plan={plan}
-							archivedTotal={archivedSessions.length}
 							focused={onMaster}
 							selected={onMaster ? selected : null}
 							inputText={masterText}
@@ -1059,12 +1049,14 @@ function Header({
 	needs,
 	connected,
 	masterError,
+	sessions,
 	zoom,
 }: {
 	repo: string;
 	needs: number;
 	connected: boolean;
 	masterError: boolean;
+	sessions: Session[];
 	zoom: string;
 }) {
 	return (
@@ -1100,7 +1092,12 @@ function Header({
 					</>
 				)}
 			</Text>
-			<Text color="gray">zoom: {zoom}</Text>
+			<Text>
+				<SessionCounts sessions={sessions} />
+				<Text color="gray">
+					{sessions.length ? "   " : ""}zoom: {zoom}
+				</Text>
+			</Text>
 		</Box>
 	);
 }

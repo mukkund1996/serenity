@@ -42,7 +42,7 @@ const type = (text: string) => tmux("send-keys", "-t", MAP, "-l", text);
 const screen = (target = MAP) => tmux("capture-pane", "-p", "-t", target);
 /** Width of the master panel in the 200-column test window. */
 const MASTER_W = 64;
-/** The map's topics, without the master panel (which lists archived sessions). */
+/** The map's topics, without the master panel (which names sessions that need you). */
 const mapSide = () =>
 	screen()
 		.split("\n")
@@ -418,7 +418,6 @@ test(
 			"the doomed window to close",
 		);
 		await until(() => !mapSide().includes("doomed"), "doomed to leave the map");
-		await waitFor(/archived \d+ · H all[^\n]*\n[^\n]*doomed/);
 		expect(existsSync(join(dir, "repos", "demo-doomed"))).toBe(true);
 		keys("H");
 		await waitFor(/doomed · doomed/);

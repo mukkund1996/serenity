@@ -9,15 +9,14 @@ import {
 /**
  * What the master panel shows in the rows it has (ADR 0012). NEEDS YOU, the
  * conversation and the input always show; the rows left over go to REVIEW,
- * then MY PRS, then SESSIONS, each trimmed to fit or dropped.
+ * then MY PRS, each trimmed to fit or dropped. The session counts sit in
+ * the header.
  */
 
 /** How many NEEDS YOU items fit; the rest are summarised as "+N more". */
 export const MAX_NEED_ITEMS = 5;
 /** Rows of MY PRS at most. */
 export const MAX_MY_PRS = 5;
-/** Archived sessions listed under SESSIONS at most. */
-export const MAX_ARCHIVED = 5;
 /** Indent of a NEEDS YOU item's detail lines, under its name. */
 export const NEED_INDENT = 4;
 /** Columns kept right of a suggestion for its y / e / n chips. */
@@ -56,8 +55,6 @@ export interface MasterPlanInput {
 	conversation: MasterMessage[];
 	reviews: ReviewRequest[];
 	mine: MyPr[];
-	/** Archived sessions, newest first. */
-	archived: Session[];
 }
 
 export interface MasterPlan {
@@ -65,8 +62,6 @@ export interface MasterPlan {
 	needs: { start: number; count: number; hidden: number };
 	reviews: ReviewRequest[];
 	mine: MyPr[];
-	/** Null when SESSIONS does not fit. */
-	sessions: { archived: Session[] } | null;
 }
 
 /** A section's blank line and header. */
@@ -105,20 +100,7 @@ export function planMaster(input: MasterPlanInput): MasterPlan {
 		0,
 		take(Math.min(MAX_MY_PRS, input.mine.length)),
 	);
-
-	// The counts line, then "archived" and as many of them as fit.
-	let sessions: MasterPlan["sessions"] = null;
-	const archivedWanted = Math.min(MAX_ARCHIVED, input.archived.length);
-	if ((!input.empty || archivedWanted) && take(1)) {
-		const fit = archivedWanted ? Math.min(archivedWanted, room - 1) : 0;
-		sessions = { archived: fit > 0 ? input.archived.slice(0, fit) : [] };
-	}
-	return {
-		needs: { start, count: shown.length, hidden },
-		reviews,
-		mine,
-		sessions,
-	};
+	return { needs: { start, count: shown.length, hidden }, reviews, mine };
 }
 
 /** Rows of the conversation's latest exchange, as `Conversation` draws it. */

@@ -484,74 +484,34 @@ const COUNTED = [
 	["dead", "ended"],
 ] as const;
 
-/** Counts of the sessions on the map, then the latest archived ones. */
-function SessionsSection({
-	sessions,
-	archived,
-	archivedTotal,
-	width,
-	now,
-}: {
-	sessions: Session[];
-	archived: Session[];
-	archivedTotal: number;
-	width: number;
-	now: number;
-}) {
+/** Counts of the sessions on the map, as the header's badges. */
+export function SessionCounts({ sessions }: { sessions: Session[] }) {
 	const counts = COUNTED.map(([status, word]) => ({
 		status,
 		word,
 		n: sessions.filter((s) => s.status === status).length,
 	})).filter((c) => c.n > 0);
 	return (
-		<>
-			<SectionHeader label="SESSIONS" width={width} />
-			<Text wrap="truncate">
-				{counts.length === 0 ? (
-					<Text color="gray">none on the map</Text>
-				) : (
-					counts.map((c, i) => {
-						const g = glyph(c.status);
-						return (
-							<Text key={c.status}>
-								{i ? <Text color="gray"> · </Text> : null}
-								{g ? <Text color={g.color}>{g.ch} </Text> : null}
-								<Text color={ink(nameColor(c.status))}>
-									{c.n} {c.word}
-								</Text>
-							</Text>
-						);
-					})
-				)}
-			</Text>
-			{archived.length ? (
-				<>
-					<Text color="gray" wrap="truncate">
-						archived {archivedTotal} · <Key>H</Key> all
+		<Text>
+			{counts.map((c, i) => {
+				const g = glyph(c.status);
+				return (
+					<Text key={c.status}>
+						{i ? <Text color="gray"> · </Text> : null}
+						{g ? <Text color={g.color}>{g.ch} </Text> : null}
+						<Text color={ink(nameColor(c.status))}>
+							{c.n} {c.word}
+						</Text>
 					</Text>
-					{archived.map((s) => (
-						<Box key={s.id} justifyContent="space-between">
-							<Text color="gray" wrap="truncate">
-								{"  "}
-								{s.name}
-							</Text>
-							<Box flexShrink={0} marginLeft={1}>
-								<Text color="gray">
-									{s.pr ? `#${s.pr.number} ${prStatus(s.pr).text}  ` : ""}
-									{age(s.updatedAt, now)}
-								</Text>
-							</Box>
-						</Box>
-					))}
-				</>
-			) : null}
-		</>
+				);
+			})}
+		</Text>
 	);
 }
 
 /**
- * Master panel in the topics zoom: NEEDS YOU, the GitHub and sessions
- * overview that fits (`plan`), the latest exchange, the input. When it is
+ * Master panel in the topics zoom: NEEDS YOU, the GitHub overview that
+ * fits (`plan`), the latest exchange, the input. When it is
  * the focused node its frame turns heavy white and `selected` (a `perm:<id>`,
  * a session id, a PR row, or MASTER_INPUT) carries the cursor.
  */
@@ -565,7 +525,6 @@ export function MasterPanel({
 	master,
 	calmTopics,
 	plan,
-	archivedTotal,
 	focused,
 	selected,
 	inputText,
@@ -580,7 +539,6 @@ export function MasterPanel({
 	master: MasterState;
 	calmTopics: number;
 	plan: MasterPlan;
-	archivedTotal: number;
 	focused: boolean;
 	selected: string | null;
 	inputText: string | null;
@@ -610,15 +568,6 @@ export function MasterPanel({
 			) : null}
 			{plan.mine.length ? (
 				<MyPrsSection mine={plan.mine} selected={selected} width={inner} />
-			) : null}
-			{plan.sessions ? (
-				<SessionsSection
-					sessions={sessions}
-					archived={plan.sessions.archived}
-					archivedTotal={archivedTotal}
-					width={inner}
-					now={now}
-				/>
 			) : null}
 		</>
 	);

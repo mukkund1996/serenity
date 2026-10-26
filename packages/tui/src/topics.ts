@@ -21,11 +21,14 @@ export const CARD_W = 40;
 /** Text rows under a card's PR line: as many as its text needs, up to 4. */
 const BODY_MAX = 4;
 const CARD_INNER = CARD_W - 4;
-const CARD_GAP_X = 2;
+const CARD_GAP_X = 4;
+const CARD_GAP_Y = 1;
 const PAD_X = 3;
 const TRUNK_X = 2;
-const BUBBLE_X = 4;
-const BUBBLE_GAP_X = 2;
+const BUBBLE_X = 5;
+const BUBBLE_GAP_X = 5;
+/** Blank rows between a shelf's bubbles and the next shelf's bus. */
+const SHELF_GAP_Y = 1;
 
 export interface CardBox {
 	sessionId: string;
@@ -375,7 +378,7 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 		});
 		const cardsH =
 			rowHeights.reduce((a, b) => a + b, 0) +
-			Math.max(0, rowHeights.length - 1);
+			Math.max(0, rowHeights.length - 1) * CARD_GAP_Y;
 		const w = cols * CARD_W + (cols - 1) * CARD_GAP_X + PAD_X * 2;
 		let at = ends.findIndex((end) => end + w <= right);
 		if (at < 0) {
@@ -407,13 +410,15 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 			const at = b.group.sessions.findIndex((s) => s.id === input.focusId);
 			if (at < 0) continue;
 			const row = Math.floor(at / b.cols);
-			const above = b.rowHeights.slice(0, row).reduce((a, h) => a + h + 1, 0);
+			const above = b.rowHeights
+				.slice(0, row)
+				.reduce((a, h) => a + h + CARD_GAP_Y, 0);
 			focusMid = y + 3 + above + Math.floor((b.rowHeights[row] ?? 0) / 2);
 		}
-		y += 1 + Math.max(...shelf.map((b) => b.h));
+		y += 1 + Math.max(...shelf.map((b) => b.h)) + SHELF_GAP_Y;
 	}
 
-	const total = y;
+	const total = Math.max(0, y - SHELF_GAP_Y);
 	const centre = focusMid ?? 0;
 	const offset =
 		total <= input.height
@@ -490,7 +495,7 @@ function drawBubble(
 			);
 			cards.push({ sessionId: s.id, x: cx, y: rowY, w: CARD_W, h });
 		}
-		rowY += rowH + 1;
+		rowY += rowH + CARD_GAP_Y;
 	});
 }
 
