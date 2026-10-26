@@ -208,7 +208,15 @@ function cardBody(s: Session, width: number): Line[] {
 	if (s.status === "working")
 		return [you, [{ text: "working…", style: { fg: "blue" } }]];
 	if (s.status === "dead")
-		return [you, [{ text: "Session ended.", style: DIM }]];
+		return [
+			you,
+			[
+				{
+					text: s.pinned ? "Ended. Enter resumes it." : "Session ended.",
+					style: DIM,
+				},
+			],
+		];
 	if (s.lastAssistantMessage)
 		return [
 			you,

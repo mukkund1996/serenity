@@ -154,7 +154,7 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 		"ON A NODE",
 		[
 			["i Enter Z", "reply · act on ▸ · attach"],
-			["o f", "open PR · watch"],
+			["o f p", "open PR · watch · pin"],
 			["r K x", "rename · kill agent · clean up"],
 		],
 	],

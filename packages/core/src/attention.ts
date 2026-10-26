@@ -3,6 +3,14 @@ import type { Session, Suggestion } from "./domain";
 /** Topic for sessions the master has not placed yet. */
 export const UNSORTED = "unsorted";
 
+/** Topic of pinned sessions (ADR 0022); the master never assigns it. */
+export const PINNED = "pinned";
+
+/** The topic a session is drawn under: pinned, its own, or unsorted. */
+export function topicOf(s: Session): string {
+	return s.pinned ? PINNED : (s.topic ?? UNSORTED);
+}
+
 export interface TopicGroup {
 	name: string;
 	sessions: Session[];
@@ -13,7 +21,8 @@ export interface TopicGroup {
 function needRank(s: Session, suggested: Set<string>): number {
 	if (s.watched && s.status === "done") return 0;
 	if (s.status === "waiting") return 1;
-	if (s.status === "dead") return 2;
+	// A pinned session that ended waits to be resumed; it needs nothing.
+	if (s.status === "dead" && !s.pinned) return 2;
 	if (suggested.has(s.id)) return 3;
 	return -1;
 }
@@ -40,7 +49,7 @@ function attentionOf(sessions: Session[]): number {
 	let score = 0;
 	for (const s of sessions) {
 		if (s.status === "waiting") score += 100;
-		else if (s.status === "dead") score += 10;
+		else if (s.status === "dead" && !s.pinned) score += 10;
 		else if (s.status === "done" && s.watched) score += 1;
 	}
 	return score;
@@ -49,7 +58,7 @@ function attentionOf(sessions: Session[]): number {
 function byTopic(sessions: Session[]): Map<string, Session[]> {
 	const byName = new Map<string, Session[]>();
 	for (const s of sessions) {
-		const name = s.topic ?? UNSORTED;
+		const name = topicOf(s);
 		const list = byName.get(name) ?? [];
 		list.push(s);
 		byName.set(name, list);
@@ -68,9 +77,9 @@ const CARD_RANK: Record<Session["status"], number> = {
 };
 
 /**
- * The map's topics, most attention first, then by name, each with its
- * cards in CARD_RANK order. Archived sessions are left out, so a topic
- * holding only archived ones is gone.
+ * The map's topics: pinned first, then most attention first, then by
+ * name, each with its cards in CARD_RANK order. Archived sessions are left
+ * out, so a topic holding only archived ones is gone.
  */
 export function groupTopics(sessions: Session[]): TopicGroup[] {
 	const byName = byTopic(sessions.filter((s) => s.status !== "archived"));
@@ -85,7 +94,12 @@ export function groupTopics(sessions: Session[]): TopicGroup[] {
 				done: list.filter((s) => s.status === "done").length,
 			},
 		}))
-		.sort((a, b) => b.attention - a.attention || a.name.localeCompare(b.name));
+		.sort(
+			(a, b) =>
+				Number(b.name === PINNED) - Number(a.name === PINNED) ||
+				b.attention - a.attention ||
+				a.name.localeCompare(b.name),
+		);
 }
 
 /** The archived list (H): archived sessions under their topic, newest first. */

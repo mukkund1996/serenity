@@ -87,6 +87,7 @@ export interface Methods {
 	/** Topics have no rename: only the master manages them (ADR 0012). */
 	"session.rename": { params: { id: string; name: string }; result: Session };
 	"session.watch": { params: { id: string; watched: boolean }; result: null };
+	"session.pin": { params: { id: string; pinned: boolean }; result: null };
 	"session.cleanupPlan": { params: { id: string }; result: CleanupPlan };
 	"session.cleanup": { params: { id: string }; result: null };
 	"session.kill": { params: { id: string }; result: null };

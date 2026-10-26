@@ -81,11 +81,13 @@ export class PrWatcher {
 			const fresh = this.host.storage.sessions.get(sessionId);
 			if (!fresh || fresh.status === "archived") return;
 			const patch: Partial<Session> = { pr: lookup.pr, prError: lookup.error };
-			// Imported sessions often share a checkout, so its PR is not theirs alone.
+			// Imported sessions often share a checkout, so its PR is not theirs
+			// alone; a pinned one is kept for the next task (ADR 0022).
 			if (
 				lookup.pr?.state === "MERGED" &&
 				fresh.status === "idle" &&
-				fresh.origin === "spawned"
+				fresh.origin === "spawned" &&
+				!fresh.pinned
 			)
 				patch.status = "done";
 			const changed =

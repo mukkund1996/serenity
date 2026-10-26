@@ -107,6 +107,7 @@ Status never relies on colour alone except idle and archived, which are delibera
 | `Enter` | attach · `Ctrl+g` back |
 | `o` | open PR |
 | `f` | watch (remind master when done) |
+| `p` | pin / unpin: keep for reuse under `pinned`; never done, resumed on attach (ADR 0022) |
 | `n` `r` `x` | new · rename · remove (`n` declines when the item has a suggestion; `N` always new — ADR 0012) |
 | `K` | kill the agent: stop it and archive it; worktree and branch stay (ADR 0012) |
 
@@ -129,6 +130,7 @@ Session {
   ask            // one line: what the agent needs
   lastMessage: { from: "you" | "master", text }
   watched: boolean
+  pinned: boolean   // ADR 0022
   suggestion?: { kind: reply | approve | cleanup | review,
                  label, actions: [y, e, n] }
 }

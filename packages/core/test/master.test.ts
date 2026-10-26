@@ -71,6 +71,8 @@ describe("summaries", () => {
 		expect(capTopic("web", topics, 3)).toBe("web");
 		expect(capTopic("web", topics, 2)).toBeNull();
 		expect(capTopic("infra", topics, 2)).toBe("infra");
+		// Only the user's pin puts a session there.
+		expect(capTopic("pinned", topics, 3)).toBeNull();
 		expect(summarySchema(topics, 3).properties.topic).toEqual({
 			type: "string",
 		});
@@ -126,6 +128,11 @@ describe("summaries", () => {
 		).toMatchObject({
 			status: "done",
 		});
+		const pinned = applySummary(
+			makeSession({ status: "idle", topic: "auth", pinned: true }),
+			{ summary: "s", ask: null, finished: true, topic: "infra" },
+		);
+		expect(pinned).toEqual({ summary: "s" });
 		const working = applySummary(makeSession({ status: "working" }), {
 			summary: "s",
 			ask: "late?",
@@ -209,6 +216,14 @@ describe("suggestions", () => {
 		).toBeNull();
 		expect(
 			parseSuggestion({ kind: "none", label: "x", text: null }, done),
+		).toBeNull();
+		const pinned = makeSession({ status: "done", pinned: true });
+		expect(suggestionPrompt(pinned)).not.toContain("- cleanup:");
+		expect(
+			parseSuggestion(
+				{ kind: "cleanup", label: "Clean up", text: null },
+				pinned,
+			),
 		).toBeNull();
 	});
 });

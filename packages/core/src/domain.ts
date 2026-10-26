@@ -66,6 +66,11 @@ export interface Session {
 	transcriptPath: string | null;
 	claudeSessionId: string | null;
 	watched: boolean;
+	/**
+	 * Kept for reuse (ADR 0022): shown under the pinned topic, never marked
+	 * done or offered a cleanup, and resumed on attach once it has ended.
+	 */
+	pinned: boolean;
 	createdAt: number;
 	updatedAt: number;
 }

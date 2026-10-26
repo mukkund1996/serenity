@@ -29,6 +29,7 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
 		transcriptPath: null,
 		claudeSessionId: null,
 		watched: false,
+		pinned: false,
 		createdAt: 1,
 		updatedAt: 1,
 		...overrides,

@@ -27,7 +27,9 @@ export function nameColor(status: SessionStatus): Color {
 export function cardText(session: Session): string {
 	const ended =
 		session.status === "dead"
-			? "Session ended."
+			? session.pinned
+				? "Ended. Enter resumes it."
+				: "Session ended."
 			: session.status === "archived"
 				? "Archived."
 				: null;

@@ -9,6 +9,7 @@ import {
 	needsYou,
 	type Session,
 	type Suggestion,
+	topicOf,
 	UNSORTED,
 	type Usage,
 } from "@serenity/core";
@@ -168,10 +169,9 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		allSessions.find((s) => s.id === state?.attachedSessionId) ?? null;
 	/** Each topic's card order as last drawn; the focused one keeps it. */
 	const drawn = useRef(new Map<string, string[]>());
+	const nodeSession = sessions.find((s) => s.id === node);
 	const heldTopic =
-		node === MASTER
-			? null
-			: (sessions.find((s) => s.id === node)?.topic ?? UNSORTED);
+		node === MASTER ? null : nodeSession ? topicOf(nodeSession) : UNSORTED;
 	const groups = useMemo(() => {
 		const next = holdOrder(groupTopics(sessions), drawn.current, heldTopic);
 		drawn.current = new Map(
@@ -350,7 +350,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	};
 	/** The agent last focused in each topic, where WASD lands on the map. */
 	const lastInTopic = useRef(new Map<string, string>());
-	const cardTopic = card ? (card.topic ?? UNSORTED) : null;
+	const cardTopic = card ? topicOf(card) : null;
 	if (card && cardTopic) lastInTopic.current.set(cardTopic, card.id);
 	/** WASD on the map: to the next bubble's last-focused agent, or its first. */
 	const moveToTopic = (dir: "up" | "down" | "left" | "right") => {
@@ -520,7 +520,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		return groups
 			.flatMap((g) => g.sessions)
 			.filter((s) =>
-				[s.name, s.topic ?? UNSORTED, s.branch ?? ""].some((field) =>
+				[s.name, topicOf(s), s.branch ?? ""].some((field) =>
 					field.toLowerCase().includes(q),
 				),
 			);
@@ -783,6 +783,20 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 						id: focused.id,
 						watched: !focused.watched,
 					}).catch(fail);
+					return;
+				case "p":
+					call("session.pin", {
+						id: focused.id,
+						pinned: !focused.pinned,
+					}).then(
+						() =>
+							setNotice(
+								focused.pinned
+									? `unpinned ${focused.name}`
+									: `pinned ${focused.name}; it stays for reuse`,
+							),
+						fail,
+					);
 					return;
 				case "x":
 					void openConfirm(focused, null);
@@ -1159,7 +1173,7 @@ function SessionZoom({
 						<Text color="magenta" bold>
 							◆ serenity
 						</Text>
-						<Text color="gray"> › {session.topic ?? "unsorted"} › </Text>
+						<Text color="gray"> › {topicOf(session)} › </Text>
 						<Text>{session.name}</Text>
 					</Text>
 				</Box>

@@ -662,3 +662,38 @@ test(
 	},
 	STEP_TIMEOUT,
 );
+
+test(
+	"p pins a session: it is never finished, and once ended Enter resumes it",
+	async () => {
+		await newSession("keeper");
+		keys("p");
+		await waitFor(/pinned keeper/);
+		await waitFor(/pinned · /);
+		keys("i");
+		type("ship it\r");
+		await waitFor(/Summary: Done: ship it/);
+		await Bun.sleep(500);
+		expect(screen()).not.toContain("✓ keeper");
+		expect(screen()).not.toMatch(/◆ Clean up[^\n]*\n?[^\n]*keeper/);
+
+		keys("i");
+		type("exit\r");
+		await waitFor(/Ended\. Enter resumes it\./);
+		keys("Enter");
+		await until(
+			() => panesInMap().length === 2,
+			"the resumed agent pane to join the map window",
+		);
+		const [, agentPane] = panesInMap() as [string, string];
+		spawnSync(process.execPath, [MAIN, "detach", agentPane], {
+			env: { ...process.env, ...env },
+		});
+		await until(() => panesInMap().length === 1, "the agent to be parked");
+		await until(
+			() => !screen().includes("Ended. Enter resumes it."),
+			"keeper to be live again",
+		);
+	},
+	STEP_TIMEOUT,
+);
