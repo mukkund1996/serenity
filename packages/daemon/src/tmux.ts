@@ -205,6 +205,11 @@ export class Tmux {
 		await this.cmd(["send-keys", "-t", pane, key]);
 	}
 
+	/** Renames the window holding `pane`. */
+	renameWindow(pane: string, name: string): Promise<string> {
+		return this.cmd(["rename-window", "-t", pane, name]);
+	}
+
 	async killPane(pane: string): Promise<void> {
 		await this.cmd(["kill-pane", "-t", pane]);
 	}

@@ -88,7 +88,8 @@ function typeInAgent(name: string, text: string): void {
 const endedCards = () => (screen().match(/Session ended\./g) ?? []).length;
 
 async function newSession(name: string): Promise<void> {
-	keys("n");
+	// N, not n: n declines a suggestion on the focused node (ADR 0012).
+	keys("N");
 	await waitFor(/New session/);
 	type(name);
 	await Bun.sleep(100);
@@ -598,6 +599,62 @@ test(
 		await Bun.sleep(100);
 		keys("Enter");
 		await waitFor(/Summary: Done: write the docs/);
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"Z opens the map zoom, z goes back to topics, Esc zooms out one level",
+	async () => {
+		keys("Z");
+		const map = await waitFor(/zoom: map/);
+		expect(map).toContain("◆ master");
+		expect(map).toMatch(/polish/);
+		expect(map).not.toContain("no PR yet");
+		// The map is the top level; Esc stays there.
+		keys("Escape");
+		await Bun.sleep(200);
+		expect(screen()).toContain("zoom: map");
+		keys("z");
+		await waitFor(/zoom: topics/);
+		keys("Escape");
+		await waitFor(/zoom: map/);
+		keys("z");
+		await waitFor(/zoom: topics/);
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"/ finds a session by name; r renames it and its tmux window",
+	async () => {
+		const windows = () =>
+			tmux("list-windows", "-t", "=serenity-demo", "-F", "#{window_name}")
+				.trim()
+				.split("\n");
+		await newSession("oldname");
+		keys("c");
+		await waitFor(/┏/);
+		keys("/");
+		await waitFor(/name, topic or branch/);
+		type("oldn");
+		await waitFor(/1 of 1/);
+		keys("Enter");
+		await until(() => !screen().includes("1 of 1"), "the search to close");
+		keys("r");
+		await waitFor(/Rename oldname/);
+		keys("C-u");
+		type("newname");
+		await Bun.sleep(100);
+		keys("Enter");
+		await until(
+			() => windows().includes("newname") && !windows().includes("oldname"),
+			"the window to be renamed",
+		);
+		await until(
+			() => screen().includes("newname") && !screen().includes("oldname"),
+			"the card to show the new name",
+		);
 	},
 	STEP_TIMEOUT,
 );

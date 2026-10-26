@@ -340,6 +340,9 @@ export class Daemon {
 			return null;
 		},
 
+		"session.rename": ({ id, name }) =>
+			this.rename(this.requireSession(id), name),
+
 		"session.watch": ({ id, watched }) => {
 			const session = this.requireSession(id);
 			this.change(session, { watched });
@@ -726,9 +729,9 @@ export class Daemon {
 		this.broadcast(fresh.repo);
 	}
 
-	private async createSession(params: CreateSessionParams): Promise<Session> {
-		const { repo, mode } = params;
-		const name = params.name.trim();
+	/** A valid session name no live session in the repo uses; throws otherwise. */
+	private freeName(repo: string, raw: string, self?: string): string {
+		const name = raw.trim();
 		if (!NAME_PATTERN.test(name)) {
 			throw new RpcError(
 				RpcErrorCode.InvalidParams,
@@ -739,13 +742,41 @@ export class Daemon {
 			.listByRepo(repo)
 			.find(
 				(s) =>
-					s.name === name && s.status !== "archived" && s.status !== "dead",
+					s.id !== self &&
+					s.name === name &&
+					s.status !== "archived" &&
+					s.status !== "dead",
 			);
 		if (clash)
 			throw new RpcError(
 				RpcErrorCode.InvalidParams,
 				`a session named ${name} already exists`,
 			);
+		return name;
+	}
+
+	/**
+	 * Renames a session and, for one serenity spawned, its tmux window. An
+	 * imported session's window is the user's, so it keeps its name; the
+	 * branch and worktree keep theirs too.
+	 */
+	private async rename(session: Session, raw: string): Promise<Session> {
+		const name = this.freeName(session.repo, raw, session.id);
+		if (name === session.name) return session;
+		const next = this.update(session, { name });
+		const attached = this.attached.get(session.repo)?.sessionId === session.id;
+		// While attached the pane sits in the map's window; detach parks it
+		// under the new name.
+		if (session.origin === "spawned" && session.tmuxPane && !attached)
+			await this.tmux.renameWindow(session.tmuxPane, name).catch(() => {});
+		this.log(`renamed ${session.name} to ${name}`);
+		this.broadcast(session.repo);
+		return next;
+	}
+
+	private async createSession(params: CreateSessionParams): Promise<Session> {
+		const { repo, mode } = params;
+		const name = this.freeName(repo, params.name);
 
 		const branch = params.branch?.trim() || name;
 		let cwd = params.cwd;

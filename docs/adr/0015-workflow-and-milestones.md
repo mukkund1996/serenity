@@ -11,7 +11,7 @@
 1. ✓ **Walking skeleton** — monorepo, Biome, CI; daemon auto-start + JSON-RPC; storage interface + SQLite; tmux bootstrap; spawn a session (new worktree / existing branch) with hooks; status reducer; topics zoom with real statuses (no master); attach / `Ctrl+g` spike; doctor; too-small screen.
 2. ✓ **Master** — MCP server; Opus chat stream; Haiku summarizer + finished judgement; Sonnet suggester; NEEDS YOU; `y`/`e`/`n`; Reply (4a), Confirm (4b), permission prompt; topics; watch; spinner; failure chips.
 3. ✓ **PRs** — `gh` refresh on events, card PR line, `o`, review-request suggestion.
-4. **Map and navigation** — map zoom (1), WASD, `c`, `z`/`Z`, `/` search, rename / remove, shortcuts panel (4e).
+4. ✓ **Map and navigation** — map zoom (1), WASD, `c`, `z`/`Z`, `/` search, rename / remove, shortcuts panel (4e).
 3½. ✓ **Dogfooding** — import running sessions (`I`, `U`; 0016), build ids, `install:local`, isolated `bun dev` ([dogfooding](../dogfooding.md)).
 5. **Release** — release-please, binary matrix, Homebrew tap, curl installer, README, LICENSE.
 

@@ -23,6 +23,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0015](0015-workflow-and-milestones.md) | Workflow and milestones | Accepted |
 | [0016](0016-importing-running-sessions.md) | Importing Claude sessions already running in tmux | Accepted |
 | [0017](0017-topics-zoom-shows-every-topic.md) | The topics zoom shows every topic; "topic" replaces "category" | Accepted |
+| [0018](0018-map-zoom-and-navigation.md) | Map zoom layout; `z` `Z` `Esc` `c` `/` `r` | Accepted |
 
 ## System at a glance
 

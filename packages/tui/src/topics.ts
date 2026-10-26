@@ -66,7 +66,7 @@ export interface TopicsLayout {
 	cards: CardBox[];
 }
 
-const DIM: Style = { fg: "gray" };
+export const DIM: Style = { fg: "gray" };
 const LINK: Style = { fg: "magenta", dim: true };
 
 /** Direction bits for link cells, resolved to box-drawing junctions at the end. */
@@ -92,7 +92,8 @@ const JUNCTIONS: Record<number, string> = {
 	[N | S | E | W]: "┼",
 };
 
-class Links {
+/** Right-angle links from the master, merged into box-drawing junctions. */
+export class Links {
 	private readonly cells = new Map<string, number>();
 
 	private add(x: number, y: number, bits: number): void {
@@ -118,7 +119,10 @@ class Links {
 	}
 }
 
-function counts(group: TopicGroup): Array<{ text: string; style: Style }> {
+/** A topic label's counts: `◐1 ●5 ✓1`, or `quiet`. */
+export function counts(
+	group: TopicGroup,
+): Array<{ text: string; style: Style }> {
 	const out: Array<{ text: string; style: Style }> = [];
 	if (group.counts.waiting)
 		out.push({ text: `◐${group.counts.waiting}`, style: { fg: "yellow" } });
