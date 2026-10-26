@@ -555,7 +555,8 @@ test(
 test(
 	"a first prompt typed in the new session dialog reaches the agent",
 	async () => {
-		keys("n");
+		// N, not n: n would decline a suggestion that just reached the focused node.
+		keys("N");
 		await waitFor(/New session/);
 		type("docs");
 		await Bun.sleep(100);
