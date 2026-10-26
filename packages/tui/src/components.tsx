@@ -4,13 +4,21 @@ import type {
 	MasterMessage,
 	MasterPermission,
 	MasterState,
+	ReviewRequest,
 	Session,
 	Suggestion,
 } from "@serenity/core";
-import { prLine } from "@serenity/core";
+import { prLine, prStatus } from "@serenity/core";
 import { Box, Text } from "ink";
 import { type ReactNode, useEffect, useState } from "react";
-import { askLine, cardText, glyph, nameColor } from "./theme";
+import {
+	CONVERSATION_EMPTY,
+	clipLines,
+	type MasterPlan,
+	type MyPr,
+	SPEAKER_W,
+} from "./master-layout";
+import { age, askLine, cardText, glyph, nameColor, TONE_COLOR } from "./theme";
 
 const ink = (color: Color | undefined) =>
 	color && color !== "default" ? color : undefined;
@@ -284,17 +292,19 @@ function PermissionItem({
 }
 
 function Conversation({ messages }: { messages: MasterMessage[] }) {
-	if (!messages.length)
+	if (!messages.length) {
+		const [before, after] = CONVERSATION_EMPTY.split(" g ");
 		return (
 			<Text color="gray">
-				Press <Key>g</Key> to ask the master about your sessions.
+				{before} <Key>g</Key> {after}
 			</Text>
 		);
+	}
 	return (
 		<>
 			{messages.map((m, i) => (
 				<Box key={m.id} marginTop={i ? 1 : 0}>
-					<Box width={6} flexShrink={0}>
+					<Box width={SPEAKER_W} flexShrink={0}>
 						{m.from === "you" ? (
 							<Text color="cyan">you</Text>
 						) : (
@@ -310,22 +320,199 @@ function Conversation({ messages }: { messages: MasterMessage[] }) {
 	);
 }
 
-/** Keeps a message to a few lines; the full history belongs behind M (v1.1). */
-function clipLines(text: string, lines: number): string {
-	const kept = text.split("\n").filter(Boolean).slice(0, lines).join("\n");
-	return kept.length > 400 ? `${kept.slice(0, 399)}…` : kept;
-}
-
-/** How many NEEDS YOU items fit; the rest are summarised as "+N more". */
-const MAX_NEED_ITEMS = 5;
-
 /** The master's input, as an element the arrow keys can select. */
 export const MASTER_INPUT = "input";
+/** Element ids of the master's PR rows: a review request, or one of my PRs. */
+export const REVIEW_ROW = "rv:";
+export const MY_PR_ROW = "pr:";
+
+/** A row with text on the left and a fixed part on the right. */
+function Row({
+	selected,
+	children,
+	right,
+}: {
+	selected: boolean;
+	children: ReactNode;
+	right: ReactNode;
+}) {
+	return (
+		<Box justifyContent="space-between">
+			<Text wrap="truncate">
+				<Selector on={selected} />
+				{children}
+			</Text>
+			<Box flexShrink={0} marginLeft={1}>
+				{right}
+			</Box>
+		</Box>
+	);
+}
+
+function PrTitle({
+	number,
+	title,
+	selected,
+}: {
+	number: number;
+	title: string;
+	selected: boolean;
+}) {
+	return (
+		<>
+			<Text color="gray">#{number} </Text>
+			<Text color={selected ? "whiteBright" : undefined} bold={selected}>
+				{title}
+			</Text>
+		</>
+	);
+}
+
+/** PRs waiting for the user's review, newest updated first. */
+function ReviewSection({
+	reviews,
+	selected,
+	width,
+	now,
+}: {
+	reviews: ReviewRequest[];
+	selected: string | null;
+	width: number;
+	now: number;
+}) {
+	return (
+		<>
+			<SectionHeader label={`REVIEW ${reviews.length}`} width={width} />
+			{reviews.map((r) => {
+				const on = selected === `${REVIEW_ROW}${r.number}`;
+				return (
+					<Row
+						key={r.number}
+						selected={on}
+						right={
+							<Text color="gray">
+								{r.author ? `@${r.author} ` : ""}
+								{age(r.updatedAt, now)}
+							</Text>
+						}
+					>
+						<PrTitle number={r.number} title={r.title} selected={on} />
+					</Row>
+				);
+			})}
+		</>
+	);
+}
+
+/** The user's open PRs from sessions on the map, with the card's status word. */
+function MyPrsSection({
+	mine,
+	selected,
+	width,
+}: {
+	mine: MyPr[];
+	selected: string | null;
+	width: number;
+}) {
+	return (
+		<>
+			<SectionHeader label={`MY PRS ${mine.length}`} width={width} />
+			{mine.map(({ pr }) => {
+				const on = selected === `${MY_PR_ROW}${pr.number}`;
+				const status = prStatus(pr);
+				return (
+					<Row
+						key={pr.number}
+						selected={on}
+						right={<Text color={TONE_COLOR[status.tone]}>{status.text}</Text>}
+					>
+						<PrTitle number={pr.number} title={pr.title} selected={on} />
+					</Row>
+				);
+			})}
+		</>
+	);
+}
+
+/** Order of the counts: as cards sort inside a topic. */
+const COUNTED = [
+	["waiting", "waiting"],
+	["working", "working"],
+	["idle", "idle"],
+	["done", "done"],
+	["dead", "ended"],
+] as const;
+
+/** Counts of the sessions on the map, then the latest archived ones. */
+function SessionsSection({
+	sessions,
+	archived,
+	archivedTotal,
+	width,
+	now,
+}: {
+	sessions: Session[];
+	archived: Session[];
+	archivedTotal: number;
+	width: number;
+	now: number;
+}) {
+	const counts = COUNTED.map(([status, word]) => ({
+		status,
+		word,
+		n: sessions.filter((s) => s.status === status).length,
+	})).filter((c) => c.n > 0);
+	return (
+		<>
+			<SectionHeader label="SESSIONS" width={width} />
+			<Text wrap="truncate">
+				{counts.length === 0 ? (
+					<Text color="gray">none on the map</Text>
+				) : (
+					counts.map((c, i) => {
+						const g = glyph(c.status);
+						return (
+							<Text key={c.status}>
+								{i ? <Text color="gray"> · </Text> : null}
+								{g ? <Text color={g.color}>{g.ch} </Text> : null}
+								<Text color={ink(nameColor(c.status))}>
+									{c.n} {c.word}
+								</Text>
+							</Text>
+						);
+					})
+				)}
+			</Text>
+			{archived.length ? (
+				<>
+					<Text color="gray" wrap="truncate">
+						archived {archivedTotal} · <Key>H</Key> all
+					</Text>
+					{archived.map((s) => (
+						<Box key={s.id} justifyContent="space-between">
+							<Text color="gray" wrap="truncate">
+								{"  "}
+								{s.name}
+							</Text>
+							<Box flexShrink={0} marginLeft={1}>
+								<Text color="gray">
+									{s.pr ? `#${s.pr.number} ${prStatus(s.pr).text}  ` : ""}
+									{age(s.updatedAt, now)}
+								</Text>
+							</Box>
+						</Box>
+					))}
+				</>
+			) : null}
+		</>
+	);
+}
 
 /**
- * Master panel in the topics zoom: NEEDS YOU, the latest exchange, the input.
- * When it is the focused node its frame turns heavy white and `selected`
- * (a `perm:<id>`, a session id, or MASTER_INPUT) carries the cursor.
+ * Master panel in the topics zoom: NEEDS YOU, the GitHub and sessions
+ * overview that fits (`plan`), the latest exchange, the input. When it is
+ * the focused node its frame turns heavy white and `selected` (a `perm:<id>`,
+ * a session id, a PR row, or MASTER_INPUT) carries the cursor.
  */
 export function MasterPanel({
 	width,
@@ -336,6 +523,8 @@ export function MasterPanel({
 	conversation,
 	master,
 	calmTopics,
+	plan,
+	archivedTotal,
 	focused,
 	selected,
 	inputText,
@@ -349,26 +538,49 @@ export function MasterPanel({
 	conversation: MasterMessage[];
 	master: MasterState;
 	calmTopics: number;
+	plan: MasterPlan;
+	archivedTotal: number;
 	focused: boolean;
 	selected: string | null;
 	inputText: string | null;
 	replyText: string | null;
 }) {
 	const inner = width - 6;
+	const now = Date.now();
 	const count = needs.length + permissions.length;
 	const items = [
 		...permissions.map((p) => ({ kind: "permission" as const, p })),
 		...needs.map((s) => ({ kind: "session" as const, s })),
 	];
-	// Slide the window so the selected item is always on screen.
-	const at = items.findIndex((item) =>
-		item.kind === "permission"
-			? selected === `perm:${item.p.id}`
-			: selected === item.s.id,
+	const shown = items.slice(
+		plan.needs.start,
+		plan.needs.start + plan.needs.count,
 	);
-	const start = Math.max(0, at - MAX_NEED_ITEMS + 1);
-	const shown = items.slice(start, start + MAX_NEED_ITEMS);
-	const hiddenCount = items.length - shown.length;
+	const hiddenCount = plan.needs.hidden;
+	const overview = (
+		<>
+			{plan.reviews.length ? (
+				<ReviewSection
+					reviews={plan.reviews}
+					selected={selected}
+					width={inner}
+					now={now}
+				/>
+			) : null}
+			{plan.mine.length ? (
+				<MyPrsSection mine={plan.mine} selected={selected} width={inner} />
+			) : null}
+			{plan.sessions ? (
+				<SessionsSection
+					sessions={sessions}
+					archived={plan.sessions.archived}
+					archivedTotal={archivedTotal}
+					width={inner}
+					now={now}
+				/>
+			) : null}
+		</>
+	);
 	return (
 		<TitledBox
 			title="◆ master"
@@ -385,6 +597,7 @@ export function MasterPanel({
 					<Text>
 						Press <Key>n</Key> to start your first session.
 					</Text>
+					{overview}
 				</>
 			) : (
 				<>
@@ -432,6 +645,7 @@ export function MasterPanel({
 							) : null}
 						</>
 					) : null}
+					{overview}
 					<SectionHeader label="CONVERSATION" width={inner} />
 					<Conversation messages={conversation.slice(-2)} />
 				</>

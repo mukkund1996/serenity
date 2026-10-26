@@ -5,6 +5,10 @@ import {
 	PR_FIELDS,
 	type PrInfo,
 	parsePr,
+	parseReviewRequests,
+	REVIEW_FIELDS,
+	REVIEW_LIMIT,
+	type ReviewRequest,
 } from "@serenity/core";
 
 /** What reading a branch's PR gave: the PR, or why it could not be read. */
@@ -68,6 +72,33 @@ export class Gh {
 			}
 		}
 		return { pr: null, error: classifyGhError(out.stderr) };
+	}
+
+	/** Open PRs in the repo asking the user for a review, newest updated first. */
+	async reviewRequests(
+		cwd: string,
+	): Promise<{ prs: ReviewRequest[]; error: string | null }> {
+		const out = await this.run(
+			[
+				"pr",
+				"list",
+				"--search",
+				"review-requested:@me sort:updated-desc",
+				"--state",
+				"open",
+				"--limit",
+				String(REVIEW_LIMIT),
+				"--json",
+				REVIEW_FIELDS,
+			],
+			cwd,
+		);
+		if (!out.ok) return { prs: [], error: classifyGhError(out.stderr) };
+		try {
+			return { prs: parseReviewRequests(JSON.parse(out.stdout)), error: null };
+		} catch {
+			return { prs: [], error: "unreadable gh output" };
+		}
 	}
 
 	/** The logged-in GitHub user, asked once. */

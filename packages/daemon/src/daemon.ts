@@ -44,6 +44,7 @@ import {
 import { agentCommand, shellQuote, writeHookSettings } from "./hooks";
 import { type MasterModels, MasterSupervisor } from "./master";
 import { PrWatcher, workDir } from "./prs";
+import { ReviewWatcher } from "./reviews";
 import { Tmux } from "./tmux";
 
 export interface DaemonOptions {
@@ -70,6 +71,8 @@ export interface DaemonOptions {
 	workerDebounceMs?: number;
 	/** Claude Code's config dir, where adoptable sessions are found; defaults to CLAUDE_CONFIG_DIR or ~/.claude. */
 	claudeConfigDir?: string;
+	/** How often review requests are polled while a map is open; SERENITY_REVIEW_POLL_MS overrides it. */
+	reviewPollMs?: number;
 }
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,39}$/i;
@@ -82,6 +85,8 @@ const ATTACH_PERCENT = 67;
 const DEFAULT_STARTUP_GRACE_MS = 5000;
 /** A burst of hooks (tool calls, then Stop) yields one model call. */
 const DEFAULT_WORKER_DEBOUNCE_MS = 1500;
+/** Review requests fire no event, so an open map polls them this often. */
+const DEFAULT_REVIEW_POLL_MS = 5 * 60_000;
 /** Messages of the master conversation sent to clients. */
 const CONVERSATION_SHOWN = 4;
 
@@ -118,6 +123,7 @@ export class Daemon {
 	private readonly master: MasterSupervisor;
 	private readonly gh: Gh;
 	private readonly prs: PrWatcher;
+	private readonly reviews: ReviewWatcher;
 	private readonly observer: ClaudeObserver;
 	private stopped: (() => void) | null = null;
 	readonly done: Promise<void>;
@@ -167,6 +173,16 @@ export class Daemon {
 				opts.workerDebounceMs ??
 				envNumber("SERENITY_WORKER_DEBOUNCE_MS", DEFAULT_WORKER_DEBOUNCE_MS),
 		});
+		this.reviews = new ReviewWatcher({
+			gh: this.gh,
+			watching: (repo) =>
+				[...this.subscriptions.values()].some((repos) => repos.has(repo)),
+			broadcast: (repo) => this.broadcast(repo),
+			log: this.log,
+			pollMs:
+				opts.reviewPollMs ??
+				envNumber("SERENITY_REVIEW_POLL_MS", DEFAULT_REVIEW_POLL_MS),
+		});
 		this.observer = new ClaudeObserver(
 			{
 				storage: opts.storage,
@@ -205,6 +221,7 @@ export class Daemon {
 		for (const timer of this.timers) clearTimeout(timer);
 		this.master.stop();
 		this.prs.stop();
+		this.reviews.stop();
 		this.observer.stop();
 		for (const peer of this.subscriptions.keys()) peer.close();
 		await new Promise<void>((resolve) =>
@@ -246,6 +263,7 @@ export class Daemon {
 			),
 			permissions: this.master.permissions(repo),
 			master: this.master.state(repo),
+			github: this.reviews.state(repo),
 		};
 	}
 
@@ -282,6 +300,7 @@ export class Daemon {
 			this.subscriptions.get(peer)?.add(repo);
 			if (clientPane) this.mapPanes.set(peer, clientPane);
 			this.prs.refreshRepo(repo);
+			this.reviews.watch(repo);
 			return this.state(repo);
 		},
 

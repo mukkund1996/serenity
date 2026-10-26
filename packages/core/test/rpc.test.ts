@@ -13,6 +13,7 @@ const EMPTY_STATE = {
 	conversation: [],
 	permissions: [],
 	master: { status: "idle" as const, error: null },
+	github: { user: null, reviewRequests: [] },
 };
 
 let server: Server | null = null;

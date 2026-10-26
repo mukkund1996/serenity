@@ -1,4 +1,4 @@
-import type { Color, Session, SessionStatus } from "@serenity/core";
+import type { Color, PrTone, Session, SessionStatus } from "@serenity/core";
 
 /** The only three status glyphs (design handover, "Status language"). */
 export function glyph(
@@ -46,4 +46,25 @@ export function askLine(session: Session): string {
 	if (session.status === "dead") return "session ended";
 	if (session.status === "done") return "finished";
 	return session.status;
+}
+
+/** PR status word colours (ADR 0011). */
+export const TONE_COLOR: Record<PrTone, Color> = {
+	merged: "cyan",
+	good: "green",
+	bad: "red",
+	warn: "yellow",
+	quiet: "gray",
+};
+
+/** How long ago, in the largest whole unit: "now", "5m", "2h", "3d", "4w". */
+export function age(at: number, now: number): string {
+	if (!at) return "";
+	const minutes = Math.floor(Math.max(0, now - at) / 60_000);
+	if (minutes < 1) return "now";
+	if (minutes < 60) return `${minutes}m`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return `${hours}h`;
+	const days = Math.floor(hours / 24);
+	return days < 14 ? `${days}d` : `${Math.floor(days / 7)}w`;
 }
