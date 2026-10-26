@@ -32,3 +32,10 @@ test("reviewers are logins without the @", () => {
 	);
 	expect(loadConfig(join(dir, "r.json")).reviewers).toEqual(["alice", "bob"]);
 });
+
+test("maxTopics is a positive whole number", () => {
+	writeFileSync(join(dir, "t.json"), JSON.stringify({ maxTopics: 6 }));
+	expect(loadConfig(join(dir, "t.json")).maxTopics).toBe(6);
+	writeFileSync(join(dir, "t0.json"), JSON.stringify({ maxTopics: 0 }));
+	expect(loadConfig(join(dir, "t0.json")).maxTopics).toBe(10);
+});

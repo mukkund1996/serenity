@@ -22,7 +22,9 @@ import {
  * Draws the map zoom (design screen 1): the master box in the centre and
  * every topic as a bubble beside it, one line per agent, joined to the
  * master by right-angle links (ADR 0018). Bubbles fill the left and right
- * columns; a column taller than the screen scrolls to the focused row.
+ * columns; a column taller than the screen scrolls to the focused row. The
+ * bubble holding focus gets the heavy white frame: WASD moves between
+ * bubbles and the arrow keys between the agents inside one.
  */
 
 /** Agents shown per bubble before the rest fold into `+N more`. */
@@ -76,6 +78,8 @@ export interface MapLayout {
 	canvas: Canvas;
 	/** One box per agent row on screen. */
 	rows: CardBox[];
+	/** One box per topic bubble on screen; its id is the topic's name. */
+	bubbles: NodeBox[];
 	master: NodeBox;
 }
 
@@ -137,6 +141,7 @@ export function drawMap(input: MapInput): MapLayout {
 	const { width, height } = input;
 	const canvas = new Canvas(width, height);
 	const rows: CardBox[] = [];
+	const bubbles: NodeBox[] = [];
 	const links = new Links();
 
 	const mw = Math.max(28, Math.min(48, Math.floor(width * 0.3)));
@@ -206,15 +211,9 @@ export function drawMap(input: MapInput): MapLayout {
 			if (total + offset > height)
 				canvas.text(side.trunk, height - 1, "▼", { fg: "magenta" });
 			side.bubbles.forEach((b, i) => {
-				drawBubble(
-					canvas,
-					b,
-					side.x,
-					(tops[i] as number) + offset,
-					bw,
-					input,
-					rows,
-				);
+				const y = (tops[i] as number) + offset;
+				drawBubble(canvas, b, side.x, y, bw, input, rows);
+				bubbles.push({ id: b.group.name, x: side.x, y, w: bw, h: b.h });
 			});
 		});
 	}
@@ -222,7 +221,12 @@ export function drawMap(input: MapInput): MapLayout {
 	links.draw(canvas);
 	for (const draw of drawBubbles) draw();
 	drawMaster(canvas, mx, my, mw, input.master);
-	return { canvas, rows, master: { id: "", x: mx, y: my, w: mw, h: MASTER_H } };
+	return {
+		canvas,
+		rows,
+		bubbles,
+		master: { id: "", x: mx, y: my, w: mw, h: MASTER_H },
+	};
 }
 
 function drawBubble(
@@ -234,14 +238,22 @@ function drawBubble(
 	input: MapInput,
 	rows: CardBox[],
 ): void {
-	canvas.frame(x, top, w, b.h, "rounded", DIM);
+	const focused = b.focusAt >= 0;
+	canvas.frame(
+		x,
+		top,
+		w,
+		b.h,
+		focused ? "heavy" : "rounded",
+		focused ? { fg: "whiteBright", bold: true } : DIM,
+	);
 	const chips = counts(b.group);
 	const chipsW = chips.reduce((n, c) => n + [...c.text].length + 1, 0);
 	let col = canvas.text(
 		x + 2,
 		top,
 		` ${truncate(b.group.name, w - 7 - chipsW)}`,
-		{ fg: "white" },
+		focused ? { fg: "whiteBright", bold: true } : { fg: "white" },
 	);
 	col = canvas.text(col, top, " · ", DIM);
 	for (const c of chips) col = canvas.text(col, top, `${c.text} `, c.style);

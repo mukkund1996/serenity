@@ -81,6 +81,7 @@ beforeEach(() => {
 			mcpConfig: () => "{}",
 			workerCwd: "/tmp",
 			models: { chat: "opus", summarizer: "haiku", suggester: "sonnet" },
+			maxTopics: 3,
 			debounceMs: 0,
 		},
 		runner,
@@ -113,6 +114,26 @@ describe("summaries", () => {
 		expect(storage.suggestions.listPending(REPO)).toMatchObject([
 			{ sessionId: "a", kind: "cleanup", source: "worker" },
 		]);
+	});
+
+	test("at the topic cap the summarizer must reuse a topic, and a new one is dropped", async () => {
+		put({ id: "t1", name: "one", topic: "backend" });
+		put({ id: "t2", name: "two", topic: "infra" });
+		put({ id: "t3", name: "three", topic: "docs" });
+		put({ id: "a", status: "working" });
+		runner.answers.push({
+			summary: "s",
+			ask: null,
+			finished: false,
+			topic: "frontend",
+		});
+		change("a", { status: "idle", lastAssistantMessage: "x" });
+		await settle();
+		expect(runner.calls[0]?.prompt).toContain("one of the existing topics");
+		expect(JSON.stringify(runner.calls[0]?.schema)).toContain(
+			'"enum":["backend","infra","docs"]',
+		);
+		expect(storage.sessions.get("a")?.topic).toBeNull();
 	});
 
 	test("a failing worker is recorded as the master's error, then cleared by a success", async () => {
@@ -246,6 +267,25 @@ describe("chat", () => {
 			topic: "Infra",
 		});
 		expect(storage.sessions.get("a")?.topic).toBe("infra");
+	});
+
+	test("set_topic refuses a new topic past the cap", async () => {
+		put({ id: "a", name: "api-auth", topic: "backend" });
+		put({ id: "b", name: "infra-1", topic: "infra" });
+		put({ id: "c", name: "docs-1", topic: "docs" });
+		put({ id: "d", name: "web-1", topic: "web" });
+		const refused = await master.handleTool(REPO, "set_topic", {
+			session: "api-auth",
+			topic: "frontend",
+		});
+		expect(refused.isError).toBe(true);
+		expect(refused.text).toContain("infra, docs, web");
+		// Moving into an existing topic is always fine.
+		await master.handleTool(REPO, "set_topic", {
+			session: "api-auth",
+			topic: "web",
+		});
+		expect(storage.sessions.get("a")?.topic).toBe("web");
 	});
 
 	test("archive_session kills the session once; archived stays archived", async () => {

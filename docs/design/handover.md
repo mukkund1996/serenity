@@ -93,9 +93,9 @@ Status never relies on colour alone except idle and archived, which are delibera
 | Key | Action |
 |-----|--------|
 | `Tab` `⇧Tab` | next / previous waiting |
-| `W A S D` | move around the map |
+| `W A S D` | move around the map (between topics on the map zoom, ADR 0019) |
 | `c` | center on master |
-| `z` `Z` | topics / map zoom |
+| `z` `Z` | zoom out (map) / zoom in (topics) |
 | `Esc` | one level up |
 | `[` `]` | previous / next topic |
 | `/` | search nodes |

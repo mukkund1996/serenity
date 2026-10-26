@@ -12,8 +12,9 @@ import { cardText, glyph, nameColor } from "./theme";
 
 /**
  * Draws the topics zoom's right-hand side (design screen 2): every topic as a
- * bubble of 40-col cards, neediest first, all linked back to the master on the
- * left edge. When they don't fit, the stack scrolls to the focused card.
+ * bubble of 40-col cards, neediest first, side by side in shelves that fill
+ * the width, all linked back to the master on the left edge. When they don't
+ * fit, the shelves scroll to the focused card.
  */
 
 export const CARD_W = 40;
@@ -22,7 +23,8 @@ const FOCUSED_CARD_H = 6;
 const CARD_GAP_X = 2;
 const PAD_X = 3;
 const TRUNK_X = 2;
-const BUBBLE_X = 6;
+const BUBBLE_X = 4;
+const BUBBLE_GAP_X = 2;
 
 export interface CardBox {
 	sessionId: string;
@@ -309,22 +311,30 @@ function drawCard(
 	return h;
 }
 
+interface Placed {
+	group: TopicGroup;
+	cols: number;
+	rowHeights: number[];
+	x: number;
+	w: number;
+	h: number;
+}
+
 export function drawTopics(input: TopicsInput): TopicsLayout {
 	const canvas = new Canvas(input.width, input.height);
 	const cards: CardBox[] = [];
 	const links = new Links();
-	const linkRows: number[] = [];
 
-	const room = input.width - BUBBLE_X - 1 - PAD_X * 2 + CARD_GAP_X;
+	const right = input.width - 1;
+	const room = right - BUBBLE_X - PAD_X * 2 + CARD_GAP_X;
 	const maxCols = Math.max(1, Math.floor(room / (CARD_W + CARD_GAP_X)));
 
-	// Bubbles are drawn after their links so frames win where they meet.
-	const drawBubbles: Array<() => void> = [];
-	// Laid out from row 0, then shifted to centre on the master's row, or on
-	// the focused card when the stack is taller than the canvas.
-	let offset = 0;
-	let focusMid: number | null = null;
-	let y = 0;
+	// Bubbles fill shelves left to right, neediest first, so the canvas's
+	// width is used: each goes on the first shelf with room for it. A shelf
+	// hangs off a bus on the row above it, linked to the trunk and from
+	// there to the master.
+	const shelves: Placed[][] = [];
+	const ends: number[] = [];
 	for (const group of input.groups) {
 		const cols = Math.min(maxCols, group.sessions.length);
 		const rowHeights: number[] = [];
@@ -339,55 +349,46 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 		const cardsH =
 			rowHeights.reduce((a, b) => a + b, 0) +
 			Math.max(0, rowHeights.length - 1);
-		const bubbleW = cols * CARD_W + (cols - 1) * CARD_GAP_X + PAD_X * 2;
-		const bubbleH = 2 + 1 + cardsH + 1;
-		const rel = y;
-		linkRows.push(rel + 2);
-		const at = group.sessions.findIndex((s) => s.id === input.focusId);
-		if (at >= 0) {
-			const row = Math.floor(at / cols);
-			const above = rowHeights.slice(0, row).reduce((a, b) => a + b + 1, 0);
-			focusMid = rel + 2 + above + Math.floor((rowHeights[row] ?? 0) / 2);
+		const w = cols * CARD_W + (cols - 1) * CARD_GAP_X + PAD_X * 2;
+		let at = ends.findIndex((end) => end + w <= right);
+		if (at < 0) {
+			at = shelves.push([]) - 1;
+			ends.push(BUBBLE_X);
 		}
-		drawBubbles.push(() => {
-			const top = rel + offset;
-			canvas.frame(BUBBLE_X, top, bubbleW, bubbleH, "rounded", DIM);
-			let col = canvas.text(BUBBLE_X + 2, top, ` ${group.name}`, {
-				fg: "white",
-			});
-			col = canvas.text(col, top, " · ", DIM);
-			for (const c of counts(group))
-				col = canvas.text(col, top, `${c.text} `, c.style);
-			let rowY = top + 2;
-			rowHeights.forEach((rowH, row) => {
-				for (let c = 0; c < cols; c++) {
-					const s = group.sessions[row * cols + c];
-					if (!s) continue;
-					const cx = BUBBLE_X + PAD_X + c * (CARD_W + CARD_GAP_X);
-					const h = drawCard(
-						canvas,
-						s,
-						cx,
-						rowY,
-						s.id === input.focusId
-							? {
-									element: input.focusElement ?? "card",
-									suggestion: input.focusSuggestion ?? null,
-									replyText: input.replyText,
-								}
-							: null,
-					);
-					cards.push({ sessionId: s.id, x: cx, y: rowY, w: CARD_W, h });
-				}
-				rowY += rowH + 1;
-			});
+		const x = ends[at] as number;
+		(shelves[at] as Placed[]).push({
+			group,
+			cols,
+			rowHeights,
+			x,
+			w,
+			h: 2 + 1 + cardsH + 1,
 		});
-		y += bubbleH + 1;
+		ends[at] = x + w + BUBBLE_GAP_X;
 	}
 
-	const total = Math.max(0, y - 1);
+	// Laid out from row 0, then shifted to centre on the master's row, or on
+	// the focused card when the stack is taller than the canvas.
+	const busRows: number[] = [];
+	const tops: number[] = [];
+	let focusMid: number | null = null;
+	let y = 0;
+	for (const shelf of shelves) {
+		busRows.push(y);
+		tops.push(y + 1);
+		for (const b of shelf) {
+			const at = b.group.sessions.findIndex((s) => s.id === input.focusId);
+			if (at < 0) continue;
+			const row = Math.floor(at / b.cols);
+			const above = b.rowHeights.slice(0, row).reduce((a, h) => a + h + 1, 0);
+			focusMid = y + 3 + above + Math.floor((b.rowHeights[row] ?? 0) / 2);
+		}
+		y += 1 + Math.max(...shelf.map((b) => b.h));
+	}
+
+	const total = y;
 	const centre = focusMid ?? 0;
-	offset =
+	const offset =
 		total <= input.height
 			? Math.max(
 					0,
@@ -400,25 +401,70 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 					0,
 					Math.max(Math.floor(input.height / 2) - centre, input.height - total),
 				);
-	for (let i = 0; i < linkRows.length; i++)
-		linkRows[i] = (linkRows[i] as number) + offset;
 
-	if (linkRows.length > 0) {
-		const top = Math.min(input.masterRow, ...linkRows);
-		const bottom = Math.max(input.masterRow, ...linkRows);
+	if (shelves.length > 0) {
+		const buses = busRows.map((r) => r + offset);
+		const top = Math.min(input.masterRow, ...buses);
+		const bottom = Math.max(input.masterRow, ...buses);
 		links.horizontal(0, TRUNK_X, input.masterRow);
 		links.vertical(TRUNK_X, top, bottom);
-		for (const row of linkRows) links.horizontal(TRUNK_X, BUBBLE_X - 2, row);
+		shelves.forEach((shelf, i) => {
+			const bus = buses[i] as number;
+			const drops = shelf.map((b) => b.x + 1);
+			links.horizontal(TRUNK_X, Math.max(...drops), bus);
+			for (const d of drops) links.vertical(d, bus, bus + 1);
+		});
 		links.draw(canvas);
-		for (const row of linkRows)
-			canvas.text(BUBBLE_X - 1, row, "●", { fg: "magenta" });
 	}
 	if (offset < 0) canvas.text(TRUNK_X, 0, "▲", { fg: "magenta" });
 	if (total + offset > input.height)
 		canvas.text(TRUNK_X, input.height - 1, "▼", { fg: "magenta" });
-	for (const draw of drawBubbles) draw();
+
+	// Bubbles are drawn after their links so frames win where they meet.
+	shelves.forEach((shelf, i) => {
+		for (const b of shelf)
+			drawBubble(canvas, b, (tops[i] as number) + offset, input, cards);
+	});
 
 	return { canvas, cards };
+}
+
+function drawBubble(
+	canvas: Canvas,
+	b: Placed,
+	top: number,
+	input: TopicsInput,
+	cards: CardBox[],
+): void {
+	canvas.frame(b.x, top, b.w, b.h, "rounded", DIM);
+	canvas.text(b.x + 1, top, "●", { fg: "magenta" });
+	let col = canvas.text(b.x + 2, top, ` ${b.group.name}`, { fg: "white" });
+	col = canvas.text(col, top, " · ", DIM);
+	for (const c of counts(b.group))
+		col = canvas.text(col, top, `${c.text} `, c.style);
+	let rowY = top + 2;
+	b.rowHeights.forEach((rowH, row) => {
+		for (let c = 0; c < b.cols; c++) {
+			const s = b.group.sessions[row * b.cols + c];
+			if (!s) continue;
+			const cx = b.x + PAD_X + c * (CARD_W + CARD_GAP_X);
+			const h = drawCard(
+				canvas,
+				s,
+				cx,
+				rowY,
+				s.id === input.focusId
+					? {
+							element: input.focusElement ?? "card",
+							suggestion: input.focusSuggestion ?? null,
+							replyText: input.replyText,
+						}
+					: null,
+			);
+			cards.push({ sessionId: s.id, x: cx, y: rowY, w: CARD_W, h });
+		}
+		rowY += rowH + 1;
+	});
 }
 
 /** First card of the next (`step` 1) or previous (-1) topic, wrapping around. */

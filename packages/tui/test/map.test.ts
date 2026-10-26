@@ -102,6 +102,26 @@ describe("drawMap", () => {
 		expect(rows.map((r) => r.sessionId)).not.toContain("c5");
 	});
 
+	test("the bubble holding focus gets the heavy outline; WASD moves between bubbles", () => {
+		const { canvas, bubbles, master: box } = draw({ focusId: "c2" });
+		const text = canvas.toString();
+		expect(text).toMatch(/┏━ infra · quiet ━+┓/);
+		expect(text).toMatch(/╭─ backend/);
+		expect(bubbles.map((b) => b.id).sort()).toEqual([
+			"backend",
+			"discovery",
+			"infra",
+		]);
+		const nodes = [{ ...box, id: "master" }, ...bubbles];
+		const infra = bubbles.find((b) => b.id === "infra");
+		const across = moveFocus(
+			nodes,
+			"infra",
+			infra && infra.x > box.x ? "left" : "right",
+		);
+		expect(across).toBe("master");
+	});
+
 	test("the focused row shows the master's suggestion under it", () => {
 		const { canvas } = draw({ focusId: "a2", focusSuggestion: "Reply ok" });
 		expect(canvas.toString()).toMatch(/◆ Reply ok +y e n/);

@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { groupTopics } from "@serenity/core";
 import { makeSession } from "@serenity/core/testing";
 import { splitAtNewline } from "../src/text-input";
-import { drawTopics, holdOrder, moveFocus, stepTopic } from "../src/topics";
+import {
+	CARD_W,
+	drawTopics,
+	holdOrder,
+	moveFocus,
+	stepTopic,
+} from "../src/topics";
 
 const sessions = [
 	makeSession({
@@ -155,6 +161,22 @@ describe("drawTopics", () => {
 		const { cards } = draw(null, 160);
 		const infra = cards.filter((c) => ["c1", "c2", "c3"].includes(c.sessionId));
 		expect(new Set(infra.map((c) => c.y)).size).toBe(1);
+	});
+
+	test("bubbles share a shelf when the width allows, each joined to the bus above", () => {
+		const { cards } = draw(null, 196);
+		const a1 = cards.find((c) => c.sessionId === "a1");
+		const d1 = cards.find((c) => c.sessionId === "d1");
+		const c1 = cards.find((c) => c.sessionId === "c1");
+		// backend and discovery side by side; infra, too wide, on the next shelf.
+		expect(d1?.y).toBe(a1?.y);
+		expect(d1?.x).toBeGreaterThan((a1?.x ?? 0) + CARD_W);
+		expect(c1?.y).toBeGreaterThan(a1?.y ?? 0);
+		const rows = draw(null, 196).canvas.toString().split("\n");
+		const top = rows[(a1?.y ?? 0) - 2] ?? "";
+		expect(top).toContain("╭● backend");
+		expect(top).toContain("╭● discovery");
+		expect(rows[(a1?.y ?? 0) - 3]).toMatch(/┬/);
 	});
 
 	test("nothing to draw without sessions", () => {

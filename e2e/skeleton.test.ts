@@ -604,9 +604,9 @@ test(
 );
 
 test(
-	"Z opens the map zoom, z goes back to topics, Esc zooms out one level",
+	"z zooms out to the map, Z zooms in to topics, Esc zooms out one level",
 	async () => {
-		keys("Z");
+		keys("z");
 		const map = await waitFor(/zoom: map/);
 		expect(map).toContain("◆ master");
 		expect(map).toMatch(/polish/);
@@ -615,11 +615,11 @@ test(
 		keys("Escape");
 		await Bun.sleep(200);
 		expect(screen()).toContain("zoom: map");
-		keys("z");
+		keys("Z");
 		await waitFor(/zoom: topics/);
 		keys("Escape");
 		await waitFor(/zoom: map/);
-		keys("z");
+		keys("Z");
 		await waitFor(/zoom: topics/);
 	},
 	STEP_TIMEOUT,
