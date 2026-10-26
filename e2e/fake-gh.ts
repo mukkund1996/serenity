@@ -5,6 +5,7 @@
  *   gh pr view <branch> --json …        → prints <branch>.json, or "no PR"
  *   gh pr edit <n> --add-reviewer <who> → logs "<n> <who>" to edits.log and
  *                                         adds the request to that PR's file
+ *   gh pr list --search … --json …      → review-requests.json, or []
  *   gh api user --jq .login             → "me"
  */
 import {
@@ -31,6 +32,12 @@ if (group === "pr" && command === "view") {
 		process.exit(1);
 	}
 	process.stdout.write(readFileSync(file, "utf8"));
+	process.exit(0);
+}
+
+if (group === "pr" && command === "list") {
+	const file = join(dir, "review-requests.json");
+	process.stdout.write(existsSync(file) ? readFileSync(file, "utf8") : "[]");
 	process.exit(0);
 }
 

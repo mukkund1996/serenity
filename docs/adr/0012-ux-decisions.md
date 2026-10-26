@@ -1,6 +1,6 @@
 # 0012 · UX decisions not covered by the canvas
 
-**Status:** Accepted · 2026-10-25
+**Status:** Accepted · 2026-10-25 · revised 2026-10-26 (master overview sections)
 
 The canvas's colours, frames, status language, card anatomy and keymap are final. These fill its "not designed yet" gaps.
 
@@ -28,6 +28,8 @@ The canvas's colours, frames, status language, card anatomy and keymap are final
 | `K` (kill) | Stops the agent after a `y`/`n` confirm and archives it. Unlike `x` it never touches the worktree or branch. Users do not create, rename or delete topics; only the master does. |
 | Shortcuts panel | A fixed handful of rows; related keys share a row (`K x`, `N I`), so new keys do not grow it. |
 | Conversation | The latest exchange (your message, the master's reply), a few lines each; the full history is `M` (v1.1). |
+| Master overview | Between NEEDS YOU and CONVERSATION, as rows allow: **REVIEW** (open PRs in this repo asking for your review, newest updated first, at most 3: `#n title`, `@author age`), **MY PRS** (your open PRs from sessions on the map, at most 5, with the card's status word), **SESSIONS** (counts of the sessions on the map by status, then the 5 latest archived, `H` for all). NEEDS YOU, CONVERSATION and the input always show; the rows left over go to REVIEW, then MY PRS, then SESSIONS, each trimmed to fit or dropped. Empty sections take no rows. PR rows join `↑↓`; `Enter` or `o` opens the PR. |
+| Master width | Between 38 and 64 columns: the terminal's width less 50. |
 
 ## Consequences
 - The spinner is the one animation; keep its tick cheap (no full canvas re-render).

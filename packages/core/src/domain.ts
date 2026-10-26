@@ -1,4 +1,4 @@
-import type { PrInfo } from "./pr";
+import type { GithubState, PrInfo } from "./pr";
 
 export const VERSION = "0.4.0";
 
@@ -191,4 +191,6 @@ export interface RepoState {
 	conversation: MasterMessage[];
 	permissions: MasterPermission[];
 	master: MasterState;
+	/** Review requests and the gh user, for the master panel. */
+	github: GithubState;
 }
