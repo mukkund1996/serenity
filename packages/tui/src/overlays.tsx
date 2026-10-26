@@ -251,8 +251,8 @@ export function ConfirmDialog({
 				const keep = step.startsWith("keep");
 				return (
 					<Text key={step} wrap="truncate">
-						<Text color={keep ? "gray" : "red"}>{keep ? "–" : "✕"} </Text>
-						<Text color={keep ? "gray" : undefined}>{step}</Text>
+						<Text color={keep ? "white" : "red"}>{keep ? "–" : "✕"} </Text>
+						<Text color={keep ? "white" : undefined}>{step}</Text>
 					</Text>
 				);
 			})}
@@ -309,11 +309,11 @@ export function KillDialog({
 					? `stop claude in ${session.name} · its tmux window stays`
 					: `stop the session ${session.name}`}
 			</Text>
-			<Text color="gray" wrap="truncate">
+			<Text color="white" wrap="truncate">
 				– archive it · H lists it
 			</Text>
 			{session.worktree || session.branch ? (
-				<Text color="gray" wrap="truncate">
+				<Text color="white" wrap="truncate">
 					– keep {session.worktree ? "its worktree and branch" : "its branch"} ·{" "}
 					<Key>x</Key> cleans those up
 				</Text>
@@ -380,16 +380,21 @@ export function ArchivedList({
 					<Text color="white">{scroll > 0 ? `↑ ${scroll} more` : " "}</Text>
 					{shown.map((row) =>
 						"topic" in row ? (
-							<Text key={`c:${row.topic}`} color="white" wrap="truncate">
+							<Text
+								key={`c:${row.topic}`}
+								color="whiteBright"
+								bold
+								wrap="truncate"
+							>
 								{row.topic}
 							</Text>
 						) : (
 							<Text key={row.session.id} wrap="truncate">
 								{"  "}
-								<Text color="gray" bold>
+								<Text color="white" bold>
 									{row.session.name}
 								</Text>
-								<Text color="gray">
+								<Text color="white">
 									{row.session.branch ? ` · ${row.session.branch}` : ""} ·{" "}
 									{cardText(row.session).replace(/^Archived\. ?/, "") ||
 										"archived"}
