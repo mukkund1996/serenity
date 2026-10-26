@@ -2,7 +2,7 @@
 
 A keyboard-only terminal app that shows every Claude Code session as a node on a mind map around one master agent. Only what needs you asks for attention.
 
-Status: milestone 4 (map and navigation). Sessions with live status from hooks, the topics zoom, attach / `Ctrl+g` back, and the master: Haiku summaries and topics, Sonnet suggestions you approve with `y`, cleanup with git safety checks, and an Opus chat (`g`). PRs (milestone 3): each card shows its PR and checks from `gh`, `o` opens it, ready PRs get a review request from CODEOWNERS, and a merged PR finishes the session. Claude sessions you already run in tmux can be imported with `I` (they stay in their windows). Map and navigation (milestone 4): `Z` opens the map zoom, with the master in the centre and topics around it; `z` returns to topics and `Esc` zooms out. `c` centres on the master, `/` searches sessions, and `r` renames one.
+Status: milestone 4 (map and navigation). Sessions with live status from hooks, the topics zoom, attach / `Ctrl+g` back, and the master: Haiku summaries and topics, Sonnet suggestions you approve with `y`, cleanup with git safety checks, and an Opus chat (`g`). PRs (milestone 3): each card shows its PR and checks from `gh`, `o` opens it, ready PRs get a review request from CODEOWNERS, and a merged PR finishes the session. Claude sessions you already run in tmux can be imported with `I` (they stay in their windows). Map and navigation (milestone 4): `z` zooms out to the map, with the master in the centre and topics around it (WASD moves between topics there, the arrow keys between their agents); `Z` zooms back in to topics and `Esc` zooms out. `c` centres on the master, `/` searches sessions, and `r` renames one.
 
 - Decisions: [`docs/adr/`](docs/adr/README.md)
 - Using it daily while developing it: [`docs/dogfooding.md`](docs/dogfooding.md)
@@ -38,12 +38,13 @@ bun run install:local
 
 State (SQLite, socket, daemon log) lives in `~/.local/state/serenity`; set `SERENITY_HOME` to use another directory. `serenity restart` restarts the background daemon and `serenity stop` stops it; a new build replaces a running daemon by itself.
 
-The master runs on your own Claude Code login. Models default to Opus (chat), Haiku (summaries) and Sonnet (suggestions); override them in `~/.config/serenity/config.json`. `reviewers` is who to suggest for review when CODEOWNERS names nobody:
+The master runs on your own Claude Code login. Models default to Opus (chat), Haiku (summaries) and Sonnet (suggestions); override them in `~/.config/serenity/config.json`. `reviewers` is who to suggest for review when CODEOWNERS names nobody. `maxTopics` caps how many topics the master groups sessions into (default 10):
 
 ```json
 {
   "models": { "chat": "opus", "summarizer": "haiku", "suggester": "sonnet" },
-  "reviewers": ["teammate-login"]
+  "reviewers": ["teammate-login"],
+  "maxTopics": 10
 }
 ```
 

@@ -16,7 +16,10 @@ import {
 	clipLines,
 	type MasterPlan,
 	type MyPr,
+	NEED_INDENT,
+	needLines,
 	SPEAKER_W,
+	suggestionLines,
 } from "./master-layout";
 import { age, askLine, cardText, glyph, nameColor, TONE_COLOR } from "./theme";
 
@@ -117,12 +120,29 @@ export function TitledBox({
 	);
 }
 
-function SectionHeader({ label, width }: { label: string; width: number }) {
+/** A section's heading on a filled chip, so it stands apart from its rows. */
+function SectionHeader({
+	label,
+	width,
+	urgent = false,
+}: {
+	label: string;
+	width: number;
+	/** NEEDS YOU: yellow, like the header's count. */
+	urgent?: boolean;
+}) {
+	const chip = ` ${label} `;
 	return (
 		<Box marginTop={1}>
-			<Text color="whiteBright">{label} </Text>
+			<Text
+				backgroundColor={urgent ? "yellow" : "gray"}
+				color={urgent ? "black" : "whiteBright"}
+				bold
+			>
+				{chip}
+			</Text>
 			<Text color="gray">
-				{"─".repeat(Math.max(0, width - label.length - 1))}
+				{` ${"─".repeat(Math.max(0, width - chip.length - 1))}`}
 			</Text>
 		</Box>
 	);
@@ -208,16 +228,22 @@ function NeedItem({
 	suggestion,
 	selected,
 	replyText,
+	inner,
+	first,
 }: {
 	session: Session;
 	suggestion: Suggestion | undefined;
 	selected: boolean;
 	/** Reply being typed to this session, shown under it while selected. */
 	replyText: string | null;
+	inner: number;
+	/** The first item shown; the others are spaced from the one above. */
+	first: boolean;
 }) {
 	const g = glyph(session.status);
+	const label = suggestion ? suggestionLines(suggestion.label, inner) : [];
 	return (
-		<Box flexDirection="column">
+		<Box flexDirection="column" marginTop={first ? 0 : 1}>
 			<Text wrap="truncate">
 				<Selector on={selected} />
 				{g ? <Text color={g.color}>{g.ch} </Text> : null}
@@ -229,24 +255,34 @@ function NeedItem({
 				</Text>
 				{session.watched ? <Text color="white"> ⚑</Text> : null}
 			</Text>
-			<Box paddingLeft={4}>
-				<Text color="gray" wrap="truncate">
-					{askLine(session)}
-				</Text>
-			</Box>
-			{suggestion ? (
-				<Box paddingLeft={4} justifyContent="space-between">
-					<Text wrap="truncate">
-						<Text color="magenta">◆ </Text>
-						{suggestion.label}
+			{needLines(askLine(session), inner).map((line, i) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: lines are positional
+				<Box key={i} paddingLeft={NEED_INDENT}>
+					<Text color={session.status === "waiting" ? "white" : "gray"}>
+						{line}
 					</Text>
-					<Box flexShrink={0} marginLeft={1}>
-						<Chips keys="yen" />
-					</Box>
 				</Box>
-			) : null}
+			))}
+			{label.map((line, i) => (
+				<Box
+					// biome-ignore lint/suspicious/noArrayIndexKey: lines are positional
+					key={i}
+					paddingLeft={NEED_INDENT}
+					justifyContent="space-between"
+				>
+					<Text wrap="truncate">
+						<Text color="magenta">{i ? "  " : "◆ "}</Text>
+						{line}
+					</Text>
+					{i === 0 ? (
+						<Box flexShrink={0} marginLeft={1}>
+							<Chips keys="yen" />
+						</Box>
+					) : null}
+				</Box>
+			))}
 			{selected && replyText !== null ? (
-				<Box paddingLeft={4}>
+				<Box paddingLeft={NEED_INDENT}>
 					<Text
 						color="whiteBright"
 						backgroundColor="black"
@@ -264,12 +300,16 @@ function NeedItem({
 function PermissionItem({
 	permission,
 	selected,
+	inner,
+	first,
 }: {
 	permission: MasterPermission;
 	selected: boolean;
+	inner: number;
+	first: boolean;
 }) {
 	return (
-		<Box flexDirection="column">
+		<Box flexDirection="column" marginTop={first ? 0 : 1}>
 			<Box justifyContent="space-between">
 				<Text wrap="truncate">
 					<Selector on={selected} />
@@ -282,11 +322,12 @@ function PermissionItem({
 					<Chips keys="yn" />
 				</Box>
 			</Box>
-			<Box paddingLeft={4}>
-				<Text color="gray" wrap="truncate">
-					{permission.detail}
-				</Text>
-			</Box>
+			{needLines(permission.detail, inner).map((line, i) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: lines are positional
+				<Box key={i} paddingLeft={NEED_INDENT}>
+					<Text color="gray">{line}</Text>
+				</Box>
+			))}
 		</Box>
 	);
 }
@@ -620,13 +661,19 @@ export function MasterPanel({
 					</Text>
 					{count > 0 ? (
 						<>
-							<SectionHeader label={`NEEDS YOU ${count}`} width={inner} />
-							{shown.map((item) =>
+							<SectionHeader
+								label={`NEEDS YOU ${count}`}
+								width={inner}
+								urgent
+							/>
+							{shown.map((item, i) =>
 								item.kind === "permission" ? (
 									<PermissionItem
 										key={item.p.id}
 										permission={item.p}
 										selected={selected === `perm:${item.p.id}`}
+										inner={inner}
+										first={i === 0}
 									/>
 								) : (
 									<NeedItem
@@ -637,6 +684,8 @@ export function MasterPanel({
 										)}
 										selected={selected === item.s.id}
 										replyText={replyText}
+										inner={inner}
+										first={i === 0}
 									/>
 								),
 							)}

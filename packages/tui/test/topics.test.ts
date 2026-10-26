@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { groupTopics } from "@serenity/core";
 import { makeSession } from "@serenity/core/testing";
 import { splitAtNewline } from "../src/text-input";
-import { drawTopics, holdOrder, moveFocus, stepTopic } from "../src/topics";
+import {
+	CARD_W,
+	drawTopics,
+	holdOrder,
+	moveFocus,
+	stepTopic,
+} from "../src/topics";
 
 const sessions = [
 	makeSession({
@@ -157,6 +163,49 @@ describe("drawTopics", () => {
 		expect(new Set(infra.map((c) => c.y)).size).toBe(1);
 	});
 
+	test("bubbles share a shelf when the width allows, each joined to the bus above", () => {
+		const { cards } = draw(null, 196);
+		const a1 = cards.find((c) => c.sessionId === "a1");
+		const d1 = cards.find((c) => c.sessionId === "d1");
+		const c1 = cards.find((c) => c.sessionId === "c1");
+		// backend and discovery side by side; infra, too wide, on the next shelf.
+		expect(d1?.y).toBe(a1?.y);
+		expect(d1?.x).toBeGreaterThan((a1?.x ?? 0) + CARD_W);
+		expect(c1?.y).toBeGreaterThan(a1?.y ?? 0);
+		const rows = draw(null, 196).canvas.toString().split("\n");
+		const top = rows[(a1?.y ?? 0) - 2] ?? "";
+		expect(top).toContain("╭● backend");
+		expect(top).toContain("╭● discovery");
+		expect(rows[(a1?.y ?? 0) - 3]).toMatch(/┬/);
+	});
+
+	test("a card grows to fit its summary, up to four rows, and no more", () => {
+		const card = (summary: string) => {
+			const layout = drawTopics({
+				width: 60,
+				height: 20,
+				masterRow: 10,
+				groups: groupTopics([makeSession({ id: "x", summary })]),
+				focusId: null,
+				replyText: null,
+			});
+			return {
+				h: layout.cards[0]?.h,
+				text: layout.canvas.toString(),
+			};
+		};
+		const short = card("Rotates refresh tokens.");
+		expect(short.h).toBe(4);
+		const long = card(
+			"Rotates refresh tokens on every use and revokes the old family when a stolen token is replayed; tests cover the replay path end to end.",
+		);
+		expect(long.h).toBe(7);
+		expect(long.text).toContain("end to end.");
+		const huge = card("word ".repeat(80));
+		expect(huge.h).toBe(7);
+		expect(huge.text).toContain("…");
+	});
+
 	test("nothing to draw without sessions", () => {
 		const layout = drawTopics({
 			width: 60,
@@ -218,7 +267,8 @@ describe("focused card elements", () => {
 
 	test("the master's suggestion gets its own row above the input", () => {
 		const { canvas, cards } = drawFocused("card", 'Reply "ok"');
-		expect(cards[0]?.h).toBe(7);
+		// Frame, PR line, one row of text, the suggestion and the input.
+		expect(cards[0]?.h).toBe(6);
 		const rows = canvas.toString().split("\n");
 		const pick = rows.findIndex((r) => r.includes('◆ Reply "ok"'));
 		expect(pick).toBeGreaterThan(-1);

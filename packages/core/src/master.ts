@@ -6,7 +6,8 @@ import { prStatus } from "./pr";
  * schemas, parsing of what the models return, and the rules for applying it.
  */
 
-const SUMMARY_MAX = 160;
+/** Fits the 4 text rows of a 36-column card. */
+const SUMMARY_MAX = 130;
 const ASK_MAX = 100;
 const LABEL_MAX = 60;
 const TOPIC_MAX = 20;
@@ -51,19 +52,41 @@ export function nextTopic(
 	return { topic: session.topic, topicCandidate: proposed };
 }
 
+/**
+ * A topic proposal under the cap: an existing topic, or a new one while
+ * there are fewer than `maxTopics`. Anything else is dropped (null).
+ */
+export function capTopic(
+	proposed: string | null,
+	topics: string[],
+	maxTopics: number,
+): string | null {
+	if (!proposed || topics.includes(proposed)) return proposed;
+	return topics.length < maxTopics ? proposed : null;
+}
+
 // ---------------------------------------------------------------- summarizer
 
-export const SUMMARY_SCHEMA = {
-	type: "object",
-	properties: {
-		summary: { type: "string" },
-		ask: { type: ["string", "null"] },
-		finished: { type: "boolean" },
-		topic: { type: "string" },
-	},
-	required: ["summary", "ask", "finished", "topic"],
-	additionalProperties: false,
-} as const;
+/**
+ * The summarizer's JSON schema. Once a repo has `maxTopics` topics the
+ * topic must be one of them, so the model cannot open another.
+ */
+export function summarySchema(topics: string[], maxTopics: number) {
+	return {
+		type: "object",
+		properties: {
+			summary: { type: "string" },
+			ask: { type: ["string", "null"] },
+			finished: { type: "boolean" },
+			topic:
+				topics.length >= maxTopics
+					? { type: "string", enum: topics }
+					: { type: "string" },
+		},
+		required: ["summary", "ask", "finished", "topic"],
+		additionalProperties: false,
+	} as const;
+}
 
 export interface SummaryResult {
 	summary: string;
@@ -72,7 +95,12 @@ export interface SummaryResult {
 	topic: string | null;
 }
 
-export function summaryPrompt(session: Session, topics: string[]): string {
+export function summaryPrompt(
+	session: Session,
+	topics: string[],
+	maxTopics: number,
+): string {
+	const full = topics.length >= maxTopics;
 	return [
 		"You keep a dashboard of coding-agent sessions and describe one session for its card.",
 		"",
@@ -82,10 +110,12 @@ export function summaryPrompt(session: Session, topics: string[]): string {
 		`Existing topics: ${topics.length ? topics.join(", ") : "(none yet)"}`,
 		"",
 		"Return:",
-		`- summary: what this session is doing or did, at most 2 short sentences and ${SUMMARY_MAX} characters. Describe the work, not yourself.`,
+		`- summary: what this session is doing or did, compact: 1–2 short sentences, at most ${SUMMARY_MAX} characters. Describe the work, not yourself; no filler.`,
 		`- ask: if the reply asks the user a question or for a decision, that question in one line under ${ASK_MAX} characters; otherwise null.`,
 		"- finished: true only if the reply says the task is complete and nothing is asked.",
-		"- topic: a short lowercase name of 1–2 words for grouping sessions. Reuse an existing topic when it fits.",
+		full
+			? `- topic: one of the existing topics, the closest fit. There are already ${maxTopics}, the most allowed.`
+			: `- topic: a short lowercase name of 1–2 words for grouping sessions. Strongly prefer an existing topic, even a loose fit: a broad topic with many sessions beats a new one. Create a new topic only when no existing one is related at all. At most ${maxTopics} topics in total.`,
 	].join("\n");
 }
 

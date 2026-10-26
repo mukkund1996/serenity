@@ -4,7 +4,9 @@ import { makeSession } from "@serenity/core/testing";
 import {
 	type MasterPlanInput,
 	type MyPr,
+	needLines,
 	planMaster,
+	suggestionLines,
 	wrappedRows,
 } from "../src/master-layout";
 
@@ -64,6 +66,29 @@ describe("planMaster", () => {
 		plan = planMaster(input(14 + 4));
 		expect(plan.reviews).toHaveLength(2);
 		expect(plan.mine).toHaveLength(0);
+	});
+
+	test("NEEDS YOU items are a blank row apart", () => {
+		const two = input(14 + 2 + 1 + 5, {
+			needs: [
+				{ id: "n1", rows: 2 },
+				{ id: "n2", rows: 2 },
+			],
+		});
+		// 14 fixed, the second item and its gap; 5 left for REVIEW.
+		expect(planMaster(two).reviews).toHaveLength(3);
+		expect(planMaster({ ...two, height: two.height - 1 }).reviews).toHaveLength(
+			2,
+		);
+	});
+
+	test("an item's ask and suggestion wrap to two lines instead of being cut", () => {
+		const ask =
+			"Set the refresh token TTL to 15 minutes or keep it at one hour?";
+		expect(needLines(ask, 40)).toHaveLength(2);
+		expect(needLines(ask, 40).join(" ")).toBe(ask);
+		expect(suggestionLines("Reply ok", 40)).toEqual(["Reply ok"]);
+		expect(suggestionLines("", 40)).toEqual([]);
 	});
 
 	test("NEEDS YOU and the conversation are never given up", () => {

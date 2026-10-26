@@ -1,8 +1,9 @@
-import type {
-	MasterMessage,
-	PrInfo,
-	ReviewRequest,
-	Session,
+import {
+	type MasterMessage,
+	type PrInfo,
+	type ReviewRequest,
+	type Session,
+	wrap,
 } from "@serenity/core";
 
 /**
@@ -17,6 +18,21 @@ export const MAX_NEED_ITEMS = 5;
 export const MAX_MY_PRS = 5;
 /** Archived sessions listed under SESSIONS at most. */
 export const MAX_ARCHIVED = 5;
+/** Indent of a NEEDS YOU item's detail lines, under its name. */
+export const NEED_INDENT = 4;
+/** Columns kept right of a suggestion for its y / e / n chips. */
+const CHIPS_W = 8;
+
+/** A NEEDS YOU item's detail (its ask, a permission's detail): up to 2 lines, never cut short mid-line. */
+export function needLines(text: string, inner: number): string[] {
+	return wrap(text, inner - NEED_INDENT, 2);
+}
+
+/** A suggestion's label beside its chips: up to 2 lines. */
+export function suggestionLines(label: string, inner: number): string[] {
+	return wrap(label, inner - NEED_INDENT - 2 - CHIPS_W, 2);
+}
+
 /** Width of the "you" / "◆" column before a conversation message. */
 export const SPEAKER_W = 6;
 export const CONVERSATION_EMPTY =
@@ -34,7 +50,7 @@ export interface MasterPlanInput {
 	inner: number;
 	/** No sessions on the map: the empty state replaces the status and NEEDS YOU. */
 	empty: boolean;
-	/** NEEDS YOU in order (permissions, then sessions) with each item's rows. */
+	/** NEEDS YOU in order (permissions, then sessions) with each item's rows; a blank row separates items. */
 	needs: Array<{ id: string; rows: number }>;
 	selected: string | null;
 	conversation: MasterMessage[];
@@ -71,6 +87,7 @@ export function planMaster(input: MasterPlanInput): MasterPlan {
 			fixed +=
 				HEADER_ROWS +
 				shown.reduce((sum, n) => sum + n.rows, 0) +
+				Math.max(0, shown.length - 1) +
 				(hidden ? 1 : 0);
 		fixed += HEADER_ROWS + conversationRows(input.conversation, input.inner);
 	}

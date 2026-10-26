@@ -24,6 +24,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0016](0016-importing-running-sessions.md) | Importing Claude sessions already running in tmux | Accepted |
 | [0017](0017-topics-zoom-shows-every-topic.md) | The topics zoom shows every topic; "topic" replaces "category" | Accepted |
 | [0018](0018-map-zoom-and-navigation.md) | Map zoom layout; `z` `Z` `Esc` `c` `/` `r` | Accepted |
+| [0019](0019-topic-focus-shelves-and-topic-cap.md) | WASD between topics on the map; `z` out, `Z` in; shelves in the topics zoom; at most 10 topics; roomier master and cards | Accepted |
 
 ## System at a glance
 

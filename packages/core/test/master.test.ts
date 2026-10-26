@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { needsYou } from "../src/attention";
 import {
 	applySummary,
+	capTopic,
 	chatSnapshot,
 	needsSuggestion,
 	nextTopic,
@@ -10,6 +11,7 @@ import {
 	parseSummary,
 	suggestionPrompt,
 	summaryPrompt,
+	summarySchema,
 } from "../src/master";
 import { makeSession, makeSuggestion } from "../test-support";
 
@@ -56,10 +58,26 @@ describe("summaries", () => {
 				lastAssistantMessage: "Done.",
 			}),
 			["backend", "infra"],
+			10,
 		);
 		expect(prompt).toContain("rotate tokens");
 		expect(prompt).toContain("Done.");
 		expect(prompt).toContain("backend, infra");
+		expect(prompt).toContain("Strongly prefer an existing topic");
+	});
+
+	test("the topic cap: reuse below it is free, a new topic past it is dropped", () => {
+		const topics = ["backend", "infra"];
+		expect(capTopic("web", topics, 3)).toBe("web");
+		expect(capTopic("web", topics, 2)).toBeNull();
+		expect(capTopic("infra", topics, 2)).toBe("infra");
+		expect(summarySchema(topics, 3).properties.topic).toEqual({
+			type: "string",
+		});
+		expect(summarySchema(topics, 2).properties.topic).toEqual({
+			type: "string",
+			enum: topics,
+		});
 	});
 
 	test("parsing rejects malformed output and clips long text", () => {
@@ -71,7 +89,7 @@ describe("summaries", () => {
 			finished: true,
 			topic: "Backend",
 		});
-		expect(parsed?.summary.length).toBe(160);
+		expect(parsed?.summary.length).toBe(130);
 		expect(parsed?.ask).toBeNull();
 		expect(parsed?.topic).toBe("backend");
 	});

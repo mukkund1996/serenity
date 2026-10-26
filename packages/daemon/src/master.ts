@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
 	applySummary,
+	capTopic,
 	chatMessage,
 	chatSnapshot,
 	MASTER_SYSTEM_PROMPT,
@@ -14,11 +15,11 @@ import {
 	type Session,
 	type Storage,
 	SUGGESTION_SCHEMA,
-	SUMMARY_SCHEMA,
 	type Suggestion,
 	type SuggestionKind,
 	suggestionPrompt,
 	summaryPrompt,
+	summarySchema,
 } from "@serenity/core";
 import type { ChatProcess, ClaudeRunner } from "./claude";
 
@@ -44,6 +45,8 @@ export interface MasterHost {
 	/** Where one-shot workers run; not the user's repo, so nothing there is loaded. */
 	workerCwd: string;
 	models: MasterModels;
+	/** Most topics per repo (config `maxTopics`). */
+	maxTopics: number;
 	debounceMs: number;
 }
 
@@ -148,28 +151,37 @@ export class MasterSupervisor {
 		}
 	}
 
-	private async summarize(sessionId: string): Promise<void> {
-		const session = this.host.storage.sessions.get(sessionId);
-		if (!session?.lastAssistantMessage) return;
-		const topics = [
+	/**
+	 * The repo's topics on the map, leaving out `except`'s own session. One
+	 * whose sessions are all archived has left the map.
+	 */
+	private topics(repo: string, except?: string): string[] {
+		return [
 			...new Set(
 				this.host.storage.sessions
-					.listByRepo(session.repo)
-					// A topic whose sessions are all archived has left the map.
-					.filter((s) => s.status !== "archived")
+					.listByRepo(repo)
+					.filter((s) => s.status !== "archived" && s.id !== except)
 					.map((s) => s.topic)
 					.filter((c): c is string => !!c),
 			),
 		];
+	}
+
+	private async summarize(sessionId: string): Promise<void> {
+		const session = this.host.storage.sessions.get(sessionId);
+		if (!session?.lastAssistantMessage) return;
+		const topics = this.topics(session.repo);
+		const max = this.host.maxTopics;
 		await this.track(session.repo, `summary of ${session.name}`, async () => {
 			const raw = await this.runner.runJson({
-				prompt: summaryPrompt(session, topics),
+				prompt: summaryPrompt(session, topics, max),
 				model: this.host.models.summarizer,
-				schema: SUMMARY_SCHEMA,
+				schema: summarySchema(topics, max),
 				cwd: this.host.workerCwd,
 			});
 			const result = parseSummary(raw);
 			if (!result) throw new Error("unusable summary");
+			result.topic = capTopic(result.topic, this.topics(session.repo), max);
 			const fresh = this.host.storage.sessions.get(sessionId);
 			if (!fresh || fresh.status === "archived") return;
 			const updated = this.host.update(fresh, applySummary(fresh, result));
@@ -350,6 +362,13 @@ export class MasterSupervisor {
 		if (name === "set_topic") {
 			const topic = normalizeTopic(args.topic);
 			if (!topic) return { text: "Give a topic name.", isError: true };
+			// Topics left once the session moves: a topic's last session may leave it.
+			const topics = this.topics(repo, session.id);
+			if (!capTopic(topic, topics, this.host.maxTopics))
+				return {
+					text: `There are already ${this.host.maxTopics} topics, the most allowed. Pick one of: ${topics.join(", ")}.`,
+					isError: true,
+				};
 			this.host.update(session, { topic, topicCandidate: null });
 			this.host.broadcast(repo);
 			return { text: `Moved ${session.name} to ${topic}.` };

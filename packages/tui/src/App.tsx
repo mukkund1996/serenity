@@ -30,7 +30,12 @@ import {
 	SessionMaster,
 } from "./components";
 import { drawMap, type MasterItem, rowElements } from "./map";
-import { MAX_ARCHIVED, planMaster } from "./master-layout";
+import {
+	MAX_ARCHIVED,
+	needLines,
+	planMaster,
+	suggestionLines,
+} from "./master-layout";
 import { openUrl } from "./open-url";
 import {
 	ArchivedList,
@@ -44,6 +49,7 @@ import {
 	ShortcutsPanel,
 } from "./overlays";
 import { splitAtNewline } from "./text-input";
+import { askLine } from "./theme";
 import {
 	type CardElement,
 	cardElements,
@@ -96,6 +102,8 @@ export interface AppProps {
 }
 
 const PERM = "perm:";
+/** A topic bubble's node id on the map, so no topic name clashes with MASTER. */
+const TOPIC = "topic:";
 /** The master panel's node id; every other node is a session card. */
 const MASTER = "master";
 
@@ -182,7 +190,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		suggestions.find((g) => g.sessionId === id);
 	const onMaster = node === MASTER;
 	const bodyHeight = rows - 2;
-	const masterWidth = Math.max(38, Math.min(64, columns - 50));
+	const masterWidth = Math.max(38, Math.min(72, columns - 50));
+	const masterInner = masterWidth - 6;
 
 	const github = state?.github ?? { user: null, reviewRequests: [] };
 	const mine = useMemo(
@@ -199,15 +208,20 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	// Planned with the raw selection: only its place in NEEDS YOU matters here.
 	const plan = planMaster({
 		height: bodyHeight,
-		inner: masterWidth - 6,
+		inner: masterInner,
 		empty: sessions.length === 0,
 		needs: [
-			...permissions.map((p) => ({ id: `${PERM}${p.id}`, rows: 2 })),
+			...permissions.map((p) => ({
+				id: `${PERM}${p.id}`,
+				rows: 1 + needLines(p.detail, masterInner).length,
+			})),
 			...needs.map((s) => ({
 				id: s.id,
 				rows:
-					2 +
-					(suggestionFor(s.id) ? 1 : 0) +
+					1 +
+					needLines(askLine(s), masterInner).length +
+					suggestionLines(suggestionFor(s.id)?.label ?? "", masterInner)
+						.length +
 					(onMaster && element === s.id && replyText !== null ? 1 : 0),
 			})),
 		],
@@ -308,11 +322,14 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					lastMessage: conversation[conversation.length - 1] ?? null,
 				},
 			});
+			const masterBox = { ...map.master, id: MASTER };
 			return {
 				canvas: map.canvas,
-				nodes: [
-					{ ...map.master, id: MASTER },
-					...map.rows.map((r) => ({ ...r, id: r.sessionId })),
+				nodes: [masterBox, ...map.rows.map((r) => ({ ...r, id: r.sessionId }))],
+				// WASD moves between topic bubbles here; ↑↓ walk the agents inside.
+				moves: [
+					masterBox,
+					...map.bubbles.map((b) => ({ ...b, id: `${TOPIC}${b.id}` })),
 				],
 			};
 		}
@@ -327,13 +344,11 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			replyText: onMaster ? null : replyText,
 		});
 		// The master sits left of the canvas.
-		return {
-			canvas: topics.canvas,
-			nodes: [
-				{ id: MASTER, x: -panelWidth, y: 0, w: panelWidth, h: bodyHeight },
-				...topics.cards.map((c) => ({ ...c, id: c.sessionId })),
-			],
-		};
+		const nodes = [
+			{ id: MASTER, x: -panelWidth, y: 0, w: panelWidth, h: bodyHeight },
+			...topics.cards.map((c) => ({ ...c, id: c.sessionId })),
+		];
+		return { canvas: topics.canvas, nodes, moves: nodes };
 	})();
 	/** The focusable nodes on screen, in canvas cells. */
 	const nodes: NodeBox[] = layout.nodes;
@@ -342,6 +357,37 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const focusNode = (id: string, at: string | null = null) => {
 		setNode(id);
 		setElement(at);
+	};
+	/** The agent last focused in each topic, where WASD lands on the map. */
+	const lastInTopic = useRef(new Map<string, string>());
+	const cardTopic = card ? (card.topic ?? UNSORTED) : null;
+	if (card && cardTopic) lastInTopic.current.set(cardTopic, card.id);
+	/** WASD on the map: to the next bubble's last-focused agent, or its first. */
+	const moveToTopic = (dir: "up" | "down" | "left" | "right") => {
+		const from = cardTopic === null ? MASTER : `${TOPIC}${cardTopic}`;
+		const to = moveFocus(layout.moves, from, dir);
+		const group = groups.find((g) => `${TOPIC}${g.name}` === to);
+		if (!group) return focusNode(MASTER);
+		if (group.name === cardTopic) return;
+		const last = lastInTopic.current.get(group.name);
+		const id = group.sessions.some((s) => s.id === last)
+			? (last as string)
+			: group.sessions[0]?.id;
+		if (id) focusNode(id);
+	};
+	/**
+	 * ↑↓ on the map: through the focused agent's rows (it, its suggestion,
+	 * its reply), then on to the next or previous agent in the bubble.
+	 */
+	const stepInTopic = (up: boolean) => {
+		const at = selected ? elements.indexOf(selected) : 0;
+		const next = at + (up ? -1 : 1);
+		if (next >= 0 && next < elements.length)
+			return setElement(elements[next] ?? null);
+		const list = groups.find((g) => g.name === cardTopic)?.sessions ?? [];
+		const i = list.findIndex((s) => s.id === card?.id);
+		const to = list[i + (up ? -1 : 1)];
+		if (to) focusNode(to.id);
 	};
 	/** A session just created or imported, focused before the daemon reports it. */
 	const arriving = useRef<string | null>(null);
@@ -648,7 +694,12 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			}
 			const dir = { w: "up", s: "down", a: "left", d: "right" } as const;
 			const move = dir[input as keyof typeof dir];
-			if (move) return focusNode(moveFocus(nodes, node, move) ?? MASTER);
+			if (move) {
+				if (zoom === "map") return moveToTopic(move);
+				return focusNode(moveFocus(nodes, node, move) ?? MASTER);
+			}
+			if ((key.upArrow || key.downArrow) && zoom === "map" && card)
+				return stepInTopic(key.upArrow);
 			if (key.upArrow || key.downArrow) {
 				const at = selected ? elements.indexOf(selected) : 0;
 				const next = Math.max(
@@ -677,10 +728,11 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					return exit();
 				case "?":
 					return setOverlay({ kind: "help" });
+				// z zooms out to the map, Z zooms in to topics.
 				case "z":
-					return setZoom("topics");
-				case "Z":
 					return setZoom("map");
+				case "Z":
+					return setZoom("topics");
 				case "c":
 					return focusNode(MASTER);
 				case "/":

@@ -60,6 +60,8 @@ export interface DaemonOptions {
 	/** Fallback reviewers when CODEOWNERS names nobody; defaults to config. */
 	reviewers?: string[];
 	models?: MasterModels;
+	/** Most topics per repo; defaults to config. */
+	maxTopics?: number;
 	now?: () => number;
 	log?: (line: string) => void;
 	/**
@@ -153,6 +155,7 @@ export class Daemon {
 				mcpConfig: (repo) => this.mcpConfig(repo),
 				workerCwd: join(opts.home, "workers"),
 				models: opts.models ?? config.models,
+				maxTopics: opts.maxTopics ?? config.maxTopics,
 				debounceMs:
 					opts.workerDebounceMs ??
 					envNumber("SERENITY_WORKER_DEBOUNCE_MS", DEFAULT_WORKER_DEBOUNCE_MS),
