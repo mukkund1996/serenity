@@ -2,7 +2,7 @@
 
 A keyboard-only terminal app that shows every Claude Code session as a node on a mind map around one master agent. Only what needs you asks for attention.
 
-Status: milestone 3 (PRs). Sessions with live status from hooks, the topics zoom, attach / `Ctrl+g` back, and the master: Haiku summaries and topics, Sonnet suggestions you approve with `y`, cleanup with git safety checks, and an Opus chat (`g`). PRs (milestone 3): each card shows its PR and checks from `gh`, `o` opens it, ready PRs get a review request from CODEOWNERS, and a merged PR finishes the session. Claude sessions you already run in tmux can be imported with `I` (they stay in their windows).
+Status: milestone 4 (map and navigation). Sessions with live status from hooks, the topics zoom, attach / `Ctrl+g` back, and the master: Haiku summaries and topics, Sonnet suggestions you approve with `y`, cleanup with git safety checks, and an Opus chat (`g`). PRs (milestone 3): each card shows its PR and checks from `gh`, `o` opens it, ready PRs get a review request from CODEOWNERS, and a merged PR finishes the session. Claude sessions you already run in tmux can be imported with `I` (they stay in their windows). Map and navigation (milestone 4): `Z` opens the map zoom, with the master in the centre and topics around it; `z` returns to topics and `Esc` zooms out. `c` centres on the master, `/` searches sessions, and `r` renames one.
 
 - Decisions: [`docs/adr/`](docs/adr/README.md)
 - Using it daily while developing it: [`docs/dogfooding.md`](docs/dogfooding.md)

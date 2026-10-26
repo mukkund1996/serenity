@@ -26,6 +26,7 @@ import {
 	MasterPanel,
 	SessionMaster,
 } from "./components";
+import { drawMap, type MasterItem, rowElements } from "./map";
 import { openUrl } from "./open-url";
 import {
 	ArchivedList,
@@ -35,6 +36,7 @@ import {
 	KillDialog,
 	NewSessionDialog,
 	RecentReplies,
+	RenameDialog,
 	ShortcutsPanel,
 } from "./overlays";
 import { splitAtNewline } from "./text-input";
@@ -70,7 +72,17 @@ type Overlay =
 	| { kind: "archived"; scroll: number }
 	| { kind: "replies"; selected: number }
 	| { kind: "import"; candidates: ImportCandidate[] }
+	| { kind: "rename"; sessionId: string }
 	| null;
+
+/** The two zooms drawn here; the session zoom is an attached pane (design 1, 2, 3). */
+type Zoom = "map" | "topics";
+
+/** `/` search: what is typed, and the node focused before it, which Esc restores. */
+interface Search {
+	query: string;
+	from: { node: string; element: string | null };
+}
 
 export interface AppProps {
 	home: string;
@@ -129,6 +141,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	);
 	const [sentReplies, setSentReplies] = useState<string[]>([]);
 	const [overlay, setOverlay] = useState<Overlay>(null);
+	const [zoom, setZoom] = useState<Zoom>("topics");
+	const [search, setSearch, searchRef] = useLiveState<Search | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 
 	const allSessions = state?.sessions ?? [];
@@ -173,7 +187,9 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				...needs.map((s) => s.id),
 				MASTER_INPUT,
 			]
-		: cardElements(!!cardSuggestion);
+		: zoom === "map"
+			? rowElements(!!cardSuggestion)
+			: cardElements(!!cardSuggestion);
 	const selected =
 		element && elements.includes(element) ? element : (elements[0] ?? null);
 	const focusedPermission =
@@ -190,38 +206,79 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	/** Rows of the archived list shown at once: the screen less its frame, padding and hints. */
 	const archivedHeight = Math.max(3, rows - 8);
 	const archived = useMemo(() => archivedRows(allSessions), [allSessions]);
-	const masterWidth = Math.max(34, Math.min(56, columns - 52));
+	/** The master panel docks left in the topics zoom; the map draws it itself. */
+	const masterWidth =
+		zoom === "topics" ? Math.max(34, Math.min(56, columns - 52)) : 0;
 	const masterRow = Math.floor(bodyHeight / 2);
-	const topics = useMemo(
-		() =>
-			drawTopics({
-				width: Math.max(1, columns - masterWidth),
+	const calm = groups.filter((g) => g.attention === 0).length;
+	const conversation = state?.conversation ?? [];
+	/** The selected NEEDS YOU item, as the map's master box shows it. */
+	const masterItem: MasterItem | null = !onMaster
+		? null
+		: focusedPermission
+			? { kind: "permission", permission: focusedPermission }
+			: focused
+				? {
+						kind: "session",
+						session: focused,
+						suggestion: focusedSuggestion?.label ?? null,
+						replyText,
+					}
+				: null;
+	const layout = (() => {
+		const focusElement = (onMaster ? "card" : selected) as CardElement;
+		if (zoom === "map") {
+			const map = drawMap({
+				width: Math.max(1, columns),
 				height: Math.max(1, bodyHeight),
-				masterRow,
 				groups,
 				focusId: card?.id ?? null,
-				focusElement: (onMaster ? "card" : selected) as CardElement,
+				focusElement,
 				focusSuggestion: cardSuggestion?.label ?? null,
 				replyText: onMaster ? null : replyText,
-			}),
-		[
-			columns,
-			masterWidth,
-			bodyHeight,
+				master: {
+					focused: onMaster,
+					thinking: master.status === "thinking",
+					error: master.error,
+					needCount: needs.length + permissions.length,
+					calmTopics: calm,
+					empty: sessions.length === 0,
+					item: masterItem,
+					inputSelected: onMaster && selected === MASTER_INPUT,
+					inputText: masterText,
+					lastMessage: conversation[conversation.length - 1] ?? null,
+				},
+			});
+			return {
+				canvas: map.canvas,
+				nodes: [
+					{ ...map.master, id: MASTER },
+					...map.rows.map((r) => ({ ...r, id: r.sessionId })),
+				],
+			};
+		}
+		const topics = drawTopics({
+			width: Math.max(1, columns - masterWidth),
+			height: Math.max(1, bodyHeight),
 			masterRow,
 			groups,
-			card?.id,
-			onMaster,
-			selected,
-			cardSuggestion?.label,
-			replyText,
-		],
-	);
-	/** The map's nodes in canvas cells; the master sits left of the canvas. */
-	const nodes: NodeBox[] = [
-		{ id: MASTER, x: -masterWidth, y: 0, w: masterWidth, h: bodyHeight },
-		...topics.cards.map((c) => ({ ...c, id: c.sessionId })),
-	];
+			focusId: card?.id ?? null,
+			focusElement,
+			focusSuggestion: cardSuggestion?.label ?? null,
+			replyText: onMaster ? null : replyText,
+		});
+		// The master sits left of the canvas.
+		return {
+			canvas: topics.canvas,
+			nodes: [
+				{ id: MASTER, x: -masterWidth, y: 0, w: masterWidth, h: bodyHeight },
+				...topics.cards.map((c) => ({ ...c, id: c.sessionId })),
+			],
+		};
+	})();
+	/** The focusable nodes on screen, in canvas cells. */
+	const nodes: NodeBox[] = layout.nodes;
+	const nodeIds = nodes.map((n) => n.id).join(" ");
 
 	const focusNode = (id: string, at: string | null = null) => {
 		setNode(id);
@@ -232,15 +289,14 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 	// Keep focus on a card that is still on the map; otherwise the master has it.
 	useEffect(() => {
-		if (node === MASTER || topics.cards.some((c) => c.sessionId === node))
-			return;
+		if (nodeIds.split(" ").includes(node)) return;
 		// All sessions: one archived as soon as it arrived has still arrived.
 		if (node === arriving.current && !allSessions.some((s) => s.id === node))
 			return;
 		arriving.current = null;
 		setNode(MASTER);
 		setElement(null);
-	}, [topics, node, allSessions]);
+	}, [nodeIds, node, allSessions]);
 
 	useEffect(() => {
 		if (!notice) return;
@@ -361,6 +417,27 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		sent.catch(fail);
 	};
 
+	/** Sessions matching a search, in the order the map draws them. */
+	const matches = (query: string): Session[] => {
+		const q = query.trim().toLowerCase();
+		if (!q) return [];
+		return groups
+			.flatMap((g) => g.sessions)
+			.filter((s) =>
+				[s.name, s.topic ?? UNSORTED, s.branch ?? ""].some((field) =>
+					field.toLowerCase().includes(q),
+				),
+			);
+	};
+	const searchHits = search ? matches(search.query) : [];
+
+	/** Types into the search and focuses the first hit as it narrows. */
+	const typeSearch = (current: Search, query: string) => {
+		setSearch({ ...current, query });
+		const first = matches(query)[0];
+		if (first) focusNode(first.id);
+	};
+
 	const recentReplies = (): string[] => {
 		const pick =
 			focusedSuggestion?.kind === "reply" ? focusedSuggestion.text : null;
@@ -468,6 +545,28 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				return;
 			}
 
+			const finding = searchRef.current;
+			if (finding !== null) {
+				if (key.escape) {
+					setSearch(null);
+					return focusNode(finding.from.node, finding.from.element);
+				}
+				if (key.return) return setSearch(null);
+				if (key.tab || key.upArrow || key.downArrow) {
+					const hits = matches(finding.query);
+					if (!hits.length) return;
+					const at = hits.findIndex((h) => h.id === node);
+					const back = key.upArrow || (key.tab && key.shift);
+					const next = (at + (back ? hits.length - 1 : 1)) % hits.length;
+					return focusNode((hits[next] ?? (hits[0] as Session)).id);
+				}
+				const edit = editText(finding.query, input, key);
+				if (!edit) return;
+				typeSearch(finding, edit.value);
+				if (edit.submit) setSearch(null);
+				return;
+			}
+
 			if (overlay?.kind === "help") {
 				if (input === "?" || key.escape) setOverlay(null);
 				return;
@@ -482,6 +581,11 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			}
 
 			if (key.tab) return cycleNeeds(key.shift);
+			// One level up: topics › map. The map is the top.
+			if (key.escape) {
+				if (zoom === "topics") setZoom("map");
+				return;
+			}
 			const dir = { w: "up", s: "down", a: "left", d: "right" } as const;
 			const move = dir[input as keyof typeof dir];
 			if (move) return focusNode(moveFocus(nodes, node, move) ?? MASTER);
@@ -513,6 +617,14 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					return exit();
 				case "?":
 					return setOverlay({ kind: "help" });
+				case "z":
+					return setZoom("topics");
+				case "Z":
+					return setZoom("map");
+				case "c":
+					return focusNode(MASTER);
+				case "/":
+					return setSearch({ query: "", from: { node, element } });
 				case "g":
 					return setMasterText("");
 				case "N":
@@ -587,9 +699,16 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					return;
 				case "i":
 					return startReply();
+				case "r":
+					return setOverlay({ kind: "rename", sessionId: focused.id });
 			}
 		},
-		{ isActive: overlay?.kind !== "new" && overlay?.kind !== "import" },
+		{
+			isActive:
+				overlay?.kind !== "new" &&
+				overlay?.kind !== "import" &&
+				overlay?.kind !== "rename",
+		},
 	);
 
 	const importSessions = async (claudeSessionIds: string[]) => {
@@ -602,6 +721,11 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		setNotice(
 			`imported ${adopted.length} ${adopted.length === 1 ? "session" : "sessions"}`,
 		);
+	};
+
+	const renameSession = async (id: string, name: string) => {
+		await call("session.rename", { id, name });
+		setOverlay(null);
 	};
 
 	const createSession = async (params: CreateSessionParams) => {
@@ -641,9 +765,10 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		);
 	}
 
-	const calm = groups.filter((g) => g.attention === 0).length;
 	const confirmSession =
-		overlay?.kind === "confirm" || overlay?.kind === "kill"
+		overlay?.kind === "confirm" ||
+		overlay?.kind === "kill" ||
+		overlay?.kind === "rename"
 			? allSessions.find((s) => s.id === overlay.sessionId)
 			: undefined;
 	return (
@@ -659,41 +784,56 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				needs={needs.length + permissions.length}
 				connected={connected}
 				masterError={!!master.error}
-				zoom="topics"
+				zoom={zoom}
 			/>
 			<Box height={bodyHeight}>
-				<Box
-					width={masterWidth}
-					height={bodyHeight}
-					flexDirection="column"
-					justifyContent="center"
-				>
-					<MasterPanel
+				{zoom === "topics" ? (
+					<Box
 						width={masterWidth}
-						sessions={sessions}
-						needs={needs}
-						suggestions={suggestions}
-						permissions={permissions}
-						conversation={state?.conversation ?? []}
-						master={master}
-						calmTopics={calm}
-						focused={onMaster}
-						selected={onMaster ? selected : null}
-						inputText={masterText}
-						replyText={onMaster ? replyText : null}
-					/>
-				</Box>
-				<CanvasView canvas={topics.canvas} />
+						height={bodyHeight}
+						flexDirection="column"
+						justifyContent="center"
+					>
+						<MasterPanel
+							width={masterWidth}
+							sessions={sessions}
+							needs={needs}
+							suggestions={suggestions}
+							permissions={permissions}
+							conversation={conversation}
+							master={master}
+							calmTopics={calm}
+							focused={onMaster}
+							selected={onMaster ? selected : null}
+							inputText={masterText}
+							replyText={onMaster ? replyText : null}
+						/>
+					</Box>
+				) : null}
+				<CanvasView canvas={layout.canvas} />
 			</Box>
 			<Box width="100%" justifyContent="space-between" paddingX={2}>
-				{notice ? (
+				{search ? (
+					<Text wrap="truncate">
+						<Text color="magenta">/ </Text>
+						<Text color="whiteBright">{search.query}█</Text>
+						<Text color="gray">
+							{"  "}
+							{!search.query.trim()
+								? "name, topic or branch"
+								: searchHits.length
+									? `${Math.max(1, searchHits.findIndex((h) => h.id === node) + 1)} of ${searchHits.length} · Tab next · Enter go · Esc back`
+									: "no match · Esc back"}
+						</Text>
+					</Text>
+				) : notice ? (
 					<Text color="red" wrap="truncate">
 						{notice}
 					</Text>
 				) : (
-					<Text color="gray">
-						<Key>WASD</Key> move · <Key>↑↓</Key> select · <Key>[ ]</Key> topic ·{" "}
-						<Key>Tab</Key> next need · <Key>g</Key> master
+					<Text color="gray" wrap="truncate">
+						<Key>WASD</Key> move · <Key>c</Key> center on master ·{" "}
+						<Key>z Z</Key> zoom · <Key>/</Key> search · <Key>g</Key> master
 					</Text>
 				)}
 				<Text color="gray">
@@ -714,6 +854,15 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					<ImportDialog
 						candidates={overlay.candidates}
 						onSubmit={importSessions}
+						onClose={() => setOverlay(null)}
+					/>
+				</Centered>
+			) : null}
+			{overlay?.kind === "rename" && confirmSession ? (
+				<Centered rows={rows}>
+					<RenameDialog
+						session={confirmSession}
+						onSubmit={(name) => renameSession(confirmSession.id, name)}
 						onClose={() => setOverlay(null)}
 					/>
 				</Centered>

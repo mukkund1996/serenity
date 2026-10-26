@@ -136,7 +136,8 @@ export function NewSessionDialog({
 
 /**
  * Kept to a fixed handful of rows: related keys share one, so a new key
- * joins a row rather than growing the panel. The footer covers WASD and Tab.
+ * joins a row rather than growing the panel. The footer covers WASD, c,
+ * z Z, / and g.
  */
 const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 	[
@@ -144,14 +145,15 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 		[
 			["i Enter", "reply · act on ▸ (attach)"],
 			["o f", "open PR · watch"],
-			["K x", "kill agent · clean up"],
+			["r K x", "rename · kill agent · clean up"],
 		],
 	],
 	[
 		"MAP",
 		[
+			["↑↓ [ ]", "select in node · prev / next topic"],
 			["N I", "new session · import from tmux"],
-			["H", "archived sessions"],
+			["Tab Esc H", "next need · zoom out · archived"],
 			["y e n", "approve · edit · decline"],
 		],
 	],
@@ -200,6 +202,93 @@ export function ShortcutsPanel() {
 			<Box marginTop={1}>
 				<Text color="gray">
 					<Key>q</Key> quits the map · sessions keep running
+				</Text>
+			</Box>
+		</TitledBox>
+	);
+}
+
+/**
+ * Rename a session (r). Starts from the current name; Ctrl+u clears it.
+ * Topics have no rename: the master manages them (ADR 0012).
+ */
+export function RenameDialog({
+	session,
+	onSubmit,
+	onClose,
+}: {
+	session: Session;
+	onSubmit: (name: string) => Promise<void>;
+	onClose: () => void;
+}) {
+	const [name, setName] = useState(session.name);
+	const [error, setError] = useState<string | null>(null);
+	const [busy, setBusy] = useState(false);
+
+	useInput(
+		(input, key) => {
+			if (key.escape) return onClose();
+			const submit = (value: string) => {
+				const next = value.trim().replace(/\s+/g, "-");
+				if (!next) return setError("Give the session a name.");
+				if (next === session.name) return onClose();
+				setBusy(true);
+				setError(null);
+				onSubmit(next).catch((e: Error) => {
+					setBusy(false);
+					setError(e.message);
+				});
+			};
+			if (key.return) return submit(name);
+			setError(null);
+			if (key.ctrl && input === "u") return setName("");
+			if (key.backspace || key.delete) return setName(name.slice(0, -1));
+			if (!input || key.ctrl || key.meta) return;
+			const { text, submit: enter } = splitAtNewline(input);
+			setName(name + text);
+			if (enter) submit(name + text);
+		},
+		{ isActive: !busy },
+	);
+
+	return (
+		<TitledBox
+			title={`Rename ${session.name}`}
+			titleColor="whiteBright"
+			fill="black"
+			borderStyle="double"
+			borderColor="white"
+			width={DIALOG_W}
+			right={<Text color="gray"> Esc close </Text>}
+		>
+			<Box marginTop={1}>
+				<Box width={13} flexShrink={0}>
+					<Text color="gray">Name</Text>
+				</Box>
+				<Box backgroundColor="gray" flexGrow={1}>
+					<Text wrap="truncate-start">
+						<Text color="whiteBright">{name}</Text>
+						<Text color="whiteBright">█</Text>
+					</Text>
+				</Box>
+			</Box>
+			{session.origin === "spawned" ? null : (
+				<Text color="gray" wrap="truncate">
+					its tmux window keeps its name: it is yours
+				</Text>
+			)}
+			<Box marginTop={1} justifyContent="space-between">
+				<Text color="red" wrap="truncate">
+					{error ?? ""}
+				</Text>
+				<Text color="gray">
+					{busy ? (
+						"renaming…"
+					) : (
+						<>
+							<Key>Enter</Key> rename <Key>Ctrl+u</Key> clear
+						</>
+					)}
 				</Text>
 			</Box>
 		</TitledBox>

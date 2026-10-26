@@ -82,6 +82,8 @@ export interface Methods {
 	};
 	/** Restarts an adopted session with `claude --resume` under serenity's hooks. */
 	"session.upgrade": { params: { id: string }; result: null };
+	/** Topics have no rename: only the master manages them (ADR 0012). */
+	"session.rename": { params: { id: string; name: string }; result: Session };
 	"session.watch": { params: { id: string; watched: boolean }; result: null };
 	"session.cleanupPlan": { params: { id: string }; result: CleanupPlan };
 	"session.cleanup": { params: { id: string }; result: null };
