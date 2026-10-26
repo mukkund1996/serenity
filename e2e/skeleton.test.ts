@@ -176,7 +176,7 @@ beforeAll(() => {
 		SERENITY_WORKER_DEBOUNCE_MS: "100",
 		SERENITY_GH_BIN: FAKE_GH,
 		SERENITY_FAKE_GH_DIR: ghDir(),
-		SERENITY_REVIEW_POLL_MS: "300",
+		SERENITY_REVIEW_POLL_MS: "2000",
 		CLAUDE_CONFIG_DIR: join(dir, "claude"),
 	};
 	const envArgs = Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
@@ -587,7 +587,8 @@ test(
 test(
 	"a first prompt typed in the new session dialog reaches the agent",
 	async () => {
-		keys("n");
+		// N, not n: polish may have a cleanup suggestion by now, which n declines.
+		keys("N");
 		await waitFor(/New session/);
 		type("docs");
 		await Bun.sleep(100);
