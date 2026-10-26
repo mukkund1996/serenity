@@ -40,6 +40,14 @@ function tmux(...args: string[]): string {
 const keys = (...k: string[]) => tmux("send-keys", "-t", MAP, ...k);
 const type = (text: string) => tmux("send-keys", "-t", MAP, "-l", text);
 const screen = (target = MAP) => tmux("capture-pane", "-p", "-t", target);
+/** Width of the master panel in the 200-column test window. */
+const MASTER_W = 64;
+/** The map's topics, without the master panel (which lists archived sessions). */
+const mapSide = () =>
+	screen()
+		.split("\n")
+		.map((line) => line.slice(MASTER_W))
+		.join("\n");
 const panesInMap = () =>
 	tmux("list-panes", "-t", MAP, "-F", "#{pane_id}").trim().split("\n");
 
@@ -169,6 +177,7 @@ beforeAll(() => {
 		SERENITY_WORKER_DEBOUNCE_MS: "100",
 		SERENITY_GH_BIN: FAKE_GH,
 		SERENITY_FAKE_GH_DIR: ghDir(),
+		SERENITY_REVIEW_POLL_MS: "2000",
 		CLAUDE_CONFIG_DIR: join(dir, "claude"),
 	};
 	const envArgs = Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
@@ -408,7 +417,8 @@ test(
 					.includes("doomed"),
 			"the doomed window to close",
 		);
-		await until(() => !screen().includes("doomed"), "doomed to leave the map");
+		await until(() => !mapSide().includes("doomed"), "doomed to leave the map");
+		await waitFor(/archived \d+ · H all[^\n]*\n[^\n]*doomed/);
 		expect(existsSync(join(dir, "repos", "demo-doomed"))).toBe(true);
 		keys("H");
 		await waitFor(/doomed · doomed/);
@@ -454,6 +464,29 @@ test(
 			() => !screen().includes("Request review"),
 			"the review suggestion to go",
 		);
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"the master lists my open PRs and, once polled, the PRs waiting for my review",
+	async () => {
+		await waitFor(/MY PRS 1/);
+		expect(screen()).toMatch(/#7 Ship it\s+checks passing/);
+		writeFileSync(
+			join(ghDir(), "review-requests.json"),
+			JSON.stringify([
+				{
+					number: 41,
+					url: "https://github.com/o/demo/pull/41",
+					title: "Retry gh calls",
+					author: { login: "ana" },
+					updatedAt: new Date().toISOString(),
+				},
+			]),
+		);
+		await waitFor(/REVIEW 1/);
+		expect(screen()).toMatch(/#41 Retry gh calls\s+@ana now/);
 	},
 	STEP_TIMEOUT,
 );
@@ -555,7 +588,7 @@ test(
 test(
 	"a first prompt typed in the new session dialog reaches the agent",
 	async () => {
-		// N, not n: n would decline a suggestion that just reached the focused node.
+		// N, not n: polish may have a cleanup suggestion by now, which n declines.
 		keys("N");
 		await waitFor(/New session/);
 		type("docs");

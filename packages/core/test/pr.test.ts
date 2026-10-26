@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { makeSession } from "@serenity/core/testing";
 import {
+	myPullRequests,
 	ownersFor,
+	type PrInfo,
 	parseCodeowners,
 	parsePr,
+	parseReviewRequests,
 	prStatus,
 	reviewerCandidates,
 	rollupChecks,
@@ -157,5 +161,66 @@ src/api/     @dave @o/api-team
 				exclude: ["Me", null],
 			}),
 		).toEqual(["alice", "bob"]);
+	});
+});
+
+describe("the master's GitHub", () => {
+	test("review requests: newest updated first, at most three, junk dropped", () => {
+		const item = (number: number, updatedAt: string) => ({
+			number,
+			url: `https://github.com/o/r/pull/${number}`,
+			title: `t${number}`,
+			author: { login: "ana" },
+			updatedAt,
+		});
+		const parsed = parseReviewRequests([
+			item(1, "2026-10-20T10:00:00Z"),
+			item(2, "2026-10-25T10:00:00Z"),
+			{ title: "no number" },
+			item(3, "2026-10-22T10:00:00Z"),
+			item(4, "2026-10-24T10:00:00Z"),
+		]);
+		expect(parsed.map((r) => r.number)).toEqual([2, 4, 3]);
+		expect(parsed[0]).toEqual({
+			number: 2,
+			url: "https://github.com/o/r/pull/2",
+			title: "t2",
+			author: "ana",
+			updatedAt: Date.parse("2026-10-25T10:00:00Z"),
+		});
+		expect(parseReviewRequests({})).toEqual([]);
+	});
+
+	test("my PRs: open, mine, one row per PR, newest first, never archived", () => {
+		const pr = (number: number, more: Partial<PrInfo> = {}): PrInfo => ({
+			number,
+			url: `u${number}`,
+			title: `t${number}`,
+			state: "OPEN",
+			isDraft: false,
+			checks: "passing",
+			reviewDecision: null,
+			reviewRequests: [],
+			reviewed: false,
+			author: "Me",
+			headRefOid: "",
+			baseRefName: "main",
+			files: [],
+			...more,
+		});
+		const sessions = [
+			makeSession({ id: "a", pr: pr(3) }),
+			makeSession({ id: "b", pr: pr(5) }),
+			makeSession({ id: "shared", pr: pr(5) }),
+			makeSession({ id: "merged", pr: pr(6, { state: "MERGED" }) }),
+			makeSession({ id: "theirs", pr: pr(7, { author: "bob" }) }),
+			makeSession({ id: "old", pr: pr(8), status: "archived" }),
+			makeSession({ id: "none", pr: null }),
+		];
+		const ids = (user: string | null) =>
+			myPullRequests(sessions, user).map((m) => m.session.id);
+		expect(ids("me")).toEqual(["b", "a"]);
+		// Before gh names the user, every open PR counts.
+		expect(ids(null)).toEqual(["theirs", "b", "a"]);
 	});
 });

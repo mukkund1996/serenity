@@ -5,6 +5,7 @@ import {
 	groupTopics,
 	type ImportCandidate,
 	type MasterState,
+	myPullRequests,
 	needsYou,
 	type Session,
 	type Suggestion,
@@ -24,9 +25,12 @@ import {
 	Key,
 	MASTER_INPUT,
 	MasterPanel,
+	MY_PR_ROW,
+	REVIEW_ROW,
 	SessionMaster,
 } from "./components";
 import { drawMap, type MasterItem, rowElements } from "./map";
+import { MAX_ARCHIVED, planMaster } from "./master-layout";
 import { openUrl } from "./open-url";
 import {
 	ArchivedList,
@@ -177,14 +181,70 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const suggestionFor = (id: string | undefined): Suggestion | undefined =>
 		suggestions.find((g) => g.sessionId === id);
 	const onMaster = node === MASTER;
+	const bodyHeight = rows - 2;
+	const masterWidth = Math.max(38, Math.min(64, columns - 50));
+
+	const github = state?.github ?? { user: null, reviewRequests: [] };
+	const mine = useMemo(
+		() => myPullRequests(sessions, github.user),
+		[sessions, github.user],
+	);
+	const archivedSessions = useMemo(
+		() =>
+			allSessions
+				.filter((s) => s.status === "archived")
+				.sort((a, b) => b.updatedAt - a.updatedAt),
+		[allSessions],
+	);
+	// Planned with the raw selection: only its place in NEEDS YOU matters here.
+	const plan = planMaster({
+		height: bodyHeight,
+		inner: masterWidth - 6,
+		empty: sessions.length === 0,
+		needs: [
+			...permissions.map((p) => ({ id: `${PERM}${p.id}`, rows: 2 })),
+			...needs.map((s) => ({
+				id: s.id,
+				rows:
+					2 +
+					(suggestionFor(s.id) ? 1 : 0) +
+					(onMaster && element === s.id && replyText !== null ? 1 : 0),
+			})),
+		],
+		selected: onMaster ? element : null,
+		conversation: state?.conversation ?? [],
+		reviews: github.reviewRequests,
+		mine,
+		archived: archivedSessions.slice(0, MAX_ARCHIVED),
+	});
+	/** The URL of a PR row selected in the master: a review request or one of mine. */
+	const linkOf = (id: string | null): string | null => {
+		if (id?.startsWith(REVIEW_ROW))
+			return (
+				plan.reviews.find((r) => `${REVIEW_ROW}${r.number}` === id)?.url ?? null
+			);
+		if (id?.startsWith(MY_PR_ROW))
+			return (
+				plan.mine.find((m) => `${MY_PR_ROW}${m.pr.number}` === id)?.pr.url ??
+				null
+			);
+		return null;
+	};
 	const card = onMaster ? null : (sessions.find((s) => s.id === node) ?? null);
 	const cardSuggestion = suggestionFor(card?.id);
 
-	/** What ↑↓ step through: the master's requests, NEEDS YOU and its input, or a card's rows. */
+	/** What ↑↓ step through: the master's requests, NEEDS YOU, its PR rows and input, or a card's rows. */
 	const elements: string[] = onMaster
 		? [
 				...permissions.map((p) => `${PERM}${p.id}`),
 				...needs.map((s) => s.id),
+				// The map's master box has no PR rows to select.
+				...(zoom === "topics"
+					? [
+							...plan.reviews.map((r) => `${REVIEW_ROW}${r.number}`),
+							...plan.mine.map((m) => `${MY_PR_ROW}${m.pr.number}`),
+						]
+					: []),
 				MASTER_INPUT,
 			]
 		: zoom === "map"
@@ -201,14 +261,13 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		? (sessions.find((s) => s.id === selected) ?? null)
 		: card;
 	const focusedSuggestion = suggestionFor(focused?.id);
+	const selectedLink = onMaster ? linkOf(selected) : null;
 
-	const bodyHeight = rows - 2;
 	/** Rows of the archived list shown at once: the screen less its frame, padding and hints. */
 	const archivedHeight = Math.max(3, rows - 8);
 	const archived = useMemo(() => archivedRows(allSessions), [allSessions]);
 	/** The master panel docks left in the topics zoom; the map draws it itself. */
-	const masterWidth =
-		zoom === "topics" ? Math.max(34, Math.min(56, columns - 52)) : 0;
+	const panelWidth = zoom === "topics" ? masterWidth : 0;
 	const masterRow = Math.floor(bodyHeight / 2);
 	const calm = groups.filter((g) => g.attention === 0).length;
 	const conversation = state?.conversation ?? [];
@@ -258,7 +317,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			};
 		}
 		const topics = drawTopics({
-			width: Math.max(1, columns - masterWidth),
+			width: Math.max(1, columns - panelWidth),
 			height: Math.max(1, bodyHeight),
 			masterRow,
 			groups,
@@ -271,7 +330,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		return {
 			canvas: topics.canvas,
 			nodes: [
-				{ id: MASTER, x: -masterWidth, y: 0, w: masterWidth, h: bodyHeight },
+				{ id: MASTER, x: -panelWidth, y: 0, w: panelWidth, h: bodyHeight },
 				...topics.cards.map((c) => ({ ...c, id: c.sessionId })),
 			],
 		};
@@ -337,6 +396,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const activate = () => {
 		if (onMaster) {
 			if (selected === MASTER_INPUT) return setMasterText("");
+			if (selectedLink) return openUrl(selectedLink);
 			if (focused) attach(focused);
 			return;
 		}
@@ -647,6 +707,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					return;
 			}
 			if (key.return) return activate();
+			if (input === "o" && selectedLink) return openUrl(selectedLink);
 			if (!focused) return;
 			switch (input) {
 				case "y":
@@ -803,6 +864,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							conversation={conversation}
 							master={master}
 							calmTopics={calm}
+							plan={plan}
+							archivedTotal={archivedSessions.length}
 							focused={onMaster}
 							selected={onMaster ? selected : null}
 							inputText={masterText}

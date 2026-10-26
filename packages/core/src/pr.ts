@@ -3,6 +3,8 @@
  * card shows and what the master needs. Pure, so it is tested with fixtures.
  */
 
+import type { Session } from "./domain";
+
 export type ChecksState = "failing" | "running" | "passing" | "none";
 
 export interface PrInfo {
@@ -157,6 +159,75 @@ export function wantsReviewer(pr: PrInfo): boolean {
 		pr.reviewRequests.length === 0 &&
 		!pr.reviewed
 	);
+}
+
+// ------------------------------------------------------- the master's GitHub
+
+/** An open PR in the repo that asks the user for a review (ADR 0011). */
+export interface ReviewRequest {
+	number: number;
+	url: string;
+	title: string;
+	author: string | null;
+	/** Last update, ms since the epoch. */
+	updatedAt: number;
+}
+
+/** What the master panel shows from GitHub beyond the sessions' own PRs. */
+export interface GithubState {
+	/** The logged-in gh user; null until known. */
+	user: string | null;
+	/** Newest updated first, at most REVIEW_LIMIT. */
+	reviewRequests: ReviewRequest[];
+}
+
+export const REVIEW_LIMIT = 3;
+
+/** The fields serenity asks `gh pr list` for. */
+export const REVIEW_FIELDS = "number,url,title,author,updatedAt";
+
+/** Parses `gh pr list --json <REVIEW_FIELDS>` output, newest updated first. */
+export function parseReviewRequests(raw: unknown): ReviewRequest[] {
+	if (!Array.isArray(raw)) return [];
+	const out: ReviewRequest[] = [];
+	for (const item of raw as Array<Record<string, unknown>>) {
+		if (typeof item?.number !== "number" || typeof item.url !== "string")
+			continue;
+		const author = (item.author as { login?: unknown } | null)?.login;
+		const updatedAt =
+			typeof item.updatedAt === "string" ? Date.parse(item.updatedAt) : 0;
+		out.push({
+			number: item.number,
+			url: item.url,
+			title: typeof item.title === "string" ? item.title : "",
+			author: typeof author === "string" ? author : null,
+			updatedAt: Number.isNaN(updatedAt) ? 0 : updatedAt,
+		});
+	}
+	return out.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, REVIEW_LIMIT);
+}
+
+/**
+ * The user's open PRs from sessions on the map, one row per PR (imported
+ * sessions can share a branch), newest first. Archived sessions are left out:
+ * their PRs are no longer refreshed. Without a known user, every PR counts.
+ */
+export function myPullRequests(
+	sessions: Session[],
+	user: string | null,
+): Array<{ session: Session; pr: PrInfo }> {
+	const seen = new Set<number>();
+	const out: Array<{ session: Session; pr: PrInfo }> = [];
+	for (const session of sessions) {
+		const pr = session.pr;
+		if (pr?.state !== "OPEN" || session.status === "archived") continue;
+		if (user && pr.author && pr.author.toLowerCase() !== user.toLowerCase())
+			continue;
+		if (seen.has(pr.number)) continue;
+		seen.add(pr.number);
+		out.push({ session, pr });
+	}
+	return out.sort((a, b) => b.pr.number - a.pr.number);
 }
 
 // ---------------------------------------------------------------- CODEOWNERS
