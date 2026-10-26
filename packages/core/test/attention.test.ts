@@ -3,6 +3,7 @@ import {
 	archivedTopics,
 	groupTopics,
 	needsYou,
+	PINNED,
 	UNSORTED,
 } from "../src/attention";
 import { makeSession } from "../test-support";
@@ -17,6 +18,13 @@ describe("needsYou", () => {
 			makeSession({ id: "done-unwatched", status: "done" }),
 		]);
 		expect(list.map((s) => s.id)).toEqual(["done", "wait", "dead"]);
+	});
+
+	test("an ended pinned session waits to be resumed, not on you", () => {
+		const list = needsYou([
+			makeSession({ id: "kept", status: "dead", pinned: true }),
+		]);
+		expect(list).toEqual([]);
 	});
 });
 
@@ -35,6 +43,17 @@ describe("groupTopics", () => {
 			"studio",
 		]);
 		expect(groups[0]?.counts).toEqual({ waiting: 1, working: 0, done: 0 });
+	});
+
+	test("pinned sessions sit under the pinned topic, always first", () => {
+		const groups = groupTopics([
+			makeSession({ id: "1", topic: "infra", status: "waiting" }),
+			makeSession({ id: "2", topic: "infra", status: "idle", pinned: true }),
+			makeSession({ id: "3", topic: null, status: "dead", pinned: true }),
+		]);
+		expect(groups.map((g) => g.name)).toEqual([PINNED, "infra"]);
+		expect(groups[0]?.sessions.map((s) => s.id)).toEqual(["2", "3"]);
+		expect(groups[0]?.attention).toBe(0);
 	});
 
 	test("leaves archived sessions out; an all-archived topic is gone", () => {

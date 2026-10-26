@@ -109,6 +109,16 @@ describe("PrWatcher", () => {
 		});
 	});
 
+	test("a pinned session shows the merge but is not finished by it", async () => {
+		put({ id: "s1", status: "idle", pinned: true });
+		gh.lookup = { pr: pr({ state: "MERGED" }), error: null };
+		await watcher.refresh("s1");
+		expect(storage.sessions.get("s1")).toMatchObject({
+			status: "idle",
+			pr: { state: "MERGED" },
+		});
+	});
+
 	test("a busy session keeps its status", async () => {
 		put({ id: "s1", status: "working" });
 		gh.lookup = { pr: pr({ state: "MERGED" }), error: null };

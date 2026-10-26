@@ -371,6 +371,23 @@ export class Daemon {
 			return null;
 		},
 
+		"session.pin": ({ id, pinned }) => {
+			const session = this.requireSession(id);
+			if (session.status === "archived")
+				throw new RpcError(
+					RpcErrorCode.InvalidParams,
+					`${session.name} is archived`,
+				);
+			// A pinned session is never done: it waits for its next task.
+			this.change(session, {
+				pinned,
+				...(pinned && session.status === "done" ? { status: "idle" } : {}),
+			});
+			if (pinned) this.master.supersede(session.id, "cleanup");
+			this.broadcast(session.repo);
+			return null;
+		},
+
 		"session.cleanupPlan": async ({ id }) =>
 			cleanupPlan(
 				this.requireSession(id),
@@ -650,8 +667,12 @@ export class Daemon {
 		return cleanupPlan(session, facts);
 	}
 
-	/** Joins the session's pane beside the map pane, or switches to an adopted one. */
-	private async attach(session: Session, clientPane: string): Promise<void> {
+	/**
+	 * Joins the session's pane beside the map pane, or switches to an adopted
+	 * one. A pinned session that ended is resumed first.
+	 */
+	private async attach(found: Session, clientPane: string): Promise<void> {
+		const session = found.pinned ? await this.resume(found) : found;
 		const pane = await this.requireLivePane(session);
 		const current = this.attached.get(session.repo);
 		if (current) await this.detach(current.sessionId);
@@ -679,6 +700,53 @@ export class Daemon {
 		}
 		this.prs.schedule(session.id, 0);
 		this.broadcast(session.repo);
+	}
+
+	/**
+	 * Brings back a pinned session whose pane is gone in a new window of its
+	 * own, continuing its conversation with `claude --resume` (ADR 0022). An
+	 * imported one comes back as serenity's, under its hooks.
+	 */
+	private async resume(session: Session): Promise<Session> {
+		if (session.status === "archived") return session;
+		if (session.tmuxPane && (await this.tmux.paneExists(session.tmuxPane)))
+			return session;
+		if (!existsSync(session.cwd))
+			throw new RpcError(
+				RpcErrorCode.InvalidParams,
+				`${session.name} cannot resume: ${session.cwd} is gone`,
+			);
+		if (session.tracking === "observed") this.observer.forget(session.id);
+		const tmuxSession = tmuxSessionName(session.repo);
+		await this.tmux.ensureSession(tmuxSession, session.repo);
+		const resume = session.claudeSessionId
+			? ["--resume", session.claudeSessionId]
+			: [];
+		const pane = await this.tmux.newWindow({
+			session: tmuxSession,
+			name: session.name,
+			cwd: session.cwd,
+			env: { SERENITY_SESSION_ID: session.id, SERENITY_HOME: this.opts.home },
+			command: agentCommand(
+				[...this.claudeCommand, ...resume],
+				hookSettingsPath(this.opts.home),
+				this.self,
+			),
+		});
+		await this.tmux.setPaneOption(pane, "@serenity_session", session.id);
+		const next = this.change(session, {
+			tmuxPane: pane,
+			origin: "spawned",
+			tracking: "hooks",
+			claudePid: null,
+			status: "idle",
+			ask: null,
+			waitingOn: null,
+		});
+		this.watchStartup(session.id);
+		this.log(`resumed ${session.name} in ${session.cwd} (pane ${pane})`);
+		this.broadcast(session.repo);
+		return next;
 	}
 
 	/** The master's open_session: attach beside a map showing this repo. */
@@ -772,15 +840,14 @@ export class Daemon {
 				"name: letters, digits, . _ - (max 40)",
 			);
 		}
-		const clash = this.opts.storage.sessions
-			.listByRepo(repo)
-			.find(
-				(s) =>
-					s.id !== self &&
-					s.name === name &&
-					s.status !== "archived" &&
-					s.status !== "dead",
-			);
+		const clash = this.opts.storage.sessions.listByRepo(repo).find(
+			(s) =>
+				s.id !== self &&
+				s.name === name &&
+				s.status !== "archived" &&
+				// An ended pinned session keeps its name; attaching resumes it.
+				(s.status !== "dead" || s.pinned),
+		);
 		if (clash)
 			throw new RpcError(
 				RpcErrorCode.InvalidParams,
@@ -880,6 +947,7 @@ export class Daemon {
 			transcriptPath: null,
 			claudeSessionId: null,
 			watched: false,
+			pinned: false,
 			createdAt: at,
 			updatedAt: at,
 		};

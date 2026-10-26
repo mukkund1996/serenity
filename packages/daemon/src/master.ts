@@ -10,6 +10,7 @@ import {
 	type MasterToolResult,
 	needsSuggestion,
 	normalizeTopic,
+	PINNED,
 	parseSuggestion,
 	parseSummary,
 	type Session,
@@ -153,14 +154,17 @@ export class MasterSupervisor {
 
 	/**
 	 * The repo's topics on the map, leaving out `except`'s own session. One
-	 * whose sessions are all archived has left the map.
+	 * whose sessions are all archived has left the map. Pinned sessions are
+	 * drawn under the pinned topic, so theirs do not count.
 	 */
 	private topics(repo: string, except?: string): string[] {
 		return [
 			...new Set(
 				this.host.storage.sessions
 					.listByRepo(repo)
-					.filter((s) => s.status !== "archived" && s.id !== except)
+					.filter(
+						(s) => s.status !== "archived" && !s.pinned && s.id !== except,
+					)
 					.map((s) => s.topic)
 					.filter((c): c is string => !!c),
 			),
@@ -220,13 +224,13 @@ export class MasterSupervisor {
 
 	// ------------------------------------------------------------- suggestions
 
-	/** Pending suggestions of a session that a newer one replaces. */
-	supersede(sessionId: string): void {
+	/** Pending suggestions of a session (or only those of `kind`) that no longer apply. */
+	supersede(sessionId: string, kind?: SuggestionKind): void {
 		const session = this.host.storage.sessions.get(sessionId);
 		if (!session) return;
 		let changed = false;
 		for (const g of this.host.storage.suggestions.listPending(session.repo)) {
-			if (g.sessionId !== sessionId) continue;
+			if (g.sessionId !== sessionId || (kind && g.kind !== kind)) continue;
 			this.host.storage.suggestions.put({
 				...g,
 				status: "superseded",
@@ -362,6 +366,11 @@ export class MasterSupervisor {
 		if (name === "set_topic") {
 			const topic = normalizeTopic(args.topic);
 			if (!topic) return { text: "Give a topic name.", isError: true };
+			if (session.pinned || topic === PINNED)
+				return {
+					text: "Only the user pins and unpins sessions, with p.",
+					isError: true,
+				};
 			// Topics left once the session moves: a topic's last session may leave it.
 			const topics = this.topics(repo, session.id);
 			if (!capTopic(topic, topics, this.host.maxTopics))
@@ -477,6 +486,8 @@ export function chatSuggestionProblem(
 			? null
 			: `${session.name} is not waiting on a permission prompt.`;
 	if (kind === "cleanup") {
+		if (session.pinned)
+			return `${session.name} is pinned for reuse; the user cleans it up with x.`;
 		if (session.status === "working")
 			return `${session.name} is still working.`;
 		if (session.pr?.state === "OPEN")

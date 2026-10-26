@@ -1,3 +1,4 @@
+import { PINNED, topicOf } from "./attention";
 import type { Session, Suggestion, SuggestionKind } from "./domain";
 import { prStatus } from "./pr";
 
@@ -54,13 +55,15 @@ export function nextTopic(
 
 /**
  * A topic proposal under the cap: an existing topic, or a new one while
- * there are fewer than `maxTopics`. Anything else is dropped (null).
+ * there are fewer than `maxTopics`. Anything else is dropped (null), as is
+ * the pinned topic, which only the user's pin puts a session in.
  */
 export function capTopic(
 	proposed: string | null,
 	topics: string[],
 	maxTopics: number,
 ): string | null {
+	if (proposed === PINNED) return null;
 	if (!proposed || topics.includes(proposed)) return proposed;
 	return topics.length < maxTopics ? proposed : null;
 }
@@ -136,7 +139,8 @@ export function parseSummary(raw: unknown): SummaryResult | null {
 /**
  * What a summary changes on the session. An ask makes it wait on a question;
  * a finished task is done. Only applied to a session that is still idle, so
- * a summary arriving late never overrides newer activity.
+ * a summary arriving late never overrides newer activity. A pinned session
+ * keeps its topic for when it is unpinned, and is never done (ADR 0022).
  */
 export function applySummary(
 	session: Session,
@@ -144,14 +148,14 @@ export function applySummary(
 ): Partial<Session> {
 	const patch: Partial<Session> = {
 		summary: result.summary,
-		...nextTopic(session, result.topic),
+		...(session.pinned ? {} : nextTopic(session, result.topic)),
 	};
 	if (session.status !== "idle") return patch;
 	if (result.ask) {
 		patch.status = "waiting";
 		patch.waitingOn = "question";
 		patch.ask = result.ask;
-	} else if (result.finished) {
+	} else if (result.finished && !session.pinned) {
 		patch.status = "done";
 	}
 	return patch;
@@ -201,7 +205,7 @@ export function suggestionPrompt(session: Session): string {
 		session.waitingOn === "question" || session.waitingOn === null
 			? "- reply: the agent asked a question; text is the short reply the user would most likely send."
 			: null,
-		session.status === "done"
+		session.status === "done" && !session.pinned
 			? `- cleanup: the task is finished; stop the session${session.worktree ? " and remove its worktree" : ""}.`
 			: null,
 		"- none: nothing sensible to suggest.",
@@ -243,6 +247,7 @@ export function parseSuggestion(
 	if (
 		r.kind === "cleanup" &&
 		session.status === "done" &&
+		!session.pinned &&
 		session.pr?.state !== "OPEN"
 	)
 		return { kind: "cleanup", label, text: null };
@@ -270,7 +275,7 @@ export function chatSnapshot(
 	if (!sessions.length) return "Sessions: none yet.";
 	const lines = sessions.map((s) => {
 		const parts = [
-			`- ${s.name} [${s.topic ?? "unsorted"}] ${s.status}${s.waitingOn ? ` on ${s.waitingOn}` : ""}`,
+			`- ${s.name} [${topicOf(s)}] ${s.status}${s.waitingOn ? ` on ${s.waitingOn}` : ""}`,
 		];
 		if (s.ask) parts.push(`asks: ${s.ask}`);
 		if (s.pr || s.prError) parts.push(prLine(s));

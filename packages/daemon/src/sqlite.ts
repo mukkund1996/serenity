@@ -64,6 +64,7 @@ const SESSION_DEFAULTS: Pick<
 	| "origin"
 	| "tracking"
 	| "claudePid"
+	| "pinned"
 > = {
 	waitingOn: null,
 	waitingSince: null,
@@ -73,6 +74,7 @@ const SESSION_DEFAULTS: Pick<
 	origin: "spawned",
 	tracking: "hooks",
 	claudePid: null,
+	pinned: false,
 };
 
 /** Rows written before "category" was renamed to "topic". */

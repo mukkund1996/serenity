@@ -116,6 +116,40 @@ describe("summaries", () => {
 		]);
 	});
 
+	test("a pinned session's finished task leaves it idle, in its topic, with no cleanup", async () => {
+		put({ id: "a", status: "working", topic: "auth", pinned: true });
+		runner.answers.push({
+			summary: "Refresh tokens rotate now.",
+			ask: null,
+			finished: true,
+			topic: "backend",
+		});
+		change("a", { status: "idle", lastAssistantMessage: "Done. Tests pass." });
+		await settle();
+		expect(storage.sessions.get("a")).toMatchObject({
+			summary: "Refresh tokens rotate now.",
+			topic: "auth",
+			status: "idle",
+		});
+		expect(runner.calls).toHaveLength(1);
+		expect(storage.suggestions.listPending(REPO)).toEqual([]);
+	});
+
+	test("pinned sessions' topics do not count toward the cap", async () => {
+		put({ id: "t1", name: "one", topic: "backend" });
+		put({ id: "t2", name: "two", topic: "infra", pinned: true });
+		put({ id: "a", status: "working" });
+		runner.answers.push({
+			summary: "s",
+			ask: null,
+			finished: false,
+			topic: "web",
+		});
+		change("a", { status: "idle", lastAssistantMessage: "x" });
+		await settle();
+		expect(runner.calls[0]?.prompt).toContain("Existing topics: backend\n");
+	});
+
 	test("at the topic cap the summarizer must reuse a topic, and a new one is dropped", async () => {
 		put({ id: "t1", name: "one", topic: "backend" });
 		put({ id: "t2", name: "two", topic: "infra" });
@@ -267,6 +301,34 @@ describe("chat", () => {
 			topic: "Infra",
 		});
 		expect(storage.sessions.get("a")?.topic).toBe("infra");
+	});
+
+	test("set_topic leaves pinning to the user", async () => {
+		put({ id: "a", name: "api-auth", topic: "backend" });
+		put({ id: "b", name: "kept", topic: "backend", pinned: true });
+		const toPinned = await master.handleTool(REPO, "set_topic", {
+			session: "api-auth",
+			topic: "pinned",
+		});
+		expect(toPinned.isError).toBe(true);
+		const fromPinned = await master.handleTool(REPO, "set_topic", {
+			session: "kept",
+			topic: "infra",
+		});
+		expect(fromPinned.isError).toBe(true);
+		expect(storage.sessions.get("a")?.topic).toBe("backend");
+		expect(storage.sessions.get("b")?.topic).toBe("backend");
+	});
+
+	test("the chat cannot suggest cleaning up a pinned session", async () => {
+		put({ id: "a", name: "kept", status: "idle", pinned: true });
+		const result = await master.handleTool(REPO, "suggest", {
+			session: "kept",
+			kind: "cleanup",
+			label: "Clean up",
+		});
+		expect(result.isError).toBe(true);
+		expect(result.text).toContain("pinned");
 	});
 
 	test("set_topic refuses a new topic past the cap", async () => {
