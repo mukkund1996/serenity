@@ -29,4 +29,10 @@ test("hook settings run serenity hook for every event, shell-quoted", () => {
 		},
 	]);
 	expect(Object.keys(settings.hooks)).toContain("PermissionRequest");
+	expect(settings).toMatchObject({
+		statusLine: {
+			type: "command",
+			command: "'/opt/my bin/serenity' statusline",
+		},
+	});
 });

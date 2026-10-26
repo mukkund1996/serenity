@@ -192,6 +192,7 @@ export class ClaudeObserver {
 				summary: null,
 				ask: null,
 				waitingOn: null,
+				waitingSince: null,
 				topicCandidate: null,
 				lastPrompt: null,
 				lastAssistantMessage: null,

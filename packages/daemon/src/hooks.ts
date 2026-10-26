@@ -11,7 +11,8 @@ export function shellQuote(arg: string): string {
 /**
  * The settings file passed to every spawned session with `claude --settings`
  * (ADR 0006). Each hook runs `serenity hook <Event>`; the user's own settings
- * are untouched.
+ * are untouched. The status line runs `serenity statusline`, which reports
+ * plan usage and still prints the user's own status line (ADR 0020).
  */
 export function hookSettings(selfCommand: string[]): object {
 	const base = selfCommand.map(shellQuote).join(" ");
@@ -27,7 +28,10 @@ export function hookSettings(selfCommand: string[]): object {
 			],
 		]),
 	);
-	return { hooks };
+	return {
+		hooks,
+		statusLine: { type: "command", command: `${base} statusline` },
+	};
 }
 
 /**
