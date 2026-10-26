@@ -18,7 +18,7 @@ Copied from the design canvas "Agent Mind Map CLI — Screens" ([source](https:/
 | `4a · Reply` | `i` focuses the card's input row. `Tab` in the input opens recent replies; the master's pick is first and highlighted. |
 | `4b · Confirm` | Opens on `x`, on `e` for a cleanup suggestion, or when `y` is pressed but something is unsafe. Lists every step plus a safety line (uncommitted changes, unpushed commits, PR merged). |
 | `4c · Slack draft` | **v2.** Only when the master decides a message is worth sending. Destination, why, editable text. Nothing is sent without `y`. |
-| `4d · New session` | Name, working dir, new worktree or existing branch. No topic field: the master places the node. |
+| `4d · New session` | Name, an optional first prompt (passed to `claude` when it starts), working dir, new worktree or existing branch. No topic field: the master places the node. |
 | `4e · Shortcuts` | `?` toggles a small panel at the bottom right. The only place the full keymap and legend live. |
 
 ## Master behaviour

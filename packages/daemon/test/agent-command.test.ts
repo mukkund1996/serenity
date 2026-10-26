@@ -11,6 +11,22 @@ test("the agent command runs claude, then reports its exit code", () => {
 	expect(command.slice(4)).toEqual(["claude", "--settings", "/h/hooks.json"]);
 });
 
+test("a first prompt follows --, so a leading dash is not read as a flag", () => {
+	const command = agentCommand(
+		["claude"],
+		"/h/hooks.json",
+		["serenity"],
+		"-v me",
+	);
+	expect(command.slice(4)).toEqual([
+		"claude",
+		"--settings",
+		"/h/hooks.json",
+		"--",
+		"-v me",
+	]);
+});
+
 test("the wrapper passes the exit code through to the notifier", () => {
 	// Stand-ins: "claude" exits 7, the notifier echoes its arguments.
 	const [sh, flag, script, name, ...rest] = agentCommand(

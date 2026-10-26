@@ -15,7 +15,8 @@
  *   Like Claude Code, with CLAUDE_CONFIG_DIR set and inside tmux it keeps
  *   `sessions/<pid>.json` (status, pane) and a transcript current, which is
  *   what serenity reads for sessions it adopted (ADR 0016). `--resume <id>`
- *   continues that session id.
+ *   continues that session id. A prompt after `--` is the first line, sent
+ *   once the session starts.
  *
  * `-p --json-schema` (the master's Haiku/Sonnet workers): answers the summary
  * or suggestion schema from the prompt on stdin.
@@ -227,11 +228,20 @@ async function interactive(): Promise<void> {
 		process.stdout.write("approved\r\n> ");
 	};
 
+	const dashes = args.indexOf("--");
+	let firstPrompt = dashes === -1 ? undefined : args[dashes + 1];
+	const sendFirstPrompt = () => {
+		const text = firstPrompt;
+		firstPrompt = undefined;
+		if (text) onLine(text);
+	};
+
 	const onLine = (raw: string) => {
 		const text = raw.trim();
 		if (state === "trust") {
 			if (text !== "y") process.exit(0);
-			return start();
+			start();
+			return sendFirstPrompt();
 		}
 		if (state === "permission") return approve();
 		if (text === "crash") process.exit(3);
@@ -258,6 +268,8 @@ async function interactive(): Promise<void> {
 		fire("Stop", { last_assistant_message: reply });
 		process.stdout.write(`got: ${text}\r\n> `);
 	};
+
+	if (state === "ready") sendFirstPrompt();
 
 	// Key by key, like Claude Code: a lone "1" answers the permission menu.
 	process.stdin.setRawMode?.(true);
