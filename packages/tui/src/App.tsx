@@ -10,6 +10,7 @@ import {
 	type Session,
 	type Suggestion,
 	UNSORTED,
+	type Usage,
 } from "@serenity/core";
 import {
 	Box,
@@ -55,6 +56,7 @@ import {
 	type NodeBox,
 	stepTopic,
 } from "./topics";
+import { usageParts } from "./usage";
 import { useDaemon } from "./use-daemon";
 
 export const MIN_COLUMNS = 80;
@@ -889,6 +891,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				masterError={!!master.error}
 				sessions={sessions}
 				zoom={zoom}
+				usage={state?.usage ?? null}
+				averageWaitMs={state?.averageWaitMs ?? null}
 			/>
 			<Box height={bodyHeight}>
 				{zoom === "topics" ? (
@@ -1051,6 +1055,8 @@ function Header({
 	masterError,
 	sessions,
 	zoom,
+	usage,
+	averageWaitMs,
 }: {
 	repo: string;
 	needs: number;
@@ -1058,46 +1064,63 @@ function Header({
 	masterError: boolean;
 	sessions: Session[];
 	zoom: string;
+	usage: Usage | null;
+	averageWaitMs: number | null;
 }) {
+	const parts = usageParts(usage, averageWaitMs, Date.now());
 	return (
-		<Box
-			width="100%"
-			backgroundColor="black"
-			justifyContent="space-between"
-			paddingX={1}
-		>
-			<Text>
-				<Text color="magenta" bold>
-					◆ serenity
-				</Text>
-				<Text color="gray"> {basename(repo)}</Text>
-			</Text>
-			<Text>
-				{!connected ? (
-					<Text backgroundColor="red" color="black" bold>
-						{" daemon down "}
+		<Box width="100%" backgroundColor="black" paddingX={1}>
+			<Box flexShrink={1} overflow="hidden">
+				<Text wrap="truncate">
+					<Text color="magenta" bold>
+						◆ serenity
 					</Text>
-				) : (
-					<>
-						{needs > 0 ? (
-							<Text backgroundColor="yellow" color="black" bold>
-								{` ${needs} need you `}
-							</Text>
-						) : null}
-						{masterError ? (
-							<Text backgroundColor="red" color="black" bold>
-								{" master error "}
-							</Text>
-						) : null}
-					</>
-				)}
-			</Text>
-			<Text>
-				<SessionCounts sessions={sessions} />
-				<Text color="gray">
-					{sessions.length ? "   " : ""}zoom: {zoom}
+					<Text color="gray"> {basename(repo)}</Text>
 				</Text>
-			</Text>
+			</Box>
+			{/* The usage bar stays whole; the repo name gives way first (ADR 0020). */}
+			<Box flexShrink={0} marginLeft={2}>
+				<Text>
+					{parts.map((part, i) => (
+						<Text key={part.label}>
+							{i > 0 ? <Text color="gray"> · </Text> : null}
+							<Text color="gray">{part.label} </Text>
+							<Text color={part.color}>{part.value}</Text>
+						</Text>
+					))}
+				</Text>
+			</Box>
+			<Box flexGrow={1} flexShrink={0} justifyContent="center">
+				<Text>
+					{!connected ? (
+						<Text backgroundColor="red" color="black" bold>
+							{" daemon down "}
+						</Text>
+					) : (
+						<>
+							{needs > 0 ? (
+								<Text backgroundColor="yellow" color="black" bold>
+									{` ${needs} need you `}
+								</Text>
+							) : null}
+							{masterError ? (
+								<Text backgroundColor="red" color="black" bold>
+									{" master error "}
+								</Text>
+							) : null}
+						</>
+					)}
+				</Text>
+			</Box>
+			{/* Counts give way before the usage bar and the zoom (ADR 0021). */}
+			{sessions.length ? (
+				<Box flexShrink={1} overflow="hidden" marginX={2}>
+					<SessionCounts sessions={sessions} />
+				</Box>
+			) : null}
+			<Box flexShrink={0}>
+				<Text color="gray">zoom: {zoom}</Text>
+			</Box>
 		</Box>
 	);
 }

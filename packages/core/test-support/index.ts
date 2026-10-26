@@ -22,6 +22,7 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
 		summary: null,
 		ask: null,
 		waitingOn: null,
+		waitingSince: null,
 		topicCandidate: null,
 		lastPrompt: null,
 		lastAssistantMessage: null,
@@ -188,6 +189,22 @@ export function storageContract(name: string, open: () => Storage): void {
 			expect(recent.map((m) => m.text)).toEqual(["two", "three"]);
 			expect(recent[0]?.from).toBe("master");
 			expect(recent[1]?.id).toBeGreaterThan(recent[0]?.id ?? 0);
+		});
+
+		test("waits: append and list a repo's waits since a time, oldest first", () => {
+			const wait = (
+				sessionId: string,
+				endedAt: number,
+				repo = "/repos/demo",
+			) => ({ repo, sessionId, startedAt: endedAt - 5, endedAt });
+			storage.waits.append(wait("b", 30));
+			storage.waits.append(wait("a", 20));
+			storage.waits.append(wait("old", 5));
+			storage.waits.append(wait("x", 25, "/repos/other"));
+			expect(storage.waits.listSince("/repos/demo", 20)).toEqual([
+				wait("a", 20),
+				wait("b", 30),
+			]);
 		});
 	});
 }

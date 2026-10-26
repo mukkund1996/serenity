@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 import {
+	averageWait,
 	BUILD_ID,
 	type CleanupPlan,
 	type CreateSessionParams,
@@ -11,6 +12,7 @@ import {
 	loadConfig,
 	type Method,
 	type Params,
+	parseRateLimits,
 	type RepoState,
 	type Result,
 	RpcError,
@@ -23,6 +25,10 @@ import {
 	selfCommand,
 	socketPath,
 	tmuxSessionName,
+	type Usage,
+	usageChanged,
+	WAIT_WINDOW_MS,
+	waitChange,
 } from "@serenity/core";
 import { ClaudeObserver } from "./adopt";
 import { type ClaudeRunner, CliClaudeRunner } from "./claude";
@@ -127,6 +133,8 @@ export class Daemon {
 	private readonly prs: PrWatcher;
 	private readonly reviews: ReviewWatcher;
 	private readonly observer: ClaudeObserver;
+	/** Plan usage is per account, so the latest report covers every repo. */
+	private usage: Usage | null = null;
 	private stopped: (() => void) | null = null;
 	readonly done: Promise<void>;
 
@@ -267,6 +275,10 @@ export class Daemon {
 			permissions: this.master.permissions(repo),
 			master: this.master.state(repo),
 			github: this.reviews.state(repo),
+			usage: this.usage,
+			averageWaitMs: averageWait(
+				this.opts.storage.waits.listSince(repo, this.now() - WAIT_WINDOW_MS),
+			),
 		};
 	}
 
@@ -284,8 +296,14 @@ export class Daemon {
 	}
 
 	private update(session: Session, patch: Partial<Session>): Session {
-		const next = { ...session, ...patch, updatedAt: this.now() };
-		this.opts.storage.sessions.put(next);
+		const now = this.now();
+		const next = { ...session, ...patch, updatedAt: now };
+		const { waitingSince, ended } = waitChange(session, next, now);
+		next.waitingSince = waitingSince;
+		this.opts.storage.transaction(() => {
+			this.opts.storage.sessions.put(next);
+			if (ended) this.opts.storage.waits.append(ended);
+		});
 		return next;
 	}
 
@@ -477,6 +495,19 @@ export class Daemon {
 			if (!session) return null;
 			this.log(`${session.name} exited (code ${code ?? "unknown"})`);
 			this.markEnded(session);
+			return null;
+		},
+
+		"usage.report": ({ rateLimits }) => {
+			const usage = parseRateLimits(rateLimits, this.now());
+			if (!usage) return null;
+			const changed = usageChanged(this.usage, usage);
+			this.usage = usage;
+			if (changed)
+				for (const repo of new Set(
+					[...this.subscriptions.values()].flatMap((repos) => [...repos]),
+				))
+					this.broadcast(repo);
 			return null;
 		},
 
@@ -842,6 +873,7 @@ export class Daemon {
 			summary: null,
 			ask: null,
 			waitingOn: null,
+			waitingSince: null,
 			topicCandidate: null,
 			lastPrompt: null,
 			lastAssistantMessage: null,

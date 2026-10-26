@@ -217,6 +217,7 @@ test(
 	async () => {
 		await waitFor(/No sessions yet/);
 		expect(screen()).toContain("Press n to start your first session");
+		expect(screen()).toContain("session — · week — · avg wait —");
 	},
 	STEP_TIMEOUT,
 );
@@ -245,6 +246,8 @@ test(
 		const done = await waitFor(/Summary: Done: rotate tokens/);
 		expect(done).toContain("✓ api-auth");
 		expect(done).toContain("backend ·");
+		// The agent's status line reported plan usage (ADR 0020).
+		await waitFor(/session 42% · week 17%/);
 		await waitFor(/◆ Clean up the worktree/);
 	},
 	STEP_TIMEOUT,
@@ -262,6 +265,8 @@ test(
 		keys("y");
 		const after = await waitFor(/Summary: Ran it\./);
 		expect(after).not.toContain("WAITING");
+		// That wait on you was answered, so it makes the average.
+		expect(after).toMatch(/avg wait \d+s/);
 	},
 	STEP_TIMEOUT,
 );

@@ -57,6 +57,8 @@ export interface Session {
 	ask: string | null;
 	/** Why a waiting session waits; decides which suggestions apply. */
 	waitingOn: WaitingOn | null;
+	/** When the current wait on you began; null unless waiting. */
+	waitingSince: number | null;
 	/** A different topic the summarizer proposed once; adopted if proposed again. */
 	topicCandidate: string | null;
 	lastPrompt: string | null;
@@ -179,6 +181,32 @@ export interface MasterState {
 	error: string | null;
 }
 
+/** One stretch a session spent waiting on you, answered (ADR 0020). */
+export interface Wait {
+	repo: string;
+	sessionId: string;
+	startedAt: number;
+	endedAt: number;
+}
+
+/** One of Claude's plan limits, as its status line reports it. */
+export interface UsageWindow {
+	/** 0–100. */
+	usedPercent: number;
+	/** Epoch ms; null when Claude did not say. */
+	resetsAt: number | null;
+}
+
+/** The account's plan usage, from the latest status line of any session (ADR 0020). */
+export interface Usage {
+	/** The 5-hour session limit. */
+	session: UsageWindow | null;
+	/** The 7-day limit. */
+	week: UsageWindow | null;
+	/** When it was reported. */
+	at: number;
+}
+
 /** What a client sees for one repo. */
 export interface RepoState {
 	repo: string;
@@ -193,4 +221,8 @@ export interface RepoState {
 	master: MasterState;
 	/** Review requests and the gh user, for the master panel. */
 	github: GithubState;
+	/** Plan usage; null until a session's status line has reported it. */
+	usage: Usage | null;
+	/** Average wait on you over the last day; null when nothing waited. */
+	averageWaitMs: number | null;
 }

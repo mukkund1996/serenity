@@ -1,4 +1,4 @@
-# 0020 · `Z` into a session, session counts in the header, a roomier topics zoom
+# 0021 · `Z` into a session, session counts in the header, a roomier topics zoom
 
 **Status:** Accepted · 2026-10-26
 
@@ -7,7 +7,7 @@ Using 0019 turned up three problems. `Z` zoomed in from the map to topics, but i
 
 ## Decision
 - **`Z` on a card in the topics zoom attaches its session**, the same as `Enter` on the card. On the map, or on the master in topics, `Z` still zooms in to topics.
-- **No SESSIONS section in the master panel.** The counts by status (`● 2 working · 1 idle · ✓ 2 done`) move to the header's right, beside `zoom:`. The archived rows go; `H` lists them. The rows left over in the master go to REVIEW, then MY PRS.
+- **No SESSIONS section in the master panel.** The counts by status (`● 2 working · 1 idle · ✓ 2 done`) move to the header's right, beside `zoom:`. On a narrow terminal they truncate first, after the repo name; the usage bar (0020), the NEEDS YOU badge and `zoom:` stay whole. The archived rows go; `H` lists them. The rows left over in the master go to REVIEW, then MY PRS.
 - **A roomier topics zoom.** Cards in a bubble are 4 columns apart (was 2), bubbles on a shelf are 5 apart (was 2) and start 5 columns from the edge (was 4), and a blank row separates a shelf from the next one's bus.
 
 ## Consequences

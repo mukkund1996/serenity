@@ -492,7 +492,7 @@ export function SessionCounts({ sessions }: { sessions: Session[] }) {
 		n: sessions.filter((s) => s.status === status).length,
 	})).filter((c) => c.n > 0);
 	return (
-		<Text>
+		<Text wrap="truncate">
 			{counts.map((c, i) => {
 				const g = glyph(c.status);
 				return (
