@@ -5,6 +5,7 @@ import type {
 	MasterMessage,
 	Session,
 	Suggestion,
+	Wait,
 } from "./domain";
 
 /**
@@ -50,11 +51,18 @@ export interface ConversationStore {
 	listRecent(repo: string, limit: number): MasterMessage[];
 }
 
+export interface WaitStore {
+	append(wait: Wait): void;
+	/** A repo's waits that ended at or after `since`, oldest first. */
+	listSince(repo: string, since: number): Wait[];
+}
+
 export interface Storage {
 	readonly sessions: SessionStore;
 	readonly events: EventStore;
 	readonly suggestions: SuggestionStore;
 	readonly conversation: ConversationStore;
+	readonly waits: WaitStore;
 	/** Runs `fn` atomically; nested calls join the outer transaction. */
 	transaction<T>(fn: () => T): T;
 	close(): void;
@@ -65,6 +73,7 @@ export function createMemoryStorage(): Storage {
 	const events: HookEvent[] = [];
 	const suggestions = new Map<string, Suggestion>();
 	const messages: MasterMessage[] = [];
+	const waits: Wait[] = [];
 	let nextEventId = 1;
 	let nextMessageId = 1;
 
@@ -127,6 +136,16 @@ export function createMemoryStorage(): Storage {
 					.filter((m) => m.repo === repo)
 					.slice(-limit)
 					.map((m) => ({ ...m })),
+		},
+		waits: {
+			append: (wait) => {
+				waits.push({ ...wait });
+			},
+			listSince: (repo, since) =>
+				waits
+					.filter((w) => w.repo === repo && w.endedAt >= since)
+					.sort((a, b) => a.endedAt - b.endedAt)
+					.map((w) => ({ ...w })),
 		},
 		transaction: (fn) => fn(),
 		close: () => {},

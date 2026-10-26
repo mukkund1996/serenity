@@ -7,6 +7,7 @@ import type {
 	Session,
 	Storage,
 	Suggestion,
+	Wait,
 } from "@serenity/core";
 
 /** Forward-only migrations; index + 1 is the schema version (PRAGMA user_version). */
@@ -42,12 +43,21 @@ const MIGRATIONS = [
 		at INTEGER NOT NULL
 	);
 	CREATE INDEX conversation_repo ON conversation (repo, id);`,
+	`CREATE TABLE waits (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		repo TEXT NOT NULL,
+		session_id TEXT NOT NULL,
+		started_at INTEGER NOT NULL,
+		ended_at INTEGER NOT NULL
+	);
+	CREATE INDEX waits_repo ON waits (repo, ended_at);`,
 ];
 
 /** Fields added after a session row may have been written; filled in on read. */
 const SESSION_DEFAULTS: Pick<
 	Session,
 	| "waitingOn"
+	| "waitingSince"
 	| "ownsBranch"
 	| "pr"
 	| "prError"
@@ -56,6 +66,7 @@ const SESSION_DEFAULTS: Pick<
 	| "claudePid"
 > = {
 	waitingOn: null,
+	waitingSince: null,
 	ownsBranch: false,
 	pr: null,
 	prError: null,
@@ -102,6 +113,13 @@ function migrate(db: Database): void {
 			db.run(`PRAGMA user_version = ${version + 1}`);
 		})();
 	}
+}
+
+interface WaitRow {
+	repo: string;
+	session_id: string;
+	started_at: number;
+	ended_at: number;
 }
 
 interface EventRow {
@@ -163,6 +181,13 @@ export function createSqliteStorage(path: string): Storage {
 	);
 	const listMessages = db.query<MessageRow, [string, number]>(
 		"SELECT * FROM (SELECT * FROM conversation WHERE repo = ? ORDER BY id DESC LIMIT ?) ORDER BY id",
+	);
+
+	const insertWait = db.query<unknown, [string, string, number, number]>(
+		"INSERT INTO waits (repo, session_id, started_at, ended_at) VALUES (?, ?, ?, ?)",
+	);
+	const listWaits = db.query<WaitRow, [string, number]>(
+		"SELECT * FROM waits WHERE repo = ? AND ended_at >= ? ORDER BY ended_at, id",
 	);
 
 	const parse = (row: { data: string } | null): Session | null =>
@@ -239,6 +264,20 @@ export function createSqliteStorage(path: string): Storage {
 						from: row.sender,
 						text: row.text,
 						at: row.at,
+					}),
+				),
+		},
+		waits: {
+			append: (w) => {
+				insertWait.run(w.repo, w.sessionId, w.startedAt, w.endedAt);
+			},
+			listSince: (repo, since) =>
+				listWaits.all(repo, since).map(
+					(row): Wait => ({
+						repo: row.repo,
+						sessionId: row.session_id,
+						startedAt: row.started_at,
+						endedAt: row.ended_at,
 					}),
 				),
 		},

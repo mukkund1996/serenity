@@ -14,6 +14,8 @@ const EMPTY_STATE = {
 	permissions: [],
 	master: { status: "idle" as const, error: null },
 	github: { user: null, reviewRequests: [] },
+	usage: null,
+	averageWaitMs: null,
 };
 
 let server: Server | null = null;

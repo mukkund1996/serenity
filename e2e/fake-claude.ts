@@ -16,7 +16,8 @@
  *   `sessions/<pid>.json` (status, pane) and a transcript current, which is
  *   what serenity reads for sessions it adopted (ADR 0016). `--resume <id>`
  *   continues that session id. A prompt after `--` is the first line, sent
- *   once the session starts.
+ *   once the session starts. After each reply it runs the `statusLine`
+ *   command with fixed `rate_limits` (session 42%, week 17%).
  *
  * `-p --json-schema` (the master's Haiku/Sonnet workers): answers the summary
  * or suggestion schema from the prompt on stdin.
@@ -205,6 +206,23 @@ async function interactive(): Promise<void> {
 		}
 	};
 
+	/** Claude refreshes its status line after a reply. */
+	const statusLine = () => {
+		const command = settings.statusLine?.command;
+		if (!command) return;
+		spawnSync("sh", ["-c", command], {
+			input: JSON.stringify({
+				session_id: sessionId,
+				cwd: process.cwd(),
+				rate_limits: {
+					five_hour: { used_percentage: 42, resets_at: 4_102_444_800 },
+					seven_day: { used_percentage: 17, resets_at: 4_102_444_800 },
+				},
+			}),
+			stdio: ["pipe", "ignore", "inherit"],
+		});
+	};
+
 	let state: "trust" | "ready" | "permission" = process
 		.cwd()
 		.endsWith("-untrusted")
@@ -225,6 +243,7 @@ async function interactive(): Promise<void> {
 		fire("PostToolUse", { tool_name: "Bash" });
 		registry.reply("Ran it.");
 		fire("Stop", { last_assistant_message: "Ran it." });
+		statusLine();
 		process.stdout.write("approved\r\n> ");
 	};
 
@@ -266,6 +285,7 @@ async function interactive(): Promise<void> {
 		const reply = text.includes("?") ? `Should I ${text}` : `Done: ${text}`;
 		registry.reply(reply);
 		fire("Stop", { last_assistant_message: reply });
+		statusLine();
 		process.stdout.write(`got: ${text}\r\n> `);
 	};
 

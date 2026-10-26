@@ -11,3 +11,4 @@ export * from "./rpc";
 export * from "./self";
 export * from "./status";
 export * from "./storage";
+export * from "./usage";

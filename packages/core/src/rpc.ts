@@ -93,6 +93,8 @@ export interface Methods {
 	/** Runs a pending suggestion; `text` overrides a reply's text (the e key). */
 	"suggestion.accept": { params: { id: string; text?: string }; result: null };
 	"suggestion.decline": { params: { id: string }; result: null };
+	/** Claude's status line `rate_limits`, forwarded by `serenity statusline` (ADR 0020). */
+	"usage.report": { params: { rateLimits: unknown }; result: null };
 	"master.message": { params: { repo: string; text: string }; result: null };
 	"master.permission": { params: { id: string; allow: boolean }; result: null };
 	"master.tool": {

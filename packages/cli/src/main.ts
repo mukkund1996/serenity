@@ -14,6 +14,11 @@ import {
 	VERSION,
 } from "@serenity/core";
 import { printChecks, runChecks } from "./doctor";
+import {
+	runUserStatusLine,
+	type StatusLineInput,
+	userStatusLineCommand,
+} from "./statusline";
 
 const USAGE = `serenity ${VERSION} · a mind map of your Claude Code sessions
 
@@ -25,7 +30,7 @@ usage:
   serenity version
 
 internal:
-  serenity daemon | tui | hook <Event> | exited <code> | detach <pane> | mcp <repo>`;
+  serenity daemon | tui | hook <Event> | statusline | exited <code> | detach <pane> | mcp <repo>`;
 
 const home = serenityHome();
 
@@ -113,6 +118,38 @@ async function hook(kind: string | undefined): Promise<void> {
 	process.exit(0);
 }
 
+/**
+ * `serenity statusline`: Claude Code's status line in spawned sessions.
+ * Reports plan usage to a running daemon and prints the user's own status
+ * line, if they have one (ADR 0020). Never starts the daemon: it runs often.
+ */
+async function statusline(): Promise<void> {
+	const raw = await Bun.stdin.text().catch(() => "");
+	let input: StatusLineInput = {};
+	try {
+		input = JSON.parse(raw);
+	} catch {}
+	const report = async () => {
+		if (!input.rate_limits) return;
+		const peer = await connectDaemon(home).catch(() => null);
+		await peer
+			?.request(
+				"usage.report",
+				{ rateLimits: input.rate_limits },
+				{ timeoutMs: 1000 },
+			)
+			.catch(() => {});
+		peer?.close();
+	};
+	const command = userStatusLineCommand(input);
+	const [, line] = await Promise.all([
+		report(),
+		command ? runUserStatusLine(command, raw, input.cwd) : "",
+	]);
+	process.stdout.write(line);
+	process.exit(0);
+}
+
 /** `serenity exited <code>`: run by the agent's wrapper shell when claude exits. */
 async function exited(code: string | undefined): Promise<void> {
 	const sessionId = process.env.SERENITY_SESSION_ID;
@@ -183,6 +220,9 @@ switch (command) {
 		await runMcpProxy(home, arg);
 		break;
 	}
+	case "statusline":
+		await statusline();
+		break;
 	case "exited":
 		await exited(arg);
 		break;

@@ -25,6 +25,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0017](0017-topics-zoom-shows-every-topic.md) | The topics zoom shows every topic; "topic" replaces "category" | Accepted |
 | [0018](0018-map-zoom-and-navigation.md) | Map zoom layout; `z` `Z` `Esc` `c` `/` `r` | Accepted |
 | [0019](0019-topic-focus-shelves-and-topic-cap.md) | WASD between topics on the map; `z` out, `Z` in; shelves in the topics zoom; at most 10 topics; roomier master and cards | Accepted |
+| [0020](0020-usage-bar.md) | Usage bar in the header: session and weekly plan limits from the status line, average wait on you | Accepted |
 
 ## System at a glance
 
