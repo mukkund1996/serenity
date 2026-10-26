@@ -13,10 +13,13 @@ import { splitAtNewline } from "./text-input";
 import { cardText, glyph } from "./theme";
 
 const DIALOG_W = 64;
-const FIELDS = ["name", "cwd", "branch", "mode"] as const;
+const FIELDS = ["name", "prompt", "cwd", "branch", "mode"] as const;
 type Field = (typeof FIELDS)[number];
 
-/** New session dialog (design 4d): name, working dir, new worktree or existing branch. */
+/**
+ * New session dialog (design 4d): name, an optional first prompt, working
+ * dir, new worktree or existing branch.
+ */
 export function NewSessionDialog({
 	repo,
 	onSubmit,
@@ -26,7 +29,12 @@ export function NewSessionDialog({
 	onSubmit: (params: CreateSessionParams) => Promise<void>;
 	onClose: () => void;
 }) {
-	const [values, setValues] = useState({ name: "", cwd: repo, branch: "" });
+	const [values, setValues] = useState({
+		name: "",
+		prompt: "",
+		cwd: repo,
+		branch: "",
+	});
 	const [mode, setMode] = useState<SessionMode>("worktree");
 	const [field, setField] = useState<Field>("name");
 	const [error, setError] = useState<string | null>(null);
@@ -52,6 +60,7 @@ export function NewSessionDialog({
 					cwd: v.cwd,
 					mode,
 					branch: v.branch || undefined,
+					prompt: v.prompt.trim() || undefined,
 				}).catch((e: Error) => {
 					setBusy(false);
 					setError(e.message);
@@ -81,7 +90,7 @@ export function NewSessionDialog({
 	const row = (label: string, f: Exclude<Field, "mode">, placeholder = "") => (
 		<Box marginTop={1}>
 			<Box width={13} flexShrink={0}>
-				<Text color="gray">{label}</Text>
+				<Text color="white">{label}</Text>
 			</Box>
 			<Box backgroundColor={field === f ? "gray" : undefined} flexGrow={1}>
 				<Text wrap="truncate-start">
@@ -104,9 +113,10 @@ export function NewSessionDialog({
 			borderStyle="double"
 			borderColor="white"
 			width={DIALOG_W}
-			right={<Text color="gray"> Esc close </Text>}
+			right={<Text color="white"> Esc close </Text>}
 		>
 			{row("Name", "name")}
+			{row("First prompt", "prompt", "optional")}
 			{row("Working dir", "cwd")}
 			{row("Branch", "branch", "same as name")}
 			<Box marginTop={1}>
@@ -120,7 +130,7 @@ export function NewSessionDialog({
 			</Box>
 			<Box marginTop={1} justifyContent="space-between">
 				<Text color="red">{error ?? (busy ? " " : "")}</Text>
-				<Text color="gray">
+				<Text color="white">
 					{busy ? (
 						"creating…"
 					) : (
@@ -168,7 +178,7 @@ export function ShortcutsPanel() {
 			borderColor="white"
 			width={46}
 			right={
-				<Text color="gray">
+				<Text color="white">
 					{" "}
 					<Key>?</Key> hide{" "}
 				</Text>
@@ -176,7 +186,9 @@ export function ShortcutsPanel() {
 		>
 			{SHORTCUTS.map(([section, keys]) => (
 				<Box key={section} flexDirection="column" marginTop={1}>
-					<Text color="gray">{section}</Text>
+					<Text color="whiteBright" bold>
+						{section}
+					</Text>
 					{keys.map(([k, label]) => (
 						<Box key={k}>
 							<Box width={11}>
@@ -188,17 +200,19 @@ export function ShortcutsPanel() {
 				</Box>
 			))}
 			<Box flexDirection="column" marginTop={1}>
-				<Text color="gray">STATUS</Text>
+				<Text color="whiteBright" bold>
+					STATUS
+				</Text>
 				<Text>
 					<Text color="yellow">◐</Text> waiting <Text color="blue">●</Text> in
 					progress <Text color="green">✓</Text> finished
 				</Text>
-				<Text color="gray">
+				<Text color="white">
 					name in grey = idle · ↗ imported (U: full tracking)
 				</Text>
 			</Box>
 			<Box marginTop={1}>
-				<Text color="gray">
+				<Text color="white">
 					<Key>q</Key> quits the map · sessions keep running
 				</Text>
 			</Box>
@@ -231,7 +245,7 @@ export function ConfirmDialog({
 		>
 			{fromMaster ? <Text color="magenta">◆ requested by master</Text> : null}
 			<Box marginTop={1}>
-				<Text color="gray">This will:</Text>
+				<Text color="white">This will:</Text>
 			</Box>
 			{plan.steps.map((step) => {
 				const keep = step.startsWith("keep");
@@ -253,7 +267,7 @@ export function ConfirmDialog({
 				<Text color="red" wrap="truncate">
 					{error ?? ""}
 				</Text>
-				<Text color="gray">
+				<Text color="white">
 					{busy ? (
 						"cleaning up…"
 					) : (
@@ -287,7 +301,7 @@ export function KillDialog({
 			fill="black"
 		>
 			<Box marginTop={1}>
-				<Text color="gray">This will:</Text>
+				<Text color="white">This will:</Text>
 			</Box>
 			<Text wrap="truncate">
 				<Text color="red">✕ </Text>
@@ -308,7 +322,7 @@ export function KillDialog({
 				<Text color="red" wrap="truncate">
 					{error ?? ""}
 				</Text>
-				<Text color="gray">
+				<Text color="white">
 					{busy ? (
 						"stopping…"
 					) : (
@@ -355,15 +369,15 @@ export function ArchivedList({
 			borderColor="white"
 			width={width}
 			fill="black"
-			right={<Text color="gray"> ↑↓ H Esc </Text>}
+			right={<Text color="white"> ↑↓ H Esc </Text>}
 		>
 			{rows.length === 0 ? (
 				<Box marginTop={1}>
-					<Text color="gray">Nothing archived yet.</Text>
+					<Text color="white">Nothing archived yet.</Text>
 				</Box>
 			) : (
 				<Box flexDirection="column" marginTop={1}>
-					<Text color="gray">{scroll > 0 ? `↑ ${scroll} more` : " "}</Text>
+					<Text color="white">{scroll > 0 ? `↑ ${scroll} more` : " "}</Text>
 					{shown.map((row) =>
 						"topic" in row ? (
 							<Text key={`c:${row.topic}`} color="white" wrap="truncate">
@@ -383,7 +397,7 @@ export function ArchivedList({
 							</Text>
 						),
 					)}
-					<Text color="gray">{below > 0 ? `↓ ${below} more` : " "}</Text>
+					<Text color="white">{below > 0 ? `↓ ${below} more` : " "}</Text>
 				</Box>
 			)}
 		</TitledBox>
@@ -408,7 +422,7 @@ export function RecentReplies({
 			borderColor="white"
 			width={50}
 			fill="black"
-			right={<Text color="gray"> ↑↓ Enter Esc </Text>}
+			right={<Text color="white"> ↑↓ Enter Esc </Text>}
 		>
 			{replies.map((reply, i) => (
 				<Box key={reply} justifyContent="space-between">
@@ -424,7 +438,7 @@ export function RecentReplies({
 				</Box>
 			))}
 			<Box marginTop={1}>
-				<Text color="gray">type to write your own</Text>
+				<Text color="white">type to write your own</Text>
 			</Box>
 		</TitledBox>
 	);
@@ -492,9 +506,9 @@ export function ImportDialog({
 			borderColor="white"
 			width={72}
 			fill="black"
-			right={<Text color="gray"> ↑↓ Space Enter Esc </Text>}
+			right={<Text color="white"> ↑↓ Space Enter Esc </Text>}
 		>
-			<Text color="gray">
+			<Text color="white">
 				Claude sessions running in your tmux, in this repo. They stay where they
 				are; Enter on a card jumps to their window.
 			</Text>
@@ -527,10 +541,10 @@ export function ImportDialog({
 				);
 			})}
 			<Box marginTop={1} justifyContent="space-between">
-				<Text color="gray">
+				<Text color="white">
 					<Key>a</Key> all / none
 				</Text>
-				<Text color={error ? "red" : "gray"} wrap="truncate">
+				<Text color={error ? "red" : "white"} wrap="truncate">
 					{error ??
 						(busy
 							? "importing…"
