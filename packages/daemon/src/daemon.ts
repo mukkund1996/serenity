@@ -795,6 +795,7 @@ export class Daemon {
 				this.claudeCommand,
 				hookSettingsPath(this.opts.home),
 				this.self,
+				params.prompt?.trim() || undefined,
 			),
 		});
 		await this.tmux.setPaneOption(pane, "@serenity_session", id);

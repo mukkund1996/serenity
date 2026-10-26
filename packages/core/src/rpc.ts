@@ -23,6 +23,8 @@ export interface CreateSessionParams {
 	mode: SessionMode;
 	/** Branch to create (worktree) or to check out (branch). Defaults to the name. */
 	branch?: string;
+	/** Sent to the agent as its first prompt. */
+	prompt?: string;
 }
 
 /** What cleaning up a session would do, computed by serenity, not the model (ADR 0008). */

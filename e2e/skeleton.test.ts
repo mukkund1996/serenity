@@ -553,6 +553,23 @@ test(
 );
 
 test(
+	"a first prompt typed in the new session dialog reaches the agent",
+	async () => {
+		keys("n");
+		await waitFor(/New session/);
+		type("docs");
+		await Bun.sleep(100);
+		keys("Tab");
+		await Bun.sleep(100);
+		type("write the docs");
+		await Bun.sleep(100);
+		keys("Enter");
+		await waitFor(/Summary: Done: write the docs/);
+	},
+	STEP_TIMEOUT,
+);
+
+test(
 	"Z opens the map zoom, z goes back to topics, Esc zooms out one level",
 	async () => {
 		keys("Z");
