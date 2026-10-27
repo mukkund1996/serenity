@@ -62,9 +62,15 @@ export interface Methods {
 	/**
 	 * Detach by the agent's pane (the tmux Ctrl+g binding), by session id, or
 	 * whatever is attached beside a map pane (clientPane: the map is exiting).
+	 * `master` (the Ctrl+m binding) then focuses the master in the map.
 	 */
 	"session.detach": {
-		params: { pane?: string; id?: string; clientPane?: string };
+		params: {
+			pane?: string;
+			id?: string;
+			clientPane?: string;
+			master?: boolean;
+		};
 		result: null;
 	};
 	"hook.event": {

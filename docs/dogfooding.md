@@ -15,7 +15,7 @@ Use serenity for your daily Claude Code sessions while you keep building it. Two
 cd ~/projects/serenity && bun install && bun run install:local
 ```
 
-Then, in the repo you work in, open a tmux window and run `serenity`. Press `I` to import the Claude sessions already running in your tmux windows for that repo, then Enter. They stay where they are; Enter on a card jumps to its window and `Ctrl+g` brings you back. `U` restarts an imported session (when idle) under serenity's hooks for full status. New sessions (`n`) go through serenity as usual.
+Then, in the repo you work in, open a tmux window and run `serenity`. Press `I` to import the Claude sessions already running in your tmux windows for that repo, then Enter. They stay where they are; `Z` on a card (or Enter twice: into the card, then attach) jumps to its window and `Ctrl+g` brings you back. `U` restarts an imported session (when idle) under serenity's hooks for full status. New sessions (`n`) go through serenity as usual.
 
 ## The loop
 

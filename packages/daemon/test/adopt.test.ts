@@ -123,7 +123,7 @@ beforeEach(() => {
 				ended.push(session.name);
 				storage.sessions.put({ ...session, status: "dead" });
 			},
-			bindDetachKey: async () => {},
+			bindSessionKeys: async () => {},
 			log: () => {},
 		},
 		config,

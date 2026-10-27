@@ -30,7 +30,7 @@ usage:
   serenity version
 
 internal:
-  serenity daemon | tui | hook <Event> | statusline | exited <code> | detach <pane> | mcp <repo>`;
+  serenity daemon | tui | hook <Event> | statusline | exited <code> | detach <pane> [master] | mcp <repo>`;
 
 const home = serenityHome();
 
@@ -167,10 +167,17 @@ async function exited(code: string | undefined): Promise<void> {
 	process.exit(0);
 }
 
-async function detach(pane: string | undefined): Promise<void> {
+async function detach(
+	pane: string | undefined,
+	then: string | undefined,
+): Promise<void> {
 	const peer = await connectDaemon(home);
 	if (!peer) fail("daemon is not running");
-	await peer.request("session.detach", { pane }, { timeoutMs: 5000 });
+	await peer.request(
+		"session.detach",
+		{ pane, master: then === "master" },
+		{ timeoutMs: 5000 },
+	);
 	peer.close();
 }
 
@@ -227,7 +234,7 @@ switch (command) {
 		await exited(arg);
 		break;
 	case "detach":
-		await detach(arg);
+		await detach(arg, process.argv[4]);
 		break;
 	case "daemon":
 		await runDaemon();

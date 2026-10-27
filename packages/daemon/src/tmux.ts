@@ -1,5 +1,8 @@
 import { run } from "./exec";
 
+/** Ctrl+m as a CSI u key, after its Escape: `ESC [ 109 ; 5 u`. */
+const CTRL_M_CSI_U = "[109;5u";
+
 /**
  * Thin tmux driver (ADR 0004). `socketName` selects a private tmux server
  * (`tmux -L`), which the E2E tests use; in normal use it is unset.
@@ -219,11 +222,14 @@ export class Tmux {
 	}
 
 	/**
-	 * Ctrl+g in an agent pane detaches it back to the map; anywhere else it
-	 * passes through. Agent panes are marked with the @serenity_session option.
+	 * Ctrl+g in an agent pane detaches it back to the map; Ctrl+m does too and
+	 * then focuses the master. In the map pane Ctrl+m reaches the map as a CSI u
+	 * key, which it tells apart from Enter. Anywhere else both pass through.
+	 * Agent panes carry the @serenity_session option, the map pane @serenity_map.
+	 * Ctrl+m differs from Enter only when the terminal sends extended keys.
 	 */
-	bindDetachKey(detachCommand: string): Promise<string> {
-		return this.cmd([
+	async bindSessionKeys(detachCommand: string): Promise<void> {
+		await this.cmd([
 			"bind-key",
 			"-n",
 			"C-g",
@@ -233,6 +239,21 @@ export class Tmux {
 			`run-shell -b "${detachCommand} #{pane_id}"`,
 			"send-keys C-g",
 		]);
+		await this.cmd([
+			"bind-key",
+			"-n",
+			"C-m",
+			"if-shell",
+			"-F",
+			"#{@serenity_session}",
+			`run-shell -b "${detachCommand} #{pane_id} master"`,
+			`if-shell -F "#{@serenity_map}" "send-keys Escape '${CTRL_M_CSI_U}'" "send-keys C-m"`,
+		]);
+	}
+
+	/** Presses Ctrl+m in `pane` as a CSI u key, as the binding does in the map pane. */
+	async pressCtrlM(pane: string): Promise<void> {
+		await this.cmd(["send-keys", "-t", pane, "Escape", CTRL_M_CSI_U]);
 	}
 
 	/**

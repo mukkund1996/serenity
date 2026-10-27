@@ -283,6 +283,7 @@ test(
 		await waitFor(/Ctrl\+g map/, mapPane);
 		expect(screen(mapPane)).toContain("ABOUT THIS SESSION");
 		expect(tmux("list-keys", "-T", "root", "C-g")).toContain("detach");
+		expect(tmux("list-keys", "-T", "root", "C-m")).toContain("master");
 
 		// send-keys bypasses key bindings, so run what the binding runs.
 		spawnSync(process.execPath, [MAIN, "detach", agentPane], {
@@ -694,6 +695,67 @@ test(
 			() => !screen().includes("Ended. Enter resumes it."),
 			"keeper to be live again",
 		);
+	},
+	STEP_TIMEOUT,
+);
+
+/** What the tmux binding sends the map for Ctrl+m: a CSI u key, not Enter. */
+const ctrlM = () => keys("Escape", "[109;5u");
+
+test(
+	"arrows move between nodes; Enter goes into one, s selects, Esc leaves it",
+	async () => {
+		keys("c");
+		keys("Right");
+		await Bun.sleep(200);
+		expect(screen()).not.toContain("▸");
+		keys("Enter");
+		keys("s");
+		await waitFor(/▸/);
+		keys("Escape");
+		await until(() => !screen().includes("▸"), "Esc to leave the card");
+		expect(screen()).toContain("zoom: topics");
+		// Outside a node Esc goes up a level, as before.
+		keys("Escape");
+		await waitFor(/zoom: map/);
+		keys("Z");
+		await waitFor(/zoom: topics/);
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"Ctrl+m focuses the master, from the map and from an attached session",
+	async () => {
+		keys("Right");
+		keys("Enter");
+		keys("s");
+		await waitFor(/▸/);
+		ctrlM();
+		await until(() => !screen().includes("▸"), "focus to leave the card");
+		keys("Enter");
+		// Inside the master the first of its items is selected.
+		await waitFor(/▸/);
+		keys("Escape");
+
+		await newSession("hopper");
+		keys("Enter");
+		keys("Enter");
+		await until(
+			() => panesInMap().length === 2,
+			"the agent pane to join the map window",
+		);
+		const [, agentPane] = panesInMap() as [string, string];
+		// send-keys bypasses key bindings, so run what the binding runs.
+		spawnSync(process.execPath, [MAIN, "detach", agentPane, "master"], {
+			env: { ...process.env, ...env },
+		});
+		await until(() => panesInMap().length === 1, "the agent to be parked");
+		await waitFor(/zoom: topics/);
+		// Still on hopper, Enter would attach it again; on the master it goes in.
+		keys("Enter");
+		await waitFor(/▸/);
+		expect(panesInMap().length).toBe(1);
 	},
 	STEP_TIMEOUT,
 );

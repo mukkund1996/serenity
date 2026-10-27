@@ -38,8 +38,8 @@ export interface AdoptHost {
 	change(session: Session, patch: Partial<Session>): Session;
 	broadcast(repo: string): void;
 	markEnded(session: Session): void;
-	/** Binds Ctrl+g so an adopted pane can return to the map. */
-	bindDetachKey(): Promise<void>;
+	/** Binds Ctrl+g and Ctrl+m so an adopted pane can return to the map. */
+	bindSessionKeys(): Promise<void>;
 	log(line: string): void;
 }
 
@@ -168,7 +168,7 @@ export class ClaudeObserver {
 		const chosen = (await this.candidates(repo)).filter((c) =>
 			wanted.has(c.claudeSessionId),
 		);
-		if (chosen.length) await this.host.bindDetachKey();
+		if (chosen.length) await this.host.bindSessionKeys();
 		this.watchSessions();
 		const adopted: Session[] = [];
 		for (const c of chosen) {
