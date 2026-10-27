@@ -1,6 +1,7 @@
 import { PINNED, topicOf } from "./attention";
 import type { Session, Suggestion, SuggestionKind } from "./domain";
 import { prStatus } from "./pr";
+import type { SlackItem } from "./slack";
 
 /**
  * The master's model-facing logic (ADR 0007), kept pure: prompts, JSON
@@ -267,8 +268,33 @@ export const MASTER_SYSTEM_PROMPT = [
 	"Answer in at most 3 short sentences; your replies are shown in a small panel. No markdown headings or tables.",
 ].join("\n");
 
+/** Added to the chat's system prompt when the repo has Slack on (ADR 0023). */
+export const MASTER_SLACK_PROMPT = [
+	"You can read the user's Slack with the mcp__slack__ tools (search, read channels and threads, profiles).",
+	"The snapshot lists the Slack threads and mentions waiting on the user. When asked about one, read its thread and check the sessions, their PRs and the repo before answering.",
+	"Anything that writes to Slack (sending a message, a reaction) asks the user first; draft the exact text before you send.",
+].join("\n");
+
 /** The snapshot prepended to each user message sent to the chat. */
 export function chatSnapshot(
+	sessions: Session[],
+	suggestions: Suggestion[],
+	slack: SlackItem[] | null = null,
+): string {
+	const waiting = slack?.length
+		? [
+				"",
+				"Slack waiting on the user:",
+				...slack.map(
+					(m) =>
+						`- ${m.channel} ${m.reason} from ${m.author} (channel ${m.channelId}, thread ${m.threadTs}): ${clip(m.text, 160)}`,
+				),
+			]
+		: [];
+	return [sessionSnapshot(sessions, suggestions), ...waiting].join("\n");
+}
+
+function sessionSnapshot(
 	sessions: Session[],
 	suggestions: Suggestion[],
 ): string {

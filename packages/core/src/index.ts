@@ -9,6 +9,7 @@ export * from "./paths";
 export * from "./pr";
 export * from "./rpc";
 export * from "./self";
+export * from "./slack";
 export * from "./status";
 export * from "./storage";
 export * from "./usage";

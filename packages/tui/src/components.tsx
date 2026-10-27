@@ -6,9 +6,10 @@ import type {
 	MasterState,
 	ReviewRequest,
 	Session,
+	SlackState,
 	Suggestion,
 } from "@serenity/core";
-import { prLine, prStatus } from "@serenity/core";
+import { prLine, prStatus, wrap } from "@serenity/core";
 import { Box, Text } from "ink";
 import { type ReactNode, useEffect, useState } from "react";
 import {
@@ -18,6 +19,7 @@ import {
 	type MyPr,
 	NEED_INDENT,
 	needLines,
+	SLACK_TEXT_LINES,
 	SPEAKER_W,
 	suggestionLines,
 } from "./master-layout";
@@ -366,6 +368,8 @@ export const MASTER_INPUT = "input";
 /** Element ids of the master's PR rows: a review request, or one of my PRs. */
 export const REVIEW_ROW = "rv:";
 export const MY_PR_ROW = "pr:";
+/** Element id of the SLACK section's item; `[` `]` cycle it while selected. */
+export const SLACK_ROW = "slack";
 
 /** A row with text on the left and a fixed part on the right. */
 function Row({
@@ -441,6 +445,70 @@ function ReviewSection({
 					</Row>
 				);
 			})}
+		</>
+	);
+}
+
+/**
+ * One Slack thread or mention waiting on the user (ADR 0023): channel and
+ * author, its age, and the message. `[` `]` step through the others.
+ */
+function SlackSection({
+	slack,
+	index,
+	selected,
+	width,
+	now,
+}: {
+	slack: SlackState;
+	index: number;
+	selected: boolean;
+	width: number;
+	now: number;
+}) {
+	const item = slack.items[index];
+	const count = slack.items.length;
+	const lines = item
+		? wrap(item.text, width - NEED_INDENT, SLACK_TEXT_LINES)
+		: [];
+	return (
+		<>
+			<SectionHeader
+				label={count > 1 ? `SLACK ${index + 1}/${count}` : "SLACK"}
+				width={width}
+			/>
+			{item ? (
+				<>
+					<Row
+						selected={selected}
+						right={
+							<Text color="gray">
+								{count > 1 && selected ? "[ ] " : ""}
+								{age(item.at, now)}
+							</Text>
+						}
+					>
+						<Text color={selected ? "whiteBright" : "white"} bold={selected}>
+							{item.channel}
+						</Text>
+						<Text color="gray">
+							{" "}
+							· {item.author}
+							{item.reason === "mention" ? " mentioned you" : " replied"}
+						</Text>
+					</Row>
+					{Array.from({ length: SLACK_TEXT_LINES }, (_, i) => (
+						// biome-ignore lint/suspicious/noArrayIndexKey: lines are positional
+						<Box key={i} paddingLeft={NEED_INDENT}>
+							<Text color="white">{lines[i] ?? " "}</Text>
+						</Box>
+					))}
+				</>
+			) : (
+				<Text color="yellow" wrap="truncate">
+					{slack.error}
+				</Text>
+			)}
 		</>
 	);
 }
@@ -525,6 +593,8 @@ export function MasterPanel({
 	master,
 	calmTopics,
 	plan,
+	slack,
+	slackIndex,
 	focused,
 	selected,
 	inputText,
@@ -539,6 +609,8 @@ export function MasterPanel({
 	master: MasterState;
 	calmTopics: number;
 	plan: MasterPlan;
+	slack: SlackState | null;
+	slackIndex: number;
 	focused: boolean;
 	selected: string | null;
 	inputText: string | null;
@@ -558,6 +630,15 @@ export function MasterPanel({
 	const hiddenCount = plan.needs.hidden;
 	const overview = (
 		<>
+			{plan.slack && slack ? (
+				<SlackSection
+					slack={slack}
+					index={slackIndex}
+					selected={selected === SLACK_ROW}
+					width={inner}
+					now={now}
+				/>
+			) : null}
 			{plan.reviews.length ? (
 				<ReviewSection
 					reviews={plan.reviews}

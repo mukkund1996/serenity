@@ -38,13 +38,14 @@ bun run install:local
 
 State (SQLite, socket, daemon log) lives in `~/.local/state/serenity`; set `SERENITY_HOME` to use another directory. `serenity restart` restarts the background daemon and `serenity stop` stops it; a new build replaces a running daemon by itself.
 
-The master runs on your own Claude Code login. Models default to Opus (chat), Haiku (summaries) and Sonnet (suggestions); override them in `~/.config/serenity/config.json`. `reviewers` is who to suggest for review when CODEOWNERS names nobody. `maxTopics` caps how many topics the master groups sessions into (default 10):
+The master runs on your own Claude Code login. Models default to Opus (chat), Haiku (summaries) and Sonnet (suggestions); override them in `~/.config/serenity/config.json`. `reviewers` is who to suggest for review when CODEOWNERS names nobody. `maxTopics` caps how many topics the master groups sessions into (default 10). `slack.repos` turns on Slack for those repos' maps ([ADR 0023](docs/adr/0023-slack-for-the-master.md)): the threads and mentions waiting on you show under the master, `[` `]` cycle them, and the master's chat can read Slack. Run `serenity slack login` once to sign in.
 
 ```json
 {
   "models": { "chat": "opus", "summarizer": "haiku", "suggester": "sonnet" },
   "reviewers": ["teammate-login"],
-  "maxTopics": 10
+  "maxTopics": 10,
+  "slack": { "repos": ["~/projects/serenity"] }
 }
 ```
 
