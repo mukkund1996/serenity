@@ -161,7 +161,7 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 	[
 		"MAP",
 		[
-			["↑↓ [ ]", "select in node · prev / next topic"],
+			["↑↓ [ ]", "select in node · prev / next topic, Slack"],
 			["N I", "new session · import from tmux"],
 			["Tab Esc H", "next need · zoom out · archived"],
 			["y e n", "approve · edit · decline"],

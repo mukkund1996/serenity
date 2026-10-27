@@ -16,6 +16,7 @@ const EMPTY_STATE = {
 	github: { user: null, reviewRequests: [] },
 	usage: null,
 	averageWaitMs: null,
+	slack: null,
 };
 
 let server: Server | null = null;

@@ -3,12 +3,13 @@ import {
 	type MasterMessage,
 	type MasterPermission,
 	type Session,
+	type SlackItem,
 	type Style,
 	type TopicGroup,
 	truncate,
 	wrap,
 } from "@serenity/core";
-import { askLine, glyph, nameColor } from "./theme";
+import { age, askLine, glyph, nameColor } from "./theme";
 import {
 	type CardBox,
 	type CardElement,
@@ -30,6 +31,8 @@ import {
 /** Agents shown per bubble before the rest fold into `+N more`. */
 export const MAP_ROWS = 5;
 const MASTER_H = 8;
+/** The Slack box under the master: frame, channel line, two lines of text. */
+const SLACK_H = 5;
 const GAP = 4;
 const MAX_BUBBLE_W = 34;
 
@@ -60,6 +63,18 @@ export interface MapMaster {
 	lastMessage: MasterMessage | null;
 }
 
+/** The SLACK section, drawn as its own box under the master (ADR 0023). */
+export interface MapSlack {
+	/** The item shown; null when there is none and `error` says why. */
+	item: SlackItem | null;
+	index: number;
+	count: number;
+	error: string | null;
+	/** Selected on the focused master: `[` `]` cycle, Enter opens. */
+	selected: boolean;
+	now: number;
+}
+
 export interface MapInput {
 	width: number;
 	height: number;
@@ -72,6 +87,7 @@ export interface MapInput {
 	/** Text being typed to the focused agent, or null when not replying. */
 	replyText: string | null;
 	master: MapMaster;
+	slack?: MapSlack | null;
 }
 
 export interface MapLayout {
@@ -221,6 +237,9 @@ export function drawMap(input: MapInput): MapLayout {
 	links.draw(canvas);
 	for (const draw of drawBubbles) draw();
 	drawMaster(canvas, mx, my, mw, input.master);
+	const sy = my + MASTER_H + 1;
+	if (input.slack && sy + SLACK_H <= height)
+		drawSlack(canvas, mx, sy, mw, input.slack);
 	return {
 		canvas,
 		rows,
@@ -328,6 +347,51 @@ function drawRow(
 	});
 	if (flag)
 		canvas.text(col, y, flag, { ...base, fg: waiting ? "black" : "white" });
+}
+
+function drawSlack(
+	canvas: Canvas,
+	x: number,
+	y: number,
+	w: number,
+	s: MapSlack,
+): void {
+	canvas.frame(
+		x,
+		y,
+		w,
+		SLACK_H,
+		s.selected ? "heavy" : "rounded",
+		s.selected ? { fg: "whiteBright", bold: true } : DIM,
+	);
+	const title = s.count > 1 ? ` slack ${s.index + 1}/${s.count} ` : " slack ";
+	canvas.text(x + 2, y, title, { fg: "white", bold: true });
+	if (s.selected && s.count > 1) canvas.text(x + w - 7, y, " [ ] ", DIM);
+	const ix = x + 2;
+	const iw = w - 4;
+	if (!s.item) {
+		canvas.text(ix, y + 1, truncate(s.error ?? "", iw), { fg: "yellow" });
+		return;
+	}
+	if (s.selected)
+		canvas.text(x + 1, y + 1, "▸", { fg: "whiteBright", bold: true });
+	const when = age(s.item.at, s.now);
+	const col = canvas.text(
+		ix,
+		y + 1,
+		truncate(s.item.channel, iw - when.length - 1),
+		{ fg: s.selected ? "whiteBright" : "white", bold: s.selected },
+	);
+	canvas.text(
+		col,
+		y + 1,
+		truncate(` · ${s.item.author}`, ix + iw - when.length - 1 - col),
+		DIM,
+	);
+	canvas.text(ix + iw - when.length, y + 1, when, DIM);
+	wrap(s.item.text, iw, 2).forEach((line, i) => {
+		canvas.text(ix, y + 2 + i, line, { fg: "white" });
+	});
 }
 
 function drawMaster(

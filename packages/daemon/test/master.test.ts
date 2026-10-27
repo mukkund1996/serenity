@@ -79,6 +79,7 @@ beforeEach(() => {
 				opened.push(session.name);
 			},
 			mcpConfig: () => "{}",
+			slack: () => null,
 			workerCwd: "/tmp",
 			models: { chat: "opus", summarizer: "haiku", suggester: "sonnet" },
 			maxTopics: 3,

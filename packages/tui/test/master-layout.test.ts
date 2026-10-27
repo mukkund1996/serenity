@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import type { PrInfo, ReviewRequest } from "@serenity/core";
+import type { PrInfo, ReviewRequest, SlackItem } from "@serenity/core";
 import { makeSession } from "@serenity/core/testing";
 import {
 	type MasterPlanInput,
 	type MyPr,
 	needLines,
 	planMaster,
+	slackRows,
 	suggestionLines,
 	wrappedRows,
 } from "../src/master-layout";
@@ -16,6 +17,18 @@ const review = (number: number): ReviewRequest => ({
 	title: `t${number}`,
 	author: "ana",
 	updatedAt: 0,
+});
+const slackItem = (id: string): SlackItem => ({
+	id,
+	channelId: "C1",
+	channel: "#eng",
+	author: "ana",
+	text: `message ${id}`,
+	reason: "mention",
+	ts: "1.0",
+	threadTs: "1.0",
+	permalink: null,
+	at: 1000,
 });
 const mine = (number: number): MyPr => ({
 	session: makeSession({ id: `s${number}` }),
@@ -31,6 +44,7 @@ function input(height: number, more: Partial<MasterPlanInput> = {}) {
 		needs: [{ id: "n1", rows: 2 }],
 		selected: null,
 		conversation: [],
+		slack: null,
 		reviews: [review(1), review(2), review(3)],
 		mine: [mine(7), mine(6)],
 		...more,
@@ -105,4 +119,29 @@ test("wrappedRows wraps on words and breaks words longer than a line", () => {
 	expect(wrappedRows("aaaa bbbb", 8)).toBe(2);
 	expect(wrappedRows("one\ntwo", 10)).toBe(2);
 	expect(wrappedRows("x".repeat(25), 10)).toBe(3);
+});
+
+test("Slack takes its rows before REVIEW, whole or not at all", () => {
+	const slack = {
+		items: [slackItem("a"), slackItem("b")],
+		error: null,
+		checkedAt: 1,
+	};
+	const roomy = planMaster(input(60, { slack }));
+	expect(roomy.slack).toBe(true);
+	expect(roomy.reviews).toHaveLength(3);
+	// Its header and three rows exactly fit: REVIEW gets nothing.
+	const exact = planMaster(input(14 + 2 + 3, { slack }));
+	expect(exact.slack).toBe(true);
+	expect(exact.reviews).toHaveLength(0);
+	// One row short: Slack is dropped, and REVIEW gets the rows.
+	const short = planMaster(input(14 + 2 + 2, { slack }));
+	expect(short.slack).toBe(false);
+	expect(short.reviews).toHaveLength(2);
+});
+
+test("Slack with nothing waiting takes no rows; an error takes one", () => {
+	expect(slackRows({ items: [], error: null, checkedAt: 1 })).toBe(0);
+	expect(slackRows({ items: [], error: "no login", checkedAt: 1 })).toBe(1);
+	expect(slackRows(null)).toBe(0);
 });

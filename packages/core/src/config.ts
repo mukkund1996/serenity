@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { DEFAULT_SLACK_MCP } from "./slack";
 
 /** `~/.config/serenity/config.json` (ADR 0012). Every field is optional. */
 export interface Config {
@@ -10,13 +11,30 @@ export interface Config {
 	reviewers: string[];
 	/** Most topics the summarizer may create per repo; past it, sessions join an existing one. */
 	maxTopics: number;
+	/** Slack for the master (ADR 0023). */
+	slack: {
+		/** Repos (absolute, `~` allowed) whose map shows Slack; none by default. */
+		repos: string[];
+		/** The MCP server entry for Slack, as `--mcp-config` takes it. */
+		mcp: Record<string, unknown>;
+	};
 }
 
 export const DEFAULT_CONFIG: Config = {
 	models: { chat: "opus", summarizer: "haiku", suggester: "sonnet" },
 	reviewers: [],
 	maxTopics: 10,
+	slack: { repos: [], mcp: DEFAULT_SLACK_MCP },
 };
+
+/** Repos are named by their real path, as `git rev-parse --show-toplevel` gives it. */
+function realPath(path: string): string {
+	try {
+		return realpathSync(path);
+	} catch {
+		return resolve(path);
+	}
+}
 
 export function configPath(env: NodeJS.ProcessEnv = process.env): string {
 	const base = env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
@@ -30,6 +48,7 @@ export function loadConfig(path = configPath()): Config {
 		models?: Partial<Config["models"]>;
 		reviewers?: unknown;
 		maxTopics?: unknown;
+		slack?: { repos?: unknown; mcp?: unknown };
 	};
 	try {
 		raw = JSON.parse(readFileSync(path, "utf8"));
@@ -54,5 +73,16 @@ export function loadConfig(path = configPath()): Config {
 			Number.isInteger(raw.maxTopics) && (raw.maxTopics as number) > 0
 				? (raw.maxTopics as number)
 				: DEFAULT_CONFIG.maxTopics,
+		slack: {
+			repos: Array.isArray(raw.slack?.repos)
+				? raw.slack.repos
+						.filter((r): r is string => typeof r === "string" && !!r.trim())
+						.map((r) => realPath(r.trim().replace(/^~(?=$|\/)/, homedir())))
+				: [],
+			mcp:
+				raw.slack?.mcp && typeof raw.slack.mcp === "object"
+					? (raw.slack.mcp as Record<string, unknown>)
+					: DEFAULT_CONFIG.slack.mcp,
+		},
 	};
 }

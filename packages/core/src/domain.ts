@@ -1,4 +1,5 @@
 import type { GithubState, PrInfo } from "./pr";
+import type { SlackState } from "./slack";
 
 export const VERSION = "0.4.0";
 
@@ -240,4 +241,6 @@ export interface RepoState {
 	usage: Usage | null;
 	/** Average wait on you over the last day; null when nothing waited. */
 	averageWaitMs: number | null;
+	/** Slack threads and mentions waiting on you; null when Slack is off for the repo (ADR 0023). */
+	slack: SlackState | null;
 }

@@ -8,12 +8,19 @@ export interface JsonRunOptions {
 	model: string;
 	schema: object;
 	cwd: string;
+	/** MCP servers for this call (`--mcp-config` JSON); none by default. */
+	mcpConfig?: string;
+	/** MCP tools it may call; every other tool is denied. */
+	allowedTools?: string[];
+	timeoutMs?: number;
 }
 
 export interface ChatOptions {
 	cwd: string;
 	model: string;
 	mcpConfigPath: string;
+	/** Tools allowed beyond CHAT_ALLOWED, e.g. Slack's read tools. */
+	extraAllowed?: string[];
 	systemPrompt: string;
 	/** Claude session id to continue after a restart. */
 	resume: string | null;
@@ -85,6 +92,10 @@ export class CliClaudeRunner implements ClaudeRunner {
 				"",
 				"--no-session-persistence",
 				...ISOLATION,
+				...(opts.mcpConfig ? ["--mcp-config", opts.mcpConfig] : []),
+				...(opts.allowedTools?.length
+					? ["--allowedTools", opts.allowedTools.join(",")]
+					: []),
 			],
 			{
 				cwd: opts.cwd,
@@ -93,7 +104,10 @@ export class CliClaudeRunner implements ClaudeRunner {
 				stderr: "pipe",
 			},
 		);
-		const timer = setTimeout(() => proc.kill(), JSON_TIMEOUT_MS);
+		const timer = setTimeout(
+			() => proc.kill(),
+			opts.timeoutMs ?? JSON_TIMEOUT_MS,
+		);
 		const [stdout, stderr, code] = await Promise.all([
 			new Response(proc.stdout).text(),
 			new Response(proc.stderr).text(),
@@ -137,7 +151,7 @@ export class CliClaudeRunner implements ClaudeRunner {
 				"--tools",
 				CHAT_TOOLS,
 				"--allowedTools",
-				CHAT_ALLOWED,
+				[CHAT_ALLOWED, ...(opts.extraAllowed ?? [])].join(","),
 				"--mcp-config",
 				opts.mcpConfigPath,
 				"--permission-prompt-tool",

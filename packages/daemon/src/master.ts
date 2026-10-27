@@ -4,6 +4,7 @@ import {
 	capTopic,
 	chatMessage,
 	chatSnapshot,
+	MASTER_SLACK_PROMPT,
 	MASTER_SYSTEM_PROMPT,
 	type MasterPermission,
 	type MasterState,
@@ -14,6 +15,8 @@ import {
 	parseSuggestion,
 	parseSummary,
 	type Session,
+	SLACK_READ_TOOLS,
+	type SlackState,
 	type Storage,
 	SUGGESTION_SCHEMA,
 	type Suggestion,
@@ -43,6 +46,8 @@ export interface MasterHost {
 	open(session: Session): Promise<void>;
 	/** `--mcp-config` JSON for a repo's chat; its server is `serenity mcp <repo>`. */
 	mcpConfig(repo: string): string;
+	/** The repo's Slack inbox, or null when Slack is off for it (ADR 0023). */
+	slack(repo: string): SlackState | null;
 	/** Where one-shot workers run; not the user's repo, so nothing there is loaded. */
 	workerCwd: string;
 	models: MasterModels;
@@ -283,6 +288,7 @@ export class MasterSupervisor {
 		const snapshot = chatSnapshot(
 			this.host.storage.sessions.listByRepo(repo),
 			this.host.storage.suggestions.listPending(repo),
+			this.host.slack(repo)?.items ?? null,
 		);
 		chat.process.send(chatMessage(snapshot, text));
 		this.host.broadcast(repo);
@@ -295,12 +301,17 @@ export class MasterSupervisor {
 			thinking: false,
 			reply: [],
 		};
+		const slack = !!this.host.slack(repo);
 		chat.process = this.runner.startChat(
 			{
 				cwd: repo,
 				model: this.host.models.chat,
 				mcpConfigPath: this.host.mcpConfig(repo),
-				systemPrompt: MASTER_SYSTEM_PROMPT,
+				// Slack's read tools never ask; anything that writes asks the user.
+				extraAllowed: slack ? SLACK_READ_TOOLS : [],
+				systemPrompt: slack
+					? `${MASTER_SYSTEM_PROMPT}\n${MASTER_SLACK_PROMPT}`
+					: MASTER_SYSTEM_PROMPT,
 				resume: chat.claudeSessionId,
 			},
 			(event) => {

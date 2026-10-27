@@ -31,6 +31,7 @@ import {
 	REVIEW_ROW,
 	SessionCounts,
 	SessionMaster,
+	SLACK_ROW,
 } from "./components";
 import { drawMap, type MasterItem, rowElements } from "./map";
 import { needLines, planMaster, suggestionLines } from "./master-layout";
@@ -155,6 +156,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const [zoom, setZoom] = useState<Zoom>("topics");
 	const [search, setSearch, searchRef] = useLiveState<Search | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
+	/** The Slack item shown; `[` `]` step it while the SLACK section is selected. */
+	const [slackIndex, setSlackIndex] = useState(0);
 
 	const allSessions = state?.sessions ?? [];
 	/** Archived sessions are off the map; `H` lists them. */
@@ -192,6 +195,10 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const masterInner = masterWidth - 6;
 
 	const github = state?.github ?? { user: null, reviewRequests: [] };
+	const slack = state?.slack ?? null;
+	const slackItems = slack?.items ?? [];
+	const slackAt = Math.min(slackIndex, Math.max(0, slackItems.length - 1));
+	const slackItem = slackItems[slackAt] ?? null;
 	const mine = useMemo(
 		() => myPullRequests(sessions, github.user),
 		[sessions, github.user],
@@ -218,11 +225,13 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		],
 		selected: onMaster ? element : null,
 		conversation: state?.conversation ?? [],
+		slack,
 		reviews: github.reviewRequests,
 		mine,
 	});
 	/** The URL of a PR row selected in the master: a review request or one of mine. */
 	const linkOf = (id: string | null): string | null => {
+		if (id === SLACK_ROW) return slackItem?.permalink ?? null;
 		if (id?.startsWith(REVIEW_ROW))
 			return (
 				plan.reviews.find((r) => `${REVIEW_ROW}${r.number}` === id)?.url ?? null
@@ -242,6 +251,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		? [
 				...permissions.map((p) => `${PERM}${p.id}`),
 				...needs.map((s) => s.id),
+				// The map draws Slack in its own box under the master.
+				...(slackItem && (zoom === "map" || plan.slack) ? [SLACK_ROW] : []),
 				// The map's master box has no PR rows to select.
 				...(zoom === "topics"
 					? [
@@ -311,6 +322,17 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					inputText: masterText,
 					lastMessage: conversation[conversation.length - 1] ?? null,
 				},
+				slack:
+					slack && (slackItem || slack.error)
+						? {
+								item: slackItem,
+								index: slackAt,
+								count: slackItems.length,
+								error: slack.error,
+								selected: onMaster && selected === SLACK_ROW,
+								now: Date.now(),
+							}
+						: null,
 			});
 			const masterBox = { ...map.master, id: MASTER };
 			return {
@@ -699,6 +721,12 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				return setElement(elements[next] ?? null);
 			}
 			if (input === "[" || input === "]") {
+				// On the SLACK section they step through its items instead.
+				if (onMaster && selected === SLACK_ROW) {
+					const n = slackItems.length;
+					if (n > 1) setSlackIndex((slackAt + (input === "]" ? 1 : n - 1)) % n);
+					return;
+				}
 				const id = stepTopic(groups, card?.id ?? null, input === "]" ? 1 : -1);
 				if (id) focusNode(id);
 				return;
@@ -926,6 +954,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							master={master}
 							calmTopics={calm}
 							plan={plan}
+							slack={slack}
+							slackIndex={slackAt}
 							focused={onMaster}
 							selected={onMaster ? selected : null}
 							inputText={masterText}
