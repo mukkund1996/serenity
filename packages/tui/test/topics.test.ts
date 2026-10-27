@@ -8,6 +8,7 @@ import {
 	drawTopics,
 	holdOrder,
 	moveFocus,
+	splitSides,
 	stepTopic,
 } from "../src/topics";
 
@@ -105,6 +106,25 @@ describe("drawTopics", () => {
 		expect(rows.filter((r) => r.includes("●")).length).toBeGreaterThanOrEqual(
 			3,
 		);
+	});
+
+	test("left of a centred master, bubbles grow leftwards and link to the right edge", () => {
+		const width = 70;
+		const { canvas, cards } = drawTopics({
+			width,
+			height: 30,
+			masterRow: 15,
+			groups: groupTopics(sessions).filter((g) => g.name === "backend"),
+			focusId: null,
+			replyText: null,
+			side: "left",
+		});
+		const rows = canvas.toString().split("\n");
+		expect(rows[15]?.endsWith("──")).toBe(true);
+		const a1 = cards.find((c) => c.sessionId === "a1");
+		// The bubble hugs the master's side: its right frame sits by the trunk.
+		expect((a1?.x ?? 0) + CARD_W).toBeGreaterThan(width - 12);
+		expect(rows.some((r) => r.includes("╭● backend"))).toBe(true);
 	});
 
 	test("the focused card is heavy and taller", () => {
@@ -377,4 +397,12 @@ test("topic card outlines take a light status colour; focus is always white", ()
 	expect(frameColor("dead", false)).toBe("gray");
 	for (const status of ["waiting", "working", "done", "idle"] as const)
 		expect(frameColor(status, true)).toBe("whiteBright");
+});
+
+describe("splitSides", () => {
+	test("neediest goes right, then each topic to the side with fewer cards", () => {
+		const { left, right } = splitSides(groupTopics(sessions));
+		expect(right.map((g) => g.name)).toEqual(["backend", "discovery"]);
+		expect(left.map((g) => g.name)).toEqual(["infra"]);
+	});
 });
