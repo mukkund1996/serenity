@@ -8,9 +8,23 @@ Status: milestone 4 (map and navigation). Sessions with live status from hooks, 
 - Using it daily while developing it: [`docs/dogfooding.md`](docs/dogfooding.md)
 - Screen specs: [`docs/design/handover.md`](docs/design/handover.md)
 
-## Requirements
+## Install
 
-macOS or Linux, [tmux](https://github.com/tmux/tmux) 3.2+, [Claude Code](https://claude.com/claude-code), git. [`gh`](https://cli.github.com), logged in, for PR status (optional: without it cards say why).
+macOS or Linux. One command installs serenity and what it needs: [tmux](https://github.com/tmux/tmux) 3.2+, git, [`gh`](https://cli.github.com) and [Claude Code](https://claude.com/claude-code), skipping any you already have:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mukkund1996/serenity/main/scripts/install.sh | sh
+```
+
+Or with Homebrew (tmux, git and gh come as dependencies; Claude Code is a cask):
+
+```bash
+brew install --cask claude-code; brew install mukkund1996/tap/serenity
+```
+
+Then `gh auth login` for PR status (optional: without it cards say why), and run `serenity` inside any git repo. `serenity doctor` checks the setup. The installer takes `SERENITY_VERSION`, `SERENITY_INSTALL_DIR` (default `~/.local/bin`) and `SERENITY_NO_DEPS=1`.
+
+Releases: merging the release-please PR on `main` tags a version; the release workflow attaches the binaries and bumps the tap ([0025](docs/adr/0025-install-script-and-homebrew.md)).
 
 ## Development
 
@@ -38,13 +52,14 @@ bun run install:local
 
 State (SQLite, socket, daemon log) lives in `~/.local/state/serenity`; set `SERENITY_HOME` to use another directory. `serenity restart` restarts the background daemon and `serenity stop` stops it; a new build replaces a running daemon by itself.
 
-The master runs on your own Claude Code login. Models default to Opus (chat), Haiku (summaries) and Sonnet (suggestions); override them in `~/.config/serenity/config.json`. `reviewers` is who to suggest for review when CODEOWNERS names nobody. `maxTopics` caps how many topics the master groups sessions into (default 10):
+The master runs on your own Claude Code login. Models default to Opus (chat), Haiku (summaries) and Sonnet (suggestions); override them in `~/.config/serenity/config.json`. `reviewers` is who to suggest for review when CODEOWNERS names nobody. `maxTopics` caps how many topics the master groups sessions into (default 10). `slack.repos` turns on Slack for those repos' maps ([ADR 0023](docs/adr/0023-slack-for-the-master.md)): the threads and mentions waiting on you show under the master, `[` `]` cycle them, and the master's chat can read Slack. The master suggests a reply from your sessions and PRs, or asks a session first ([ADR 0024](docs/adr/0024-slack-reply-suggestions.md)); `y` posts it in the thread, `e` edits, `n` declines. Run `serenity slack login` once to sign in.
 
 ```json
 {
   "models": { "chat": "opus", "summarizer": "haiku", "suggester": "sonnet" },
   "reviewers": ["teammate-login"],
-  "maxTopics": 10
+  "maxTopics": 10,
+  "slack": { "repos": ["~/projects/serenity"] }
 }
 ```
 

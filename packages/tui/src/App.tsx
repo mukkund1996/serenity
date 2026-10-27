@@ -38,6 +38,7 @@ import {
 	REVIEW_ROW,
 	SessionCounts,
 	SessionMaster,
+	SLACK_ROW,
 } from "./components";
 import { drawMap, type MasterItem, rowElements } from "./map";
 import { needLines, planMaster, suggestionLines } from "./master-layout";
@@ -69,6 +70,8 @@ import { useDaemon } from "./use-daemon";
 
 export const MIN_COLUMNS = 80;
 export const MIN_ROWS = 24;
+/** Marks a Slack suggestion's id in replyEdit: e edits its text, Enter sends it there. */
+const SLACK_EDIT = "slack:";
 /** Replies remembered for the recent-replies list (design 4a). */
 const REPLY_HISTORY = 6;
 
@@ -164,6 +167,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const [zoom, setZoom] = useState<Zoom>("topics");
 	const [search, setSearch, searchRef] = useLiveState<Search | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
+	/** The Slack item shown; `[` `]` step it while the SLACK section is selected. */
+	const [slackIndex, setSlackIndex] = useState(0);
 
 	const allSessions = state?.sessions ?? [];
 	/** Archived sessions are off the map; `H` lists them. */
@@ -201,6 +206,12 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const masterInner = masterWidth - 6;
 
 	const github = state?.github ?? { user: null, reviewRequests: [] };
+	const slack = state?.slack ?? null;
+	const slackItems = slack?.items ?? [];
+	const slackAt = Math.min(slackIndex, Math.max(0, slackItems.length - 1));
+	const slackItem = slackItems[slackAt] ?? null;
+	const slackSuggestion =
+		slack?.suggestions.find((g) => g.itemId === slackItem?.id) ?? null;
 	const mine = useMemo(
 		() => myPullRequests(sessions, github.user),
 		[sessions, github.user],
@@ -227,11 +238,14 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		],
 		selected: onMaster && inside ? element : null,
 		conversation: state?.conversation ?? [],
+		slack,
+		slackIndex: slackAt,
 		reviews: github.reviewRequests,
 		mine,
 	});
 	/** The URL of a PR row selected in the master: a review request or one of mine. */
 	const linkOf = (id: string | null): string | null => {
+		if (id === SLACK_ROW) return slackItem?.permalink ?? null;
 		if (id?.startsWith(REVIEW_ROW))
 			return (
 				plan.reviews.find((r) => `${REVIEW_ROW}${r.number}` === id)?.url ?? null
@@ -251,6 +265,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		? [
 				...permissions.map((p) => `${PERM}${p.id}`),
 				...needs.map((s) => s.id),
+				// The map draws Slack in its own box under the master.
+				...(slackItem && (zoom === "map" || plan.slack) ? [SLACK_ROW] : []),
 				// The map's master box has no PR rows to select.
 				...(zoom === "topics"
 					? [
@@ -298,7 +314,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					}
 				: null;
 	const layout = (() => {
-		// Outside a node nothing inside it is selected (ADR 0023).
+		// Outside a node nothing inside it is selected (ADR 0026).
 		const focusElement = (
 			onMaster || !inside ? "card" : selected
 		) as CardElement;
@@ -323,6 +339,20 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					inputText: masterText,
 					lastMessage: conversation[conversation.length - 1] ?? null,
 				},
+				slack:
+					slack && (slackItem || slack.error)
+						? {
+								item: slackItem,
+								index: slackAt,
+								count: slackItems.length,
+								error: slack.error,
+								suggestion: slackSuggestion,
+								replyText:
+									onMaster && selected === SLACK_ROW ? replyText : null,
+								selected: onMaster && selected === SLACK_ROW,
+								now: Date.now(),
+							}
+						: null,
 			});
 			const masterBox = { ...map.master, id: MASTER };
 			return {
@@ -516,17 +546,31 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 	const sendReply = (text: string) => {
 		const target = focused;
+		const editing = replyEditRef.current;
 		endReply();
 		setOverlay(null);
+		if (editing?.startsWith(SLACK_EDIT)) {
+			if (text.trim()) acceptSlack(editing.slice(SLACK_EDIT.length), text);
+			return;
+		}
 		if (!target || !text.trim()) return;
 		setSentReplies((list) =>
 			[text, ...list.filter((r) => r !== text)].slice(0, REPLY_HISTORY),
 		);
-		const editing = replyEditRef.current;
 		const sent = editing
 			? call("suggestion.accept", { id: editing, text })
 			: call("session.reply", { id: target.id, text });
 		sent.catch(fail);
+	};
+
+	/** y on a Slack suggestion: post the reply, or type the question to its session. */
+	const acceptSlack = (itemId: string, text?: string) => {
+		const ask = slackSuggestion?.kind === "ask";
+		call("slack.accept", { repo, itemId, ...(text ? { text } : {}) }).then(
+			() =>
+				setNotice(ask ? "asked; its answer becomes a reply" : "sent to Slack"),
+			fail,
+		);
 	};
 
 	/** Sessions matching a search, in the order the map draws them. */
@@ -559,7 +603,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	useInput(
 		function onKey(input: string, key: InkKey) {
 			// Ctrl+m focuses the master from every view, the session zoom too.
-			// tmux passes it here as an extended key; Enter stays Enter (ADR 0023).
+			// tmux passes it here as an extended key; Enter stays Enter (ADR 0026).
 			const toMasterKey = key.ctrl && input === "m";
 			if (attached) {
 				if (key.escape || (key.ctrl && input === "g") || toMasterKey)
@@ -740,8 +784,32 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				return setElement(elements[next] ?? null);
 			}
 			if (input === "[" || input === "]") {
+				// On the SLACK section they step through its items instead.
+				if (onMaster && selected === SLACK_ROW) {
+					const n = slackItems.length;
+					if (n > 1) setSlackIndex((slackAt + (input === "]" ? 1 : n - 1)) % n);
+					return;
+				}
 				const id = stepTopic(groups, card?.id ?? null, input === "]" ? 1 : -1);
 				if (id) focusNode(id);
+				return;
+			}
+
+			// y e n on the SLACK section act on its suggestion (ADR 0024).
+			if (
+				onMaster &&
+				selected === SLACK_ROW &&
+				["y", "e", "n"].includes(input)
+			) {
+				if (slackSuggestion?.status !== "pending" || !slackItem) return;
+				if (input === "y") return acceptSlack(slackItem.id);
+				if (input === "n")
+					return void call("slack.decline", {
+						repo,
+						itemId: slackItem.id,
+					}).catch(fail);
+				setReplyEdit(`${SLACK_EDIT}${slackItem.id}`);
+				setReplyText(slackSuggestion.text);
 				return;
 			}
 
@@ -968,6 +1036,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							master={master}
 							calmTopics={calm}
 							plan={plan}
+							slack={slack}
+							slackIndex={slackAt}
 							focused={onMaster}
 							selected={onMaster && inside ? selected : null}
 							inputText={masterText}

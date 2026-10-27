@@ -57,7 +57,7 @@ Only these three glyphs exist. PR status is words only: checks failing (red), ch
 - Focus = heavy white frame `┏━┓`. Waiting = yellow light frame. Others = grey light frame.
 
 ## Header and footer
-Header: `◆ mindmap  <repo>` · centred inverse-yellow `4 need you` · `zoom: …`. Footer: `←↑↓→ move · Enter into · Ctrl+m master` left (ADR 0023), `? shortcuts` always bottom right.
+Header: `◆ mindmap  <repo>` · centred inverse-yellow `4 need you` · `zoom: …`. Footer: `←↑↓→ move · Enter into · Ctrl+m master` left (ADR 0026), `? shortcuts` always bottom right.
 
 ## Frames and grid
 | Element | Characters |
@@ -93,10 +93,10 @@ Status never relies on colour alone except idle and archived, which are delibera
 | Key | Action |
 |-----|--------|
 | `Tab` `⇧Tab` | next / previous waiting |
-| `←` `↑` `↓` `→` | move between nodes (between topics on the map zoom; ADR 0019, 0023) |
-| `Enter` · `Esc` | go into the focused node · leave it (ADR 0023) |
-| `w` `s` | select inside the node, marked `▸` (ADR 0023) |
-| `c` · `Ctrl+m` | center on master · focus the master from any view, the session too (ADR 0023) |
+| `←` `↑` `↓` `→` | move between nodes (between topics on the map zoom; ADR 0019, 0026) |
+| `Enter` · `Esc` | go into the focused node · leave it (ADR 0026) |
+| `w` `s` | select inside the node, marked `▸` (ADR 0026) |
+| `c` · `Ctrl+m` | center on master · focus the master from any view, the session too (ADR 0026) |
 | `z` `Z` | zoom out (map) / zoom in (topics; on a card in topics, into its session) |
 | `Esc` | one level up (outside a node) |
 | `[` `]` | previous / next topic |

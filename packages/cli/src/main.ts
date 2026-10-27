@@ -1,12 +1,16 @@
 #!/usr/bin/env bun
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
 	BUILD_ID,
+	configPath,
 	connectDaemon,
 	doctorMarkerPath,
 	ensureDaemon,
 	isHookKind,
+	loadConfig,
+	SLACK_SERVER,
 	selfCommand,
 	serenityHome,
 	socketPath,
@@ -25,6 +29,7 @@ const USAGE = `serenity ${VERSION} · a mind map of your Claude Code sessions
 usage:
   serenity            open the map for the git repo you are in
   serenity doctor     check tmux, claude, git and gh
+  serenity slack login  sign in to Slack for the master (once)
   serenity stop       stop the background daemon
   serenity restart    restart it (sessions keep running)
   serenity version
@@ -209,6 +214,41 @@ async function stopDaemon(): Promise<void> {
 	console.log("daemon stopped");
 }
 
+/**
+ * `serenity slack login` (ADR 0023): the master reads Slack through its MCP
+ * server, isolated from the user's own MCP config, so it signs in apart. The
+ * server is registered only for serenity's workers folder, then `claude mcp
+ * login` runs the OAuth flow; later `claude -p` calls reuse the token.
+ */
+function slackLogin(): void {
+	const claude = process.env.SERENITY_CLAUDE_BIN ?? "claude";
+	const config = loadConfig();
+	const cwd = join(home, "workers");
+	mkdirSync(cwd, { recursive: true });
+	const run = (args: string[], stdio: "inherit" | "pipe" = "inherit") =>
+		spawnSync(claude, args, { cwd, stdio, encoding: "utf8" });
+	// Replaced, so a changed `slack.mcp` in the config takes effect.
+	run(["mcp", "remove", "-s", "local", SLACK_SERVER], "pipe");
+	const added = run([
+		"mcp",
+		"add-json",
+		"-s",
+		"local",
+		SLACK_SERVER,
+		JSON.stringify(config.slack.mcp),
+	]);
+	if (added.status !== 0) fail("could not register Slack's MCP server");
+	if (config.slack.mcp.type === "stdio")
+		console.log("A stdio server signs in through its own settings.");
+	else if (run(["mcp", "login", SLACK_SERVER]).status !== 0)
+		fail("Slack login did not finish");
+	console.log(
+		config.slack.repos.length
+			? `Slack is on for: ${config.slack.repos.join(", ")}`
+			: `Slack is off for every repo. List repos under slack.repos in ${configPath()}, then run serenity restart.`,
+	);
+}
+
 const [command, arg] = process.argv.slice(2);
 switch (command) {
 	case undefined:
@@ -245,6 +285,10 @@ switch (command) {
 		process.exit(ok ? 0 : 1);
 		break;
 	}
+	case "slack":
+		if (arg !== "login") fail("usage: serenity slack login");
+		slackLogin();
+		break;
 	case "stop":
 		await stopDaemon();
 		break;

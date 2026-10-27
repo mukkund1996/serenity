@@ -1,0 +1,106 @@
+name: release
+
+# release-please keeps a release PR open from conventional commits on main.
+# Merging it tags vX.Y.Z and creates the GitHub release; the jobs below then
+# attach the binaries and their checksums and bump the Homebrew tap (ADR 0014).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re)build binaries for, e.g. v0.5.0
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      created: ${{ steps.rp.outputs.release_created }}
+      tag: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      - id: rp
+        uses: googleapis/release-please-action@v4
+
+  build:
+    needs: release-please
+    if: always() && (needs.release-please.outputs.created == 'true' || github.event_name == 'workflow_dispatch')
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { target: darwin-arm64, os: macos-latest, native: true }
+          - { target: darwin-x64, os: macos-latest }
+          - { target: linux-x64, os: ubuntu-latest, native: true }
+          - { target: linux-arm64, os: ubuntu-latest }
+    runs-on: ${{ matrix.os }}
+    env:
+      TAG: ${{ needs.release-please.outputs.tag || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/build.ts bun-${{ matrix.target }} dist/serenity-${{ matrix.target }}
+      # Apple Silicon refuses to run an unsigned binary; an ad-hoc signature is enough outside the App Store.
+      - if: runner.os == 'macOS'
+        run: codesign --force --sign - dist/serenity-${{ matrix.target }}
+      - if: matrix.native
+        run: |
+          out=$(./dist/serenity-${{ matrix.target }} version)
+          echo "$out"
+          case "$out" in "${TAG#v}+"*) ;; *) echo "version $out does not match $TAG"; exit 1 ;; esac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: serenity-${{ matrix.target }}
+          path: dist/serenity-${{ matrix.target }}
+
+  publish:
+    needs: [release-please, build]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.release-please.outputs.tag || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Checksums
+        working-directory: assets
+        run: sha256sum serenity-* > SHA256SUMS && cat SHA256SUMS
+      - name: Upload to the release
+        run: gh release upload "$TAG" assets/* --clobber
+      - name: Bump the Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN is not set; the tap was not bumped"
+            exit 0
+          fi
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/mukkund1996/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          bun scripts/homebrew-formula.ts "$TAG" assets/SHA256SUMS > tap/Formula/serenity.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/serenity.rb
+          git diff --cached --quiet || git commit -m "serenity ${TAG#v}"
+          git push

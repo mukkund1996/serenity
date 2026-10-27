@@ -1,6 +1,7 @@
 import type { GithubState, PrInfo } from "./pr";
+import type { SlackState } from "./slack";
 
-export const VERSION = "0.4.0";
+export const VERSION = "0.4.0"; // x-release-please-version
 
 /** Set by scripts/build.ts: the commit and time of a compiled build. */
 declare const SERENITY_BUILD: string | undefined;
@@ -63,6 +64,11 @@ export interface Session {
 	topicCandidate: string | null;
 	lastPrompt: string | null;
 	lastAssistantMessage: string | null;
+	/**
+	 * Subagents started and not yet stopped. A turn that ends while any run
+	 * (background agents) is still working on their results.
+	 */
+	subagents: string[];
 	transcriptPath: string | null;
 	claudeSessionId: string | null;
 	watched: boolean;
@@ -101,10 +107,13 @@ export interface ImportCandidate {
 export const HOOK_KINDS = [
 	"SessionStart",
 	"UserPromptSubmit",
+	"PreToolUse",
 	"PostToolUse",
 	"PermissionRequest",
 	"Notification",
 	"Stop",
+	"SubagentStart",
+	"SubagentStop",
 	"SessionEnd",
 ] as const;
 
@@ -125,6 +134,8 @@ export interface HookPayload {
 	notification_type?: string;
 	last_assistant_message?: string;
 	tool_name?: string;
+	/** Set on events from inside a subagent, and on SubagentStart/Stop. */
+	agent_id?: string;
 	[key: string]: unknown;
 }
 
@@ -230,4 +241,6 @@ export interface RepoState {
 	usage: Usage | null;
 	/** Average wait on you over the last day; null when nothing waited. */
 	averageWaitMs: number | null;
+	/** Slack threads and mentions waiting on you; null when Slack is off for the repo (ADR 0023). */
+	slack: SlackState | null;
 }

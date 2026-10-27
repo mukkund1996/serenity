@@ -3,14 +3,15 @@ import {
 	type PrInfo,
 	type ReviewRequest,
 	type Session,
+	type SlackState,
 	wrap,
 } from "@serenity/core";
 
 /**
  * What the master panel shows in the rows it has (ADR 0012). NEEDS YOU, the
- * conversation and the input always show; the rows left over go to REVIEW,
- * then MY PRS, each trimmed to fit or dropped. The session counts sit in
- * the header.
+ * conversation and the input always show; the rows left over go to SLACK
+ * (whole or not at all, ADR 0023), then REVIEW, then MY PRS, each trimmed to
+ * fit or dropped. The session counts sit in the header.
  */
 
 /** How many NEEDS YOU items fit; the rest are summarised as "+N more". */
@@ -30,6 +31,25 @@ export function needLines(text: string, inner: number): string[] {
 /** A suggestion's label beside its chips: up to 2 lines. */
 export function suggestionLines(label: string, inner: number): string[] {
 	return wrap(label, inner - NEED_INDENT - 2 - CHIPS_W, 2);
+}
+
+/** Lines of a Slack message's text under its channel and author. */
+export const SLACK_TEXT_LINES = 2;
+
+/**
+ * Rows the SLACK section's body takes: the item at `index` and its
+ * suggestion, if any (ADR 0024), or the reason Slack cannot be read.
+ */
+export function slackRows(slack: SlackState | null, index = 0): number {
+	if (!slack) return 0;
+	const item = slack.items[index];
+	if (item)
+		return (
+			1 +
+			SLACK_TEXT_LINES +
+			(slack.suggestions.some((g) => g.itemId === item.id) ? 1 : 0)
+		);
+	return slack.error ? 1 : 0;
 }
 
 /** Width of the "you" / "◆" column before a conversation message. */
@@ -53,6 +73,10 @@ export interface MasterPlanInput {
 	needs: Array<{ id: string; rows: number }>;
 	selected: string | null;
 	conversation: MasterMessage[];
+	/** Slack's inbox when the repo has it on. */
+	slack: SlackState | null;
+	/** The Slack item shown. */
+	slackIndex?: number;
 	reviews: ReviewRequest[];
 	mine: MyPr[];
 }
@@ -60,6 +84,8 @@ export interface MasterPlanInput {
 export interface MasterPlan {
 	/** The window of NEEDS YOU on screen; it slides to keep the selection shown. */
 	needs: { start: number; count: number; hidden: number };
+	/** Whether the SLACK section fits. */
+	slack: boolean;
 	reviews: ReviewRequest[];
 	mine: MyPr[];
 }
@@ -95,12 +121,21 @@ export function planMaster(input: MasterPlanInput): MasterPlan {
 		room -= HEADER_ROWS + rows;
 		return rows;
 	};
+	const slackWant = slackRows(input.slack, input.slackIndex);
+	// One message cut short says nothing, so Slack shows whole or not at all.
+	const slack = slackWant > 0 && room - HEADER_ROWS >= slackWant;
+	if (slack) take(slackWant);
 	const reviews = input.reviews.slice(0, take(input.reviews.length));
 	const mine = input.mine.slice(
 		0,
 		take(Math.min(MAX_MY_PRS, input.mine.length)),
 	);
-	return { needs: { start, count: shown.length, hidden }, reviews, mine };
+	return {
+		needs: { start, count: shown.length, hidden },
+		slack,
+		reviews,
+		mine,
+	};
 }
 
 /** Rows of the conversation's latest exchange, as `Conversation` draws it. */

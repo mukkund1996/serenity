@@ -1,4 +1,4 @@
-# 0023 · Arrow keys between nodes, Enter into a node, `Ctrl+m` to the master
+# 0026 · Arrow keys between nodes, Enter into a node, `Ctrl+m` to the master
 
 **Status:** Accepted · 2026-10-27
 

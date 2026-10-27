@@ -134,4 +134,74 @@ describe("reduceHook", () => {
 			}),
 		).toEqual({});
 	});
+
+	test("a tool starting means work, but never ends a wait", () => {
+		for (const status of ["idle", "done"] as const)
+			expect(
+				reduceHook(makeSession({ status }), "PreToolUse", {
+					tool_name: "Read",
+				}),
+			).toEqual({ status: "working", ask: null, waitingOn: null });
+		expect(
+			reduceHook(
+				makeSession({ status: "waiting", ask: "x", waitingOn: "permission" }),
+				"PreToolUse",
+				{ tool_name: "Read", agent_id: "a-1" },
+			),
+		).toEqual({});
+	});
+
+	test("a done session that uses a tool again is working", () => {
+		expect(
+			reduceHook(makeSession({ status: "done" }), "PostToolUse", {}),
+		).toMatchObject({ status: "working" });
+	});
+
+	test("a turn that ends while subagents run stays working until they stop", () => {
+		let session = makeSession({ status: "working" });
+		const apply = (kind: Parameters<typeof reduceHook>[1], agent?: string) => {
+			session = {
+				...session,
+				...reduceHook(session, kind, {
+					...(agent ? { agent_id: agent } : {}),
+					last_assistant_message: "waiting on the agents",
+				}),
+			};
+		};
+		apply("SubagentStart", "a-1");
+		apply("SubagentStart", "a-2");
+		expect(session.subagents).toEqual(["a-1", "a-2"]);
+		apply("Stop");
+		expect(session.status).toBe("working");
+		expect(session.lastAssistantMessage).toBe("waiting on the agents");
+		apply("SubagentStop", "a-1");
+		apply("Stop");
+		expect(session.status).toBe("working");
+		apply("SubagentStop", "a-2");
+		expect(session.subagents).toEqual([]);
+		apply("Stop");
+		expect(session.status).toBe("idle");
+	});
+
+	test("a subagent starting wakes an idle session; an unknown stop changes nothing", () => {
+		expect(
+			reduceHook(makeSession({ status: "idle" }), "SubagentStart", {
+				agent_id: "a-1",
+			}),
+		).toEqual({
+			subagents: ["a-1"],
+			status: "working",
+			ask: null,
+			waitingOn: null,
+		});
+		expect(
+			reduceHook(makeSession(), "SubagentStop", { agent_id: "a-9" }),
+		).toEqual({});
+	});
+
+	test("a new or ended session forgets its subagents", () => {
+		const session = makeSession({ status: "working", subagents: ["a-1"] });
+		expect(reduceHook(session, "SessionStart", {}).subagents).toEqual([]);
+		expect(reduceHook(session, "SessionEnd", {}).subagents).toEqual([]);
+	});
 });

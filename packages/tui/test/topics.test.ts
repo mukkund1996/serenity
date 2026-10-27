@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { groupTopics } from "@serenity/core";
 import { makeSession } from "@serenity/core/testing";
 import { splitAtNewline } from "../src/text-input";
+import { frameColor } from "../src/theme";
 import {
 	CARD_W,
 	drawTopics,
@@ -366,4 +367,14 @@ describe("holdOrder", () => {
 	test("with nothing focused every topic takes its fresh order", () => {
 		expect(holdOrder(groups, drawn, null)).toBe(groups);
 	});
+});
+
+test("topic card outlines take a light status colour; focus is always white", () => {
+	expect(frameColor("waiting", false)).toBe("yellowBright");
+	expect(frameColor("working", false)).toBe("blueBright");
+	expect(frameColor("done", false)).toBe("greenBright");
+	expect(frameColor("idle", false)).toBe("gray");
+	expect(frameColor("dead", false)).toBe("gray");
+	for (const status of ["waiting", "working", "done", "idle"] as const)
+		expect(frameColor(status, true)).toBe("whiteBright");
 });

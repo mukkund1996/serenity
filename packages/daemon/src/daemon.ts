@@ -20,6 +20,7 @@ import {
 	RpcPeer,
 	reduceHook,
 	type Session,
+	SLACK_SERVER,
 	STARTUP_ASK,
 	type Storage,
 	selfCommand,
@@ -51,6 +52,8 @@ import { agentCommand, shellQuote, writeHookSettings } from "./hooks";
 import { type MasterModels, MasterSupervisor } from "./master";
 import { PrWatcher, workDir } from "./prs";
 import { ReviewWatcher } from "./reviews";
+import { SlackWatcher } from "./slack";
+import { SlackAdvisor } from "./slack-advisor";
 import { Tmux } from "./tmux";
 
 export interface DaemonOptions {
@@ -81,6 +84,10 @@ export interface DaemonOptions {
 	claudeConfigDir?: string;
 	/** How often review requests are polled while a map is open; SERENITY_REVIEW_POLL_MS overrides it. */
 	reviewPollMs?: number;
+	/** Repos whose map shows Slack; defaults to config (ADR 0023). */
+	slackRepos?: string[];
+	/** How often Slack is read while such a map is open; SERENITY_SLACK_POLL_MS overrides it. */
+	slackPollMs?: number;
 }
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,39}$/i;
@@ -95,6 +102,8 @@ const DEFAULT_STARTUP_GRACE_MS = 5000;
 const DEFAULT_WORKER_DEBOUNCE_MS = 1500;
 /** Review requests fire no event, so an open map polls them this often. */
 const DEFAULT_REVIEW_POLL_MS = 5 * 60_000;
+/** Neither do Slack messages; each read is a model call, so it runs as seldom. */
+const DEFAULT_SLACK_POLL_MS = 5 * 60_000;
 /** Messages of the master conversation sent to clients. */
 const CONVERSATION_SHOWN = 4;
 
@@ -132,6 +141,11 @@ export class Daemon {
 	private readonly gh: Gh;
 	private readonly prs: PrWatcher;
 	private readonly reviews: ReviewWatcher;
+	private readonly slack: SlackWatcher;
+	private readonly advisor: SlackAdvisor;
+	private readonly slackRepos: Set<string>;
+	/** The Slack MCP server entry, for the inbox worker and the chat. */
+	private readonly slackMcp: Record<string, unknown>;
 	private readonly observer: ClaudeObserver;
 	/** Plan usage is per account, so the latest report covers every repo. */
 	private usage: Usage | null = null;
@@ -151,6 +165,9 @@ export class Daemon {
 			opts.log ??
 			((line) => console.log(`${new Date().toISOString()} ${line}`));
 		const config = loadConfig();
+		this.slackRepos = new Set(opts.slackRepos ?? config.slack.repos);
+		this.slackMcp = config.slack.mcp;
+		const runner = opts.runner ?? new CliClaudeRunner(this.claudeCommand);
 		this.master = new MasterSupervisor(
 			{
 				storage: opts.storage,
@@ -161,6 +178,8 @@ export class Daemon {
 				kill: (session) => this.kill(session),
 				open: (session) => this.open(session),
 				mcpConfig: (repo) => this.mcpConfig(repo),
+				slack: (repo) =>
+					this.slackRepos.has(repo) ? this.slack.state() : null,
 				workerCwd: join(opts.home, "workers"),
 				models: opts.models ?? config.models,
 				maxTopics: opts.maxTopics ?? config.maxTopics,
@@ -168,7 +187,7 @@ export class Daemon {
 					opts.workerDebounceMs ??
 					envNumber("SERENITY_WORKER_DEBOUNCE_MS", DEFAULT_WORKER_DEBOUNCE_MS),
 			},
-			opts.runner ?? new CliClaudeRunner(this.claudeCommand),
+			runner,
 		);
 		this.gh = opts.gh ?? new Gh();
 		this.prs = new PrWatcher({
@@ -193,6 +212,44 @@ export class Daemon {
 			pollMs:
 				opts.reviewPollMs ??
 				envNumber("SERENITY_REVIEW_POLL_MS", DEFAULT_REVIEW_POLL_MS),
+		});
+		const models = opts.models ?? config.models;
+		const slackMcpConfig = JSON.stringify({
+			mcpServers: { [SLACK_SERVER]: this.slackMcp },
+		});
+		this.advisor = new SlackAdvisor({
+			runner,
+			storage: opts.storage,
+			model: models.suggester,
+			sendModel: models.summarizer,
+			cwd: join(opts.home, "workers"),
+			mcpConfig: slackMcpConfig,
+			reviews: (repo) => this.reviews.state(repo).reviewRequests,
+			sendText: async (session, text) =>
+				this.tmux.sendText(await this.requireLivePane(session), text),
+			refreshInbox: () => void this.slack.refresh(),
+			broadcast: (repo) => this.broadcast(repo),
+			log: this.log,
+		});
+		this.slack = new SlackWatcher({
+			runner,
+			model: models.summarizer,
+			cwd: join(opts.home, "workers"),
+			mcpConfig: slackMcpConfig,
+			watching: () => this.openRepos().some((r) => this.slackRepos.has(r)),
+			broadcast: () => {
+				for (const repo of this.openRepos())
+					if (this.slackRepos.has(repo)) this.broadcast(repo);
+			},
+			onInbox: (items) => {
+				for (const repo of this.openRepos())
+					if (this.slackRepos.has(repo)) this.advisor.onInbox(repo, items);
+			},
+			log: this.log,
+			now: this.now,
+			pollMs:
+				opts.slackPollMs ??
+				envNumber("SERENITY_SLACK_POLL_MS", DEFAULT_SLACK_POLL_MS),
 		});
 		this.observer = new ClaudeObserver(
 			{
@@ -231,6 +288,7 @@ export class Daemon {
 		this.master.stop();
 		this.prs.stop();
 		this.reviews.stop();
+		this.slack.stop();
 		this.observer.stop();
 		for (const peer of this.subscriptions.keys()) peer.close();
 		await new Promise<void>((resolve) =>
@@ -281,7 +339,19 @@ export class Daemon {
 			averageWaitMs: averageWait(
 				this.opts.storage.waits.listSince(repo, this.now() - WAIT_WINDOW_MS),
 			),
+			slack: this.slackRepos.has(repo)
+				? { ...this.slack.state(), suggestions: this.advisor.list(repo) }
+				: null,
 		};
+	}
+
+	/** Repos with a map open. */
+	private openRepos(): string[] {
+		return [
+			...new Set(
+				[...this.subscriptions.values()].flatMap((repos) => [...repos]),
+			),
+		];
 	}
 
 	private broadcast(repo: string): void {
@@ -313,6 +383,8 @@ export class Daemon {
 	private change(session: Session, patch: Partial<Session>): Session {
 		const next = this.update(session, patch);
 		this.master.onSessionChanged(session, next);
+		if (next.lastAssistantMessage !== session.lastAssistantMessage)
+			this.advisor.onSessionChanged(next);
 		return next;
 	}
 
@@ -327,6 +399,12 @@ export class Daemon {
 			}
 			this.prs.refreshRepo(repo);
 			this.reviews.watch(repo);
+			if (this.slackRepos.has(repo)) {
+				this.slack.watch();
+				// A map opened after the last read still gets its suggestions.
+				const { items, error } = this.slack.state();
+				if (!error) this.advisor.onInbox(repo, items);
+			}
 			return this.state(repo);
 		},
 
@@ -473,6 +551,23 @@ export class Daemon {
 			return null;
 		},
 
+		"slack.accept": async ({ repo, itemId, text }) => {
+			try {
+				await this.advisor.accept(repo, itemId, text);
+			} catch (error) {
+				throw new RpcError(
+					RpcErrorCode.InvalidParams,
+					error instanceof Error ? error.message : String(error),
+				);
+			}
+			return null;
+		},
+
+		"slack.decline": ({ repo, itemId }) => {
+			this.advisor.decline(repo, itemId);
+			return null;
+		},
+
 		"master.message": ({ repo, text }) => {
 			if (!text.trim())
 				throw new RpcError(RpcErrorCode.InvalidParams, "empty message");
@@ -525,11 +620,7 @@ export class Daemon {
 			if (!usage) return null;
 			const changed = usageChanged(this.usage, usage);
 			this.usage = usage;
-			if (changed)
-				for (const repo of new Set(
-					[...this.subscriptions.values()].flatMap((repos) => [...repos]),
-				))
-					this.broadcast(repo);
+			if (changed) for (const repo of this.openRepos()) this.broadcast(repo);
 			return null;
 		},
 
@@ -564,7 +655,10 @@ export class Daemon {
 		}
 	}
 
-	/** `--mcp-config` for a repo's master chat: `serenity mcp <repo>` (ADR 0008). */
+	/**
+	 * `--mcp-config` for a repo's master chat: `serenity mcp <repo>` (ADR
+	 * 0008), and Slack when the repo has it on (ADR 0023).
+	 */
 	private mcpConfig(repo: string): string {
 		const [command, ...args] = this.self;
 		return JSON.stringify({
@@ -575,6 +669,7 @@ export class Daemon {
 					args: [...args, "mcp", repo],
 					env: { SERENITY_HOME: this.opts.home },
 				},
+				...(this.slackRepos.has(repo) ? { [SLACK_SERVER]: this.slackMcp } : {}),
 			},
 		});
 	}
@@ -966,6 +1061,7 @@ export class Daemon {
 			topicCandidate: null,
 			lastPrompt: null,
 			lastAssistantMessage: null,
+			subagents: [],
 			transcriptPath: null,
 			claudeSessionId: null,
 			watched: false,

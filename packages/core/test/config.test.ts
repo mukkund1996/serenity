@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_CONFIG, loadConfig } from "../src/config";
 
@@ -38,4 +38,23 @@ test("maxTopics is a positive whole number", () => {
 	expect(loadConfig(join(dir, "t.json")).maxTopics).toBe(6);
 	writeFileSync(join(dir, "t0.json"), JSON.stringify({ maxTopics: 0 }));
 	expect(loadConfig(join(dir, "t0.json")).maxTopics).toBe(10);
+});
+
+test("Slack is off unless repos list it; ~ and links resolve to real paths", () => {
+	expect(loadConfig(join(dir, "missing.json")).slack.repos).toEqual([]);
+	writeFileSync(
+		join(dir, "s.json"),
+		JSON.stringify({ slack: { repos: ["~/code/app", dir, 4] } }),
+	);
+	const slack = loadConfig(join(dir, "s.json")).slack;
+	expect(slack.repos).toEqual([join(homedir(), "code/app"), realpathSync(dir)]);
+	expect(slack.mcp).toEqual(DEFAULT_CONFIG.slack.mcp);
+	writeFileSync(
+		join(dir, "m.json"),
+		JSON.stringify({ slack: { mcp: { type: "stdio", command: "slack-mcp" } } }),
+	);
+	expect(loadConfig(join(dir, "m.json")).slack.mcp).toEqual({
+		type: "stdio",
+		command: "slack-mcp",
+	});
 });
