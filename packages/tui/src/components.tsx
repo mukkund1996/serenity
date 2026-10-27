@@ -7,6 +7,7 @@ import type {
 	ReviewRequest,
 	Session,
 	SlackState,
+	SlackSuggestion,
 	Suggestion,
 } from "@serenity/core";
 import { prLine, prStatus, wrap } from "@serenity/core";
@@ -457,16 +458,22 @@ function SlackSection({
 	slack,
 	index,
 	selected,
+	replyText,
 	width,
 	now,
 }: {
 	slack: SlackState;
 	index: number;
 	selected: boolean;
+	/** The suggestion's text being edited (e), or null. */
+	replyText: string | null;
 	width: number;
 	now: number;
 }) {
 	const item = slack.items[index];
+	const suggestion = item
+		? slack.suggestions.find((g) => g.itemId === item.id)
+		: undefined;
 	const count = slack.items.length;
 	const lines = item
 		? wrap(item.text, width - NEED_INDENT, SLACK_TEXT_LINES)
@@ -503,6 +510,12 @@ function SlackSection({
 							<Text color="white">{lines[i] ?? " "}</Text>
 						</Box>
 					))}
+					{suggestion ? (
+						<SlackSuggestionLine
+							suggestion={suggestion}
+							replyText={selected ? replyText : null}
+						/>
+					) : null}
 				</>
 			) : (
 				<Text color="yellow" wrap="truncate">
@@ -510,6 +523,40 @@ function SlackSection({
 				</Text>
 			)}
 		</>
+	);
+}
+
+/** The master's ◆ suggestion for a Slack item: y e n while pending, else what it waits on. */
+function SlackSuggestionLine({
+	suggestion,
+	replyText,
+}: {
+	suggestion: SlackSuggestion;
+	replyText: string | null;
+}) {
+	if (replyText !== null)
+		return (
+			<Box paddingLeft={NEED_INDENT}>
+				<Text color="whiteBright" backgroundColor="black" wrap="truncate-start">
+					› {replyText}█
+				</Text>
+			</Box>
+		);
+	const pending = suggestion.status === "pending";
+	return (
+		<Box paddingLeft={NEED_INDENT} justifyContent="space-between">
+			<Text wrap="truncate" color={pending ? undefined : "gray"}>
+				<Text color="magenta">◆ </Text>
+				{suggestion.status === "sending"
+					? "Sending to Slack…"
+					: suggestion.label}
+			</Text>
+			{pending ? (
+				<Box flexShrink={0} marginLeft={1}>
+					<Chips keys="yen" />
+				</Box>
+			) : null}
+		</Box>
 	);
 }
 
@@ -635,6 +682,7 @@ export function MasterPanel({
 					slack={slack}
 					index={slackIndex}
 					selected={selected === SLACK_ROW}
+					replyText={replyText}
 					width={inner}
 					now={now}
 				/>

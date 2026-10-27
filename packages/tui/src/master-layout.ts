@@ -36,10 +36,19 @@ export function suggestionLines(label: string, inner: number): string[] {
 /** Lines of a Slack message's text under its channel and author. */
 export const SLACK_TEXT_LINES = 2;
 
-/** Rows the SLACK section's body takes: one item, or the reason Slack cannot be read. */
-export function slackRows(slack: SlackState | null): number {
+/**
+ * Rows the SLACK section's body takes: the item at `index` and its
+ * suggestion, if any (ADR 0024), or the reason Slack cannot be read.
+ */
+export function slackRows(slack: SlackState | null, index = 0): number {
 	if (!slack) return 0;
-	if (slack.items.length) return 1 + SLACK_TEXT_LINES;
+	const item = slack.items[index];
+	if (item)
+		return (
+			1 +
+			SLACK_TEXT_LINES +
+			(slack.suggestions.some((g) => g.itemId === item.id) ? 1 : 0)
+		);
 	return slack.error ? 1 : 0;
 }
 
@@ -66,6 +75,8 @@ export interface MasterPlanInput {
 	conversation: MasterMessage[];
 	/** Slack's inbox when the repo has it on. */
 	slack: SlackState | null;
+	/** The Slack item shown. */
+	slackIndex?: number;
 	reviews: ReviewRequest[];
 	mine: MyPr[];
 }
@@ -110,7 +121,7 @@ export function planMaster(input: MasterPlanInput): MasterPlan {
 		room -= HEADER_ROWS + rows;
 		return rows;
 	};
-	const slackWant = slackRows(input.slack);
+	const slackWant = slackRows(input.slack, input.slackIndex);
 	// One message cut short says nothing, so Slack shows whole or not at all.
 	const slack = slackWant > 0 && room - HEADER_ROWS >= slackWant;
 	if (slack) take(slackWant);

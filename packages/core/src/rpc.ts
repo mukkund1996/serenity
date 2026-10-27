@@ -94,6 +94,12 @@ export interface Methods {
 	/** Runs a pending suggestion; `text` overrides a reply's text (the e key). */
 	"suggestion.accept": { params: { id: string; text?: string }; result: null };
 	"suggestion.decline": { params: { id: string }; result: null };
+	/** y on a Slack item's suggestion (ADR 0024); `text` is the user's edit. */
+	"slack.accept": {
+		params: { repo: string; itemId: string; text?: string };
+		result: null;
+	};
+	"slack.decline": { params: { repo: string; itemId: string }; result: null };
 	/** Claude's status line `rate_limits`, forwarded by `serenity statusline` (ADR 0020). */
 	"usage.report": { params: { rateLimits: unknown }; result: null };
 	"master.message": { params: { repo: string; text: string }; result: null };

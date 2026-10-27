@@ -1,3 +1,7 @@
+import type { Session } from "./domain";
+import { prLine } from "./master";
+import type { ReviewRequest } from "./pr";
+
 /**
  * Slack for the master (ADR 0023): the threads and mentions still waiting on
  * the user, read through Slack's MCP server by a one-shot `claude -p`. Pure:
@@ -56,15 +60,41 @@ export interface SlackItem {
 	at: number;
 }
 
+/**
+ * The master's proposal for one Slack item (ADR 0024): a reply to post in
+ * its thread, or a question for a session that likely knows the answer.
+ * Nothing runs until the user presses y.
+ */
+export interface SlackSuggestion {
+	itemId: string;
+	kind: "reply" | "ask";
+	/** The ◆ line, e.g. 'Reply "merged in #42"'. */
+	label: string;
+	/** The reply to post, or the question to type to the session. */
+	text: string;
+	/** The session asked (ask), or the one the reply draws on; null if none. */
+	sessionId: string | null;
+	/**
+	 * "asked": the question was typed to the session and its answer is
+	 * awaited. "sending": the reply is being posted.
+	 */
+	status: "pending" | "asked" | "sending";
+}
+
 /** What a map of a repo with Slack enabled shows. */
 export interface SlackState {
 	/** Newest first, at most SLACK_LIMIT. */
 	items: SlackItem[];
+	/** At most one per item, for this repo. */
+	suggestions: SlackSuggestion[];
 	/** Why Slack could not be read (no login, a failed call), or null. */
 	error: string | null;
 	/** When Slack was last read; null before the first read. */
 	checkedAt: number | null;
 }
+
+/** Slack as read for the whole account, before a repo's suggestions are added. */
+export type SlackInbox = Omit<SlackState, "suggestions">;
 
 export const SLACK_LOGIN_HINT = "Slack needs a login: run serenity slack login";
 
@@ -184,4 +214,155 @@ export function parseSlackInbox(
 		.sort((a, b) => b.at - a.at)
 		.slice(0, SLACK_LIMIT);
 	return { items, error: null };
+}
+
+// ------------------------------------------------------------ suggestions
+
+const LABEL_MAX = 60;
+
+export const SLACK_SUGGESTION_SCHEMA = {
+	type: "object",
+	properties: {
+		kind: { type: "string", enum: ["reply", "ask", "none"] },
+		label: { type: "string" },
+		text: { type: ["string", "null"] },
+		session: { type: ["string", "null"] },
+	},
+	required: ["kind", "label", "text", "session"],
+	additionalProperties: false,
+} as const;
+
+/** A session can be asked when its agent is alive and free: not working, not on a prompt. */
+export function askable(s: Session): boolean {
+	return (
+		!!s.tmuxPane &&
+		(s.status === "idle" ||
+			s.status === "done" ||
+			(s.status === "waiting" && s.waitingOn === "question"))
+	);
+}
+
+/** What serenity knows that may answer a Slack message: every session, its PR, review requests. */
+export function slackContext(
+	sessions: Session[],
+	reviews: ReviewRequest[],
+): string {
+	const lines = sessions.map((s) => {
+		const parts = [
+			`- ${s.name} [${s.topic ?? "unsorted"}] ${s.status}${askable(s) ? " (can be asked)" : ""}`,
+		];
+		if (s.branch) parts.push(`branch ${s.branch}`);
+		parts.push(s.pr ? `${prLine(s)}: ${s.pr.title}` : prLine(s));
+		if (s.summary) parts.push(`summary: ${s.summary}`);
+		if (s.lastPrompt) parts.push(`task: ${line(s.lastPrompt, 160)}`);
+		return parts.join(" · ");
+	});
+	return [
+		"Coding-agent sessions in the user's repo (archived ones are finished):",
+		...(lines.length ? lines : ["(none)"]),
+		"",
+		"Pull requests waiting for the user's review:",
+		...(reviews.length
+			? reviews.map((r) => `- #${r.number} ${r.title} by ${r.author ?? "?"}`)
+			: ["(none)"]),
+	].join("\n");
+}
+
+/** The answer a session gave to the master's question, for the follow-up. */
+export interface SlackAnswer {
+	session: string;
+	question: string;
+	answer: string;
+}
+
+export function slackSuggestionPrompt(
+	item: SlackItem,
+	context: string,
+	answer: SlackAnswer | null,
+): string {
+	return [
+		"The user got this Slack message and has not answered it. Help them answer from what serenity, their dashboard of coding-agent sessions, knows.",
+		"",
+		`Channel: ${item.channel} (id ${item.channelId}), thread ts ${item.threadTs}`,
+		`${item.author} wrote: ${item.text}`,
+		"",
+		"First read the thread with the Slack tools for context. You can also search Slack. You cannot write to Slack.",
+		"",
+		context,
+		...(answer
+			? [
+					"",
+					`You asked the session ${answer.session}: ${answer.question}`,
+					`It answered: ${line(answer.answer, 1500)}`,
+				]
+			: []),
+		"",
+		"Return one of:",
+		"- reply: the sessions, their PRs or the thread hold the answer. text is the reply the user would post in the thread: their voice, short, plain Slack markdown, no greeting. session is the session it draws on, or null.",
+		...(answer
+			? []
+			: [
+					'- ask: a session marked "can be asked" most likely knows the answer but its state above does not show it. session is its exact name; text is the question to type to the agent, self-contained, asking for a short answer and no changes.',
+				]),
+		"- none: nothing in serenity bears on this message (small talk, someone else's question, a meeting).",
+		`label: what will happen, under ${LABEL_MAX} characters, e.g. Reply "merged in #42, deploys today", Ask api-auth if the fix shipped.`,
+	].join("\n");
+}
+
+/** Validates the suggester's answer; null for none or anything that cannot apply. */
+export function parseSlackSuggestion(
+	raw: unknown,
+	item: SlackItem,
+	sessions: Session[],
+	followUp: boolean,
+): SlackSuggestion | null {
+	if (!raw || typeof raw !== "object") return null;
+	const r = raw as Record<string, unknown>;
+	const label = typeof r.label === "string" ? line(r.label, LABEL_MAX) : "";
+	const text = typeof r.text === "string" ? r.text.trim() : "";
+	if (!label || !text) return null;
+	const session = sessions.find((s) => s.name === r.session) ?? null;
+	if (r.kind === "reply")
+		return {
+			itemId: item.id,
+			kind: "reply",
+			label,
+			text,
+			sessionId: session?.id ?? null,
+			status: "pending",
+		};
+	if (r.kind === "ask" && !followUp && session && askable(session))
+		return {
+			itemId: item.id,
+			kind: "ask",
+			label,
+			text,
+			sessionId: session.id,
+			status: "pending",
+		};
+	return null;
+}
+
+/** The one Slack tool that posts; only `y` on a reply uses it. */
+export const SLACK_SEND_TOOL = `mcp__${SLACK_SERVER}__slack_send_message`;
+
+export const SLACK_SEND_SCHEMA = {
+	type: "object",
+	properties: {
+		sent: { type: "boolean" },
+		problem: { type: ["string", "null"] },
+	},
+	required: ["sent", "problem"],
+	additionalProperties: false,
+} as const;
+
+export function slackSendPrompt(item: SlackItem, text: string): string {
+	return [
+		`Post a reply in the Slack thread with ts ${item.threadTs} in channel ${item.channelId}, using ${SLACK_SEND_TOOL}.`,
+		"Send the text between the markers exactly as written: no changes, no additions.",
+		"<<<",
+		text,
+		">>>",
+		"Send it once. Return sent true when the tool succeeded; otherwise sent false and the error in problem.",
+	].join("\n");
 }

@@ -16,7 +16,7 @@ import {
 	parseSummary,
 	type Session,
 	SLACK_READ_TOOLS,
-	type SlackState,
+	type SlackInbox,
 	type Storage,
 	SUGGESTION_SCHEMA,
 	type Suggestion,
@@ -47,7 +47,7 @@ export interface MasterHost {
 	/** `--mcp-config` JSON for a repo's chat; its server is `serenity mcp <repo>`. */
 	mcpConfig(repo: string): string;
 	/** The repo's Slack inbox, or null when Slack is off for it (ADR 0023). */
-	slack(repo: string): SlackState | null;
+	slack(repo: string): SlackInbox | null;
 	/** Where one-shot workers run; not the user's repo, so nothing there is loaded. */
 	workerCwd: string;
 	models: MasterModels;

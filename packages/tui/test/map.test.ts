@@ -220,6 +220,8 @@ test("Slack sits in its own box under the master", () => {
 		index: 1,
 		count: 3,
 		error: null,
+		suggestion: null,
+		replyText: null,
 		selected: true,
 		now: 3 * 3600_000 + 1,
 	};
@@ -239,4 +241,34 @@ test("Slack sits in its own box under the master", () => {
 		slack: { ...slack, item: null, count: 0, error: "Slack needs a login" },
 	});
 	expect(login.canvas.toString()).toContain("Slack needs a login");
+	// The master's suggestion sits on the box's last line, with its keys.
+	const suggested = draw({
+		slack: {
+			...slack,
+			suggestion: {
+				itemId: "C1:1",
+				kind: "reply",
+				label: 'Reply "merged in #42"',
+				text: "merged in #42",
+				sessionId: null,
+				status: "pending",
+			},
+		},
+	}).canvas.toString();
+	expect(suggested).toMatch(/◆ Reply "merged in #42" +y e n/);
+	const asked = draw({
+		slack: {
+			...slack,
+			suggestion: {
+				itemId: "C1:1",
+				kind: "ask",
+				label: "Asked api-auth; waiting for its answer",
+				text: "did it ship?",
+				sessionId: "s1",
+				status: "asked",
+			},
+		},
+	}).canvas.toString();
+	expect(asked).toContain("◆ Asked api-auth; waiting for its answer");
+	expect(asked).not.toContain("y e n");
 });

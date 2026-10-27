@@ -126,6 +126,7 @@ test("Slack takes its rows before REVIEW, whole or not at all", () => {
 		items: [slackItem("a"), slackItem("b")],
 		error: null,
 		checkedAt: 1,
+		suggestions: [],
 	};
 	const roomy = planMaster(input(60, { slack }));
 	expect(roomy.slack).toBe(true);
@@ -141,7 +142,11 @@ test("Slack takes its rows before REVIEW, whole or not at all", () => {
 });
 
 test("Slack with nothing waiting takes no rows; an error takes one", () => {
-	expect(slackRows({ items: [], error: null, checkedAt: 1 })).toBe(0);
-	expect(slackRows({ items: [], error: "no login", checkedAt: 1 })).toBe(1);
+	expect(
+		slackRows({ items: [], error: null, checkedAt: 1, suggestions: [] }),
+	).toBe(0);
+	expect(
+		slackRows({ items: [], error: "no login", checkedAt: 1, suggestions: [] }),
+	).toBe(1);
 	expect(slackRows(null)).toBe(0);
 });
