@@ -2,7 +2,8 @@ import {
 	parseSlackInbox,
 	SLACK_INBOX_SCHEMA,
 	SLACK_READ_TOOLS,
-	type SlackState,
+	type SlackInbox,
+	type SlackItem,
 	slackInboxPrompt,
 } from "@serenity/core";
 import type { ClaudeRunner } from "./claude";
@@ -18,6 +19,8 @@ export interface SlackHost {
 	watching(): boolean;
 	/** Sends the new state to every open map of a repo with Slack on. */
 	broadcast(): void;
+	/** After every successful read, changed or not. */
+	onInbox(items: SlackItem[]): void;
 	log(line: string): void;
 	now(): number;
 	pollMs: number;
@@ -35,13 +38,13 @@ const INBOX_TIMEOUT_MS = 180_000;
  * opening a map, then every `pollMs` while such a map is open.
  */
 export class SlackWatcher {
-	private current: SlackState = { items: [], error: null, checkedAt: null };
+	private current: SlackInbox = { items: [], error: null, checkedAt: null };
 	private timer: ReturnType<typeof setInterval> | null = null;
 	private inflight = false;
 
 	constructor(private readonly host: SlackHost) {}
 
-	state(): SlackState {
+	state(): SlackInbox {
 		return this.current;
 	}
 
@@ -60,7 +63,7 @@ export class SlackWatcher {
 	async refresh(): Promise<void> {
 		if (this.inflight) return;
 		this.inflight = true;
-		let next: SlackState;
+		let next: SlackInbox;
 		try {
 			const raw = await this.host.runner.runJson({
 				prompt: slackInboxPrompt(this.host.now()),
@@ -91,6 +94,7 @@ export class SlackWatcher {
 			JSON.stringify({ ...this.current, checkedAt: 0 });
 		this.current = next;
 		if (changed) this.host.broadcast();
+		if (!next.error) this.host.onInbox(next.items);
 	}
 
 	stop(): void {

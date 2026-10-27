@@ -63,6 +63,8 @@ import { useDaemon } from "./use-daemon";
 
 export const MIN_COLUMNS = 80;
 export const MIN_ROWS = 24;
+/** Marks a Slack suggestion's id in replyEdit: e edits its text, Enter sends it there. */
+const SLACK_EDIT = "slack:";
 /** Replies remembered for the recent-replies list (design 4a). */
 const REPLY_HISTORY = 6;
 
@@ -199,6 +201,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const slackItems = slack?.items ?? [];
 	const slackAt = Math.min(slackIndex, Math.max(0, slackItems.length - 1));
 	const slackItem = slackItems[slackAt] ?? null;
+	const slackSuggestion =
+		slack?.suggestions.find((g) => g.itemId === slackItem?.id) ?? null;
 	const mine = useMemo(
 		() => myPullRequests(sessions, github.user),
 		[sessions, github.user],
@@ -226,6 +230,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		selected: onMaster ? element : null,
 		conversation: state?.conversation ?? [],
 		slack,
+		slackIndex: slackAt,
 		reviews: github.reviewRequests,
 		mine,
 	});
@@ -329,6 +334,9 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 								index: slackAt,
 								count: slackItems.length,
 								error: slack.error,
+								suggestion: slackSuggestion,
+								replyText:
+									onMaster && selected === SLACK_ROW ? replyText : null,
 								selected: onMaster && selected === SLACK_ROW,
 								now: Date.now(),
 							}
@@ -522,17 +530,31 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 	const sendReply = (text: string) => {
 		const target = focused;
+		const editing = replyEditRef.current;
 		endReply();
 		setOverlay(null);
+		if (editing?.startsWith(SLACK_EDIT)) {
+			if (text.trim()) acceptSlack(editing.slice(SLACK_EDIT.length), text);
+			return;
+		}
 		if (!target || !text.trim()) return;
 		setSentReplies((list) =>
 			[text, ...list.filter((r) => r !== text)].slice(0, REPLY_HISTORY),
 		);
-		const editing = replyEditRef.current;
 		const sent = editing
 			? call("suggestion.accept", { id: editing, text })
 			: call("session.reply", { id: target.id, text });
 		sent.catch(fail);
+	};
+
+	/** y on a Slack suggestion: post the reply, or type the question to its session. */
+	const acceptSlack = (itemId: string, text?: string) => {
+		const ask = slackSuggestion?.kind === "ask";
+		call("slack.accept", { repo, itemId, ...(text ? { text } : {}) }).then(
+			() =>
+				setNotice(ask ? "asked; its answer becomes a reply" : "sent to Slack"),
+			fail,
+		);
 	};
 
 	/** Sessions matching a search, in the order the map draws them. */
@@ -729,6 +751,24 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				}
 				const id = stepTopic(groups, card?.id ?? null, input === "]" ? 1 : -1);
 				if (id) focusNode(id);
+				return;
+			}
+
+			// y e n on the SLACK section act on its suggestion (ADR 0024).
+			if (
+				onMaster &&
+				selected === SLACK_ROW &&
+				["y", "e", "n"].includes(input)
+			) {
+				if (slackSuggestion?.status !== "pending" || !slackItem) return;
+				if (input === "y") return acceptSlack(slackItem.id);
+				if (input === "n")
+					return void call("slack.decline", {
+						repo,
+						itemId: slackItem.id,
+					}).catch(fail);
+				setReplyEdit(`${SLACK_EDIT}${slackItem.id}`);
+				setReplyText(slackSuggestion.text);
 				return;
 			}
 

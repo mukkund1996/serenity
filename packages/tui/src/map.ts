@@ -4,6 +4,7 @@ import {
 	type MasterPermission,
 	type Session,
 	type SlackItem,
+	type SlackSuggestion,
 	type Style,
 	type TopicGroup,
 	truncate,
@@ -31,8 +32,8 @@ import {
 /** Agents shown per bubble before the rest fold into `+N more`. */
 export const MAP_ROWS = 5;
 const MASTER_H = 8;
-/** The Slack box under the master: frame, channel line, two lines of text. */
-const SLACK_H = 5;
+/** The Slack box under the master: frame, channel line, two lines of text, the suggestion. */
+const SLACK_H = 6;
 const GAP = 4;
 const MAX_BUBBLE_W = 34;
 
@@ -70,6 +71,10 @@ export interface MapSlack {
 	index: number;
 	count: number;
 	error: string | null;
+	/** The master's suggestion for the item (ADR 0024). */
+	suggestion: SlackSuggestion | null;
+	/** Its text being edited (e), or null. */
+	replyText: string | null;
 	/** Selected on the focused master: `[` `]` cycle, Enter opens. */
 	selected: boolean;
 	now: number;
@@ -392,6 +397,35 @@ function drawSlack(
 	wrap(s.item.text, iw, 2).forEach((line, i) => {
 		canvas.text(ix, y + 2 + i, line, { fg: "white" });
 	});
+	const row = y + 4;
+	if (s.replyText !== null) {
+		canvas.fill(ix, row, iw, 1, { bg: "black" });
+		const chars = [...`› ${s.replyText}█`];
+		canvas.text(
+			ix,
+			row,
+			chars.length > iw
+				? `…${chars.slice(-(iw - 1)).join("")}`
+				: chars.join(""),
+			{ fg: "whiteBright", bg: "black" },
+		);
+	} else if (s.suggestion) {
+		const pending = s.suggestion.status === "pending";
+		const chips = pending ? " y e n" : "";
+		const c = canvas.text(ix, row, "◆ ", { fg: "magenta" });
+		canvas.text(
+			c,
+			row,
+			truncate(
+				s.suggestion.status === "sending"
+					? "Sending to Slack…"
+					: s.suggestion.label,
+				iw - 2 - chips.length,
+			),
+			pending ? {} : DIM,
+		);
+		if (chips) canvas.text(ix + iw - chips.length, row, chips, DIM);
+	}
 }
 
 function drawMaster(

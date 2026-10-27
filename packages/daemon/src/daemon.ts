@@ -53,6 +53,7 @@ import { type MasterModels, MasterSupervisor } from "./master";
 import { PrWatcher, workDir } from "./prs";
 import { ReviewWatcher } from "./reviews";
 import { SlackWatcher } from "./slack";
+import { SlackAdvisor } from "./slack-advisor";
 import { Tmux } from "./tmux";
 
 export interface DaemonOptions {
@@ -141,6 +142,7 @@ export class Daemon {
 	private readonly prs: PrWatcher;
 	private readonly reviews: ReviewWatcher;
 	private readonly slack: SlackWatcher;
+	private readonly advisor: SlackAdvisor;
 	private readonly slackRepos: Set<string>;
 	/** The Slack MCP server entry, for the inbox worker and the chat. */
 	private readonly slackMcp: Record<string, unknown>;
@@ -211,17 +213,37 @@ export class Daemon {
 				opts.reviewPollMs ??
 				envNumber("SERENITY_REVIEW_POLL_MS", DEFAULT_REVIEW_POLL_MS),
 		});
+		const models = opts.models ?? config.models;
+		const slackMcpConfig = JSON.stringify({
+			mcpServers: { [SLACK_SERVER]: this.slackMcp },
+		});
+		this.advisor = new SlackAdvisor({
+			runner,
+			storage: opts.storage,
+			model: models.suggester,
+			sendModel: models.summarizer,
+			cwd: join(opts.home, "workers"),
+			mcpConfig: slackMcpConfig,
+			reviews: (repo) => this.reviews.state(repo).reviewRequests,
+			sendText: async (session, text) =>
+				this.tmux.sendText(await this.requireLivePane(session), text),
+			refreshInbox: () => void this.slack.refresh(),
+			broadcast: (repo) => this.broadcast(repo),
+			log: this.log,
+		});
 		this.slack = new SlackWatcher({
 			runner,
-			model: (opts.models ?? config.models).summarizer,
+			model: models.summarizer,
 			cwd: join(opts.home, "workers"),
-			mcpConfig: JSON.stringify({
-				mcpServers: { [SLACK_SERVER]: this.slackMcp },
-			}),
+			mcpConfig: slackMcpConfig,
 			watching: () => this.openRepos().some((r) => this.slackRepos.has(r)),
 			broadcast: () => {
 				for (const repo of this.openRepos())
 					if (this.slackRepos.has(repo)) this.broadcast(repo);
+			},
+			onInbox: (items) => {
+				for (const repo of this.openRepos())
+					if (this.slackRepos.has(repo)) this.advisor.onInbox(repo, items);
 			},
 			log: this.log,
 			now: this.now,
@@ -315,7 +337,9 @@ export class Daemon {
 			averageWaitMs: averageWait(
 				this.opts.storage.waits.listSince(repo, this.now() - WAIT_WINDOW_MS),
 			),
-			slack: this.slackRepos.has(repo) ? this.slack.state() : null,
+			slack: this.slackRepos.has(repo)
+				? { ...this.slack.state(), suggestions: this.advisor.list(repo) }
+				: null,
 		};
 	}
 
@@ -357,6 +381,8 @@ export class Daemon {
 	private change(session: Session, patch: Partial<Session>): Session {
 		const next = this.update(session, patch);
 		this.master.onSessionChanged(session, next);
+		if (next.lastAssistantMessage !== session.lastAssistantMessage)
+			this.advisor.onSessionChanged(next);
 		return next;
 	}
 
@@ -368,7 +394,12 @@ export class Daemon {
 			if (clientPane) this.mapPanes.set(peer, clientPane);
 			this.prs.refreshRepo(repo);
 			this.reviews.watch(repo);
-			if (this.slackRepos.has(repo)) this.slack.watch();
+			if (this.slackRepos.has(repo)) {
+				this.slack.watch();
+				// A map opened after the last read still gets its suggestions.
+				const { items, error } = this.slack.state();
+				if (!error) this.advisor.onInbox(repo, items);
+			}
 			return this.state(repo);
 		},
 
@@ -512,6 +543,23 @@ export class Daemon {
 				});
 				this.broadcast(suggestion.repo);
 			}
+			return null;
+		},
+
+		"slack.accept": async ({ repo, itemId, text }) => {
+			try {
+				await this.advisor.accept(repo, itemId, text);
+			} catch (error) {
+				throw new RpcError(
+					RpcErrorCode.InvalidParams,
+					error instanceof Error ? error.message : String(error),
+				);
+			}
+			return null;
+		},
+
+		"slack.decline": ({ repo, itemId }) => {
+			this.advisor.decline(repo, itemId);
 			return null;
 		},
 

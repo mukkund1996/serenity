@@ -21,4 +21,4 @@ Slack has an official MCP server (`https://mcp.slack.com/mcp`), signed in with O
 - Each read is a model call with several tool calls: about one Haiku call per 5 minutes while a map is open, on the user's plan.
 - What counts as waiting is the model's reading of Slack search, not an exact query. Misses and false positives are possible; `[` `]` and the chat make them cheap to skip.
 - The token lives in the `claude` CLI's credential store; `claude mcp logout slack` from the workers folder signs out.
-- Suggested replies from session state, and asking a session before replying, come next and build on this inbox.
+- Suggested replies from session state, and asking a session before replying, build on this inbox (0024).

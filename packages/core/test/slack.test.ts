@@ -1,5 +1,16 @@
-import { expect, test } from "bun:test";
-import { parseSlackInbox, SLACK_LOGIN_HINT, slackTsMs } from "../src/slack";
+import { describe, expect, test } from "bun:test";
+import {
+	askable,
+	parseSlackInbox,
+	parseSlackSuggestion,
+	SLACK_LOGIN_HINT,
+	type SlackItem,
+	slackContext,
+	slackSendPrompt,
+	slackSuggestionPrompt,
+	slackTsMs,
+} from "../src/slack";
+import { makeSession } from "../test-support";
 
 const item = (over: Record<string, unknown> = {}) => ({
 	channelId: "C1",
@@ -61,4 +72,102 @@ test("no access says how to log in when it is an auth problem", () => {
 test("Slack timestamps become ms", () => {
 	expect(slackTsMs("1730000000.5")).toBe(1730000000500);
 	expect(slackTsMs("x")).toBe(0);
+});
+
+describe("suggestions", () => {
+	const slackItem = parseSlackInbox({
+		access: "ok",
+		problem: null,
+		items: [item()],
+	})?.items[0] as SlackItem;
+	const idle = makeSession({
+		id: "s1",
+		name: "api-auth",
+		status: "idle",
+		tmuxPane: "%1",
+		summary: "Fixed the token refresh.",
+	});
+	const working = makeSession({
+		id: "s2",
+		name: "billing",
+		status: "working",
+		tmuxPane: "%2",
+	});
+
+	test("only a live agent that is free can be asked", () => {
+		expect(askable(idle)).toBe(true);
+		expect(askable(working)).toBe(false);
+		expect(askable({ ...idle, tmuxPane: null })).toBe(false);
+		expect(askable({ ...idle, status: "archived" })).toBe(false);
+		expect(
+			askable({ ...idle, status: "waiting", waitingOn: "permission" }),
+		).toBe(false);
+	});
+
+	test("the context names every session and who can be asked", () => {
+		const text = slackContext([idle, working], []);
+		expect(text).toContain("api-auth [unsorted] idle (can be asked)");
+		expect(text).toContain("summary: Fixed the token refresh.");
+		expect(text).toContain("- billing [unsorted] working · branch");
+		expect(text).not.toContain("billing [unsorted] working (can be asked)");
+	});
+
+	test("a reply or an ask to a free session; nothing else", () => {
+		const reply = parseSlackSuggestion(
+			{ kind: "reply", label: 'Reply "yes"', text: "yes", session: "api-auth" },
+			slackItem,
+			[idle],
+			false,
+		);
+		expect(reply).toMatchObject({
+			kind: "reply",
+			sessionId: "s1",
+			text: "yes",
+		});
+		const ask = { kind: "ask", label: "Ask", text: "shipped?", session: "" };
+		expect(
+			parseSlackSuggestion(
+				{ ...ask, session: "api-auth" },
+				slackItem,
+				[idle],
+				false,
+			),
+		).toMatchObject({ kind: "ask", sessionId: "s1", status: "pending" });
+		expect(
+			parseSlackSuggestion(
+				{ ...ask, session: "billing" },
+				slackItem,
+				[working],
+				false,
+			),
+		).toBeNull();
+		// After the session answered, only a reply is taken.
+		expect(
+			parseSlackSuggestion(
+				{ ...ask, session: "api-auth" },
+				slackItem,
+				[idle],
+				true,
+			),
+		).toBeNull();
+		expect(
+			parseSlackSuggestion(
+				{ kind: "none", label: "x", text: "y", session: null },
+				slackItem,
+				[],
+				false,
+			),
+		).toBeNull();
+	});
+
+	test("the follow-up prompt carries the session's answer", () => {
+		const prompt = slackSuggestionPrompt(slackItem, "ctx", {
+			session: "api-auth",
+			question: "shipped?",
+			answer: "Yes, in #42.",
+		});
+		expect(prompt).toContain("It answered: Yes, in #42.");
+		expect(prompt).not.toContain("- ask:");
+		expect(slackSendPrompt(slackItem, "merged")).toContain("<<<\nmerged\n>>>");
+	});
 });

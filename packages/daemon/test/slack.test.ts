@@ -30,6 +30,7 @@ const message = (ts: string) => ({
 let runner: FakeRunner;
 let open: boolean;
 let broadcasts: number;
+let inboxes: number[];
 let now: number;
 let watcher: SlackWatcher;
 
@@ -39,6 +40,7 @@ beforeEach(() => {
 	runner = new FakeRunner();
 	open = true;
 	broadcasts = 0;
+	inboxes = [];
 	now = 1_000_000;
 	watcher?.stop();
 	watcher = new SlackWatcher({
@@ -48,6 +50,7 @@ beforeEach(() => {
 		mcpConfig: '{"mcpServers":{"slack":{}}}',
 		watching: () => open,
 		broadcast: () => broadcasts++,
+		onInbox: (items) => inboxes.push(items.length),
 		log: () => {},
 		now: () => now,
 		pollMs: 20,
