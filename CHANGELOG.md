@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/mukkund1996/serenity/compare/v0.5.0...v0.6.0) (2026-10-27)
+
+
+### Features
+
+* the master sits in the centre of the topics zoom, topics on both sides ([#20](https://github.com/mukkund1996/serenity/issues/20)) ([303f0ac](https://github.com/mukkund1996/serenity/commit/303f0acd9e0e088d5d61c9c91db671d0e5eb8af0))
+
+
+### Bug Fixes
+
+* Enter attaches a card and i messages it; only the master is gone into ([#22](https://github.com/mukkund1996/serenity/issues/22)) ([de0a3ae](https://github.com/mukkund1996/serenity/commit/de0a3ae60886476222b8fdc6b15be5170decd00f))
+
 ## [0.5.0](https://github.com/mukkund1996/serenity/compare/v0.4.0...v0.5.0) (2026-10-27)
 
 
