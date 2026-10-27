@@ -196,6 +196,7 @@ export class ClaudeObserver {
 				topicCandidate: null,
 				lastPrompt: null,
 				lastAssistantMessage: null,
+				subagents: [],
 				transcriptPath: transcriptPathFor(
 					this.configDir,
 					c.cwd,

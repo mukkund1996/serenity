@@ -12,7 +12,8 @@ Testing milestone 1 showed two cases hooks cannot cover:
 ## Decision
 - **Hooks for status.** serenity spawns each session with `claude --settings <serenity-hooks.json>`; the user's own settings are never modified.
 - Each hook runs `serenity hook <event>`, which reads the hook's JSON from stdin and forwards it to the daemon over the socket. The session is identified by `SERENITY_SESSION_ID`, set in the pane's environment at spawn.
-- Hook events: `SessionStart` → idle; `UserPromptSubmit`, `PostToolUse` → working; `PermissionRequest`, blocking `Notification`s → waiting; `Stop` → idle or finished (decided by the Haiku worker, 0007); `SessionEnd` → dead unless archived.
+- Hook events: `SessionStart` → idle; `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `SubagentStart` → working (only `PostToolUse` ends a wait: `PreToolUse` fires before the permission check); `PermissionRequest`, blocking `Notification`s → waiting; `Stop` → idle or finished (decided by the Haiku worker, 0007); `SessionEnd` → dead unless archived.
+- **Subagents.** `SubagentStart`/`SubagentStop` keep the session's running subagent ids. A `Stop` while any run (background agents) stays working: the turn resumes when they report back. *(revised 2026-10-27: status went idle while background agents worked)*
 - **Exit report.** The agent pane runs `sh -c 'claude …; serenity exited $?'`. The `sh` parent reports every exit, with its code, as `session.exited` → dead. It is scoped to our sessions only. A tmux `pane-exited` hook was tried and rejected: set on one session, it fired for pane exits in other sessions too.
 - **Startup prompt.** If a new session sends no `SessionStart` within 5 s, it is shown as waiting with "confirm Claude's startup prompt (folder trust)", so it appears in NEEDS YOU. `SessionStart` clears it.
 - **Fallback.** If an attach or reply finds the pane gone, the session is marked dead instead of failing repeatedly.

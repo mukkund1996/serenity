@@ -944,6 +944,7 @@ export class Daemon {
 			topicCandidate: null,
 			lastPrompt: null,
 			lastAssistantMessage: null,
+			subagents: [],
 			transcriptPath: null,
 			claudeSessionId: null,
 			watched: false,
