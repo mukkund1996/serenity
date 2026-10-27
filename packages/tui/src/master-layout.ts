@@ -1,8 +1,6 @@
 import {
 	type MasterMessage,
-	type PrInfo,
 	type ReviewRequest,
-	type Session,
 	type SlackState,
 	wrap,
 } from "@serenity/core";
@@ -10,14 +8,12 @@ import {
 /**
  * What the master panel shows in the rows it has (ADR 0012). NEEDS YOU, the
  * conversation and the input always show; the rows left over go to SLACK
- * (whole or not at all, ADR 0023), then REVIEW, then MY PRS, each trimmed to
- * fit or dropped. The session counts sit in the header.
+ * (whole or not at all, ADR 0023), then REVIEW, trimmed to fit or dropped.
+ * MY PRS is off for now. The session counts sit in the header.
  */
 
 /** How many NEEDS YOU items fit; the rest are summarised as "+N more". */
 export const MAX_NEED_ITEMS = 5;
-/** Rows of MY PRS at most. */
-export const MAX_MY_PRS = 5;
 /** Indent of a NEEDS YOU item's detail lines, under its name. */
 export const NEED_INDENT = 4;
 /** Columns kept right of a suggestion for its y / e / n chips. */
@@ -37,30 +33,23 @@ export function suggestionLines(label: string, inner: number): string[] {
 export const SLACK_TEXT_LINES = 2;
 
 /**
- * Rows the SLACK section's body takes: the item at `index` and its
- * suggestion, if any (ADR 0024), or the reason Slack cannot be read.
+ * Rows the SLACK section's body takes: an item and its suggestion, if any
+ * (ADR 0024), or the reason Slack cannot be read. Sized for the tallest item,
+ * so stepping through them with `[` `]` never drops the section.
  */
-export function slackRows(slack: SlackState | null, index = 0): number {
+export function slackRows(slack: SlackState | null): number {
 	if (!slack) return 0;
-	const item = slack.items[index];
-	if (item)
-		return (
-			1 +
-			SLACK_TEXT_LINES +
-			(slack.suggestions.some((g) => g.itemId === item.id) ? 1 : 0)
-		);
-	return slack.error ? 1 : 0;
+	if (!slack.items.length) return slack.error ? 1 : 0;
+	const suggested = slack.items.some((item) =>
+		slack.suggestions.some((g) => g.itemId === item.id),
+	);
+	return 1 + SLACK_TEXT_LINES + (suggested ? 1 : 0);
 }
 
 /** Width of the "you" / "◆" column before a conversation message. */
 export const SPEAKER_W = 6;
 export const CONVERSATION_EMPTY =
 	"Press g to ask the master about your sessions.";
-
-export interface MyPr {
-	session: Session;
-	pr: PrInfo;
-}
 
 export interface MasterPlanInput {
 	/** Rows the panel may take, frame included. */
@@ -75,10 +64,7 @@ export interface MasterPlanInput {
 	conversation: MasterMessage[];
 	/** Slack's inbox when the repo has it on. */
 	slack: SlackState | null;
-	/** The Slack item shown. */
-	slackIndex?: number;
 	reviews: ReviewRequest[];
-	mine: MyPr[];
 }
 
 export interface MasterPlan {
@@ -87,7 +73,6 @@ export interface MasterPlan {
 	/** Whether the SLACK section fits. */
 	slack: boolean;
 	reviews: ReviewRequest[];
-	mine: MyPr[];
 }
 
 /** A section's blank line and header. */
@@ -121,20 +106,15 @@ export function planMaster(input: MasterPlanInput): MasterPlan {
 		room -= HEADER_ROWS + rows;
 		return rows;
 	};
-	const slackWant = slackRows(input.slack, input.slackIndex);
+	const slackWant = slackRows(input.slack);
 	// One message cut short says nothing, so Slack shows whole or not at all.
 	const slack = slackWant > 0 && room - HEADER_ROWS >= slackWant;
 	if (slack) take(slackWant);
 	const reviews = input.reviews.slice(0, take(input.reviews.length));
-	const mine = input.mine.slice(
-		0,
-		take(Math.min(MAX_MY_PRS, input.mine.length)),
-	);
 	return {
 		needs: { start, count: shown.length, hidden },
 		slack,
 		reviews,
-		mine,
 	};
 }
 

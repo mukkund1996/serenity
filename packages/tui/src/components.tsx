@@ -10,21 +10,20 @@ import type {
 	SlackSuggestion,
 	Suggestion,
 } from "@serenity/core";
-import { prLine, prStatus, wrap } from "@serenity/core";
+import { prLine, wrap } from "@serenity/core";
 import { Box, Text } from "ink";
 import { type ReactNode, useEffect, useState } from "react";
 import {
 	CONVERSATION_EMPTY,
 	clipLines,
 	type MasterPlan,
-	type MyPr,
 	NEED_INDENT,
 	needLines,
 	SLACK_TEXT_LINES,
 	SPEAKER_W,
 	suggestionLines,
 } from "./master-layout";
-import { age, askLine, cardText, glyph, nameColor, TONE_COLOR } from "./theme";
+import { age, askLine, cardText, glyph, nameColor } from "./theme";
 
 const ink = (color: Color | undefined) =>
 	color && color !== "default" ? color : undefined;
@@ -366,9 +365,8 @@ function Conversation({ messages }: { messages: MasterMessage[] }) {
 
 /** The master's input, as an element the arrow keys can select. */
 export const MASTER_INPUT = "input";
-/** Element ids of the master's PR rows: a review request, or one of my PRs. */
+/** Element id prefix of the master's review-request rows. */
 export const REVIEW_ROW = "rv:";
-export const MY_PR_ROW = "pr:";
 /** Element id of the SLACK section's item; `[` `]` cycle it while selected. */
 export const SLACK_ROW = "slack";
 
@@ -560,36 +558,6 @@ function SlackSuggestionLine({
 	);
 }
 
-/** The user's open PRs from sessions on the map, with the card's status word. */
-function MyPrsSection({
-	mine,
-	selected,
-	width,
-}: {
-	mine: MyPr[];
-	selected: string | null;
-	width: number;
-}) {
-	return (
-		<>
-			<SectionHeader label={`MY PRS ${mine.length}`} width={width} />
-			{mine.map(({ pr }) => {
-				const on = selected === `${MY_PR_ROW}${pr.number}`;
-				const status = prStatus(pr);
-				return (
-					<Row
-						key={pr.number}
-						selected={on}
-						right={<Text color={TONE_COLOR[status.tone]}>{status.text}</Text>}
-					>
-						<PrTitle number={pr.number} title={pr.title} selected={on} />
-					</Row>
-				);
-			})}
-		</>
-	);
-}
-
 /** Order of the counts: as cards sort inside a topic. */
 const COUNTED = [
 	["waiting", "waiting"],
@@ -694,9 +662,6 @@ export function MasterPanel({
 					width={inner}
 					now={now}
 				/>
-			) : null}
-			{plan.mine.length ? (
-				<MyPrsSection mine={plan.mine} selected={selected} width={inner} />
 			) : null}
 		</>
 	);

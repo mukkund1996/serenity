@@ -474,10 +474,8 @@ test(
 );
 
 test(
-	"the master lists my open PRs and, once polled, the PRs waiting for my review",
+	"once polled, the master lists the PRs waiting for my review",
 	async () => {
-		await waitFor(/MY PRS 1/);
-		expect(screen()).toMatch(/#7 Ship it\s+checks passing/);
 		writeFileSync(
 			join(ghDir(), "review-requests.json"),
 			JSON.stringify([
@@ -703,23 +701,28 @@ test(
 const ctrlM = () => keys("Escape", "[109;5u");
 
 test(
-	"arrows move between nodes; Enter goes into one, s selects, Esc leaves it",
+	"arrows and WASD move between nodes; Enter goes into the master, Esc leaves it",
 	async () => {
 		keys("c");
-		keys("Right");
 		await Bun.sleep(200);
 		expect(screen()).not.toContain("▸");
 		keys("Enter");
-		keys("s");
+		// Inside the master the first of its items is selected.
 		await waitFor(/▸/);
 		keys("Escape");
-		await until(() => !screen().includes("▸"), "Esc to leave the card");
+		await until(() => !screen().includes("▸"), "Esc to leave the master");
 		expect(screen()).toContain("zoom: topics");
-		// Outside a node Esc goes up a level, as before.
+		// Outside the master Esc goes up a level, as before.
 		keys("Escape");
 		await waitFor(/zoom: map/);
 		keys("Z");
 		await waitFor(/zoom: topics/);
+		// d moves to a card as → does: i there opens its quick message.
+		keys("d");
+		keys("i");
+		await waitFor(/▸/);
+		keys("Escape");
+		await until(() => !screen().includes("▸"), "Esc to close the message");
 	},
 	STEP_TIMEOUT,
 );
@@ -728,18 +731,16 @@ test(
 	"Ctrl+m focuses the master, from the map and from an attached session",
 	async () => {
 		keys("Right");
-		keys("Enter");
-		keys("s");
+		// i opens the card's quick message, its ▸ on the input row.
+		keys("i");
 		await waitFor(/▸/);
 		ctrlM();
 		await until(() => !screen().includes("▸"), "focus to leave the card");
 		keys("Enter");
-		// Inside the master the first of its items is selected.
 		await waitFor(/▸/);
 		keys("Escape");
 
 		await newSession("hopper");
-		keys("Enter");
 		keys("Enter");
 		await until(
 			() => panesInMap().length === 2,

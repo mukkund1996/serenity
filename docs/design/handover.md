@@ -57,7 +57,7 @@ Only these three glyphs exist. PR status is words only: checks failing (red), ch
 - Focus = heavy white frame `┏━┓`. Waiting = yellow light frame. Others = grey light frame.
 
 ## Header and footer
-Header: `◆ mindmap  <repo>` · centred inverse-yellow `4 need you` · `zoom: …`. Footer: `←↑↓→ move · Enter into · Ctrl+m master` left (ADR 0026), `? shortcuts` always bottom right.
+Header: `◆ mindmap  <repo>` · centred inverse-yellow `4 need you` · `zoom: …`. Footer: `←↑↓→ WASD move · Enter open · i message · Ctrl+m master` left (ADR 0026, 0028), `? shortcuts` always bottom right.
 
 ## Frames and grid
 | Element | Characters |
@@ -93,9 +93,9 @@ Status never relies on colour alone except idle and archived, which are delibera
 | Key | Action |
 |-----|--------|
 | `Tab` `⇧Tab` | next / previous waiting |
-| `←` `↑` `↓` `→` | move between nodes (between topics on the map zoom; ADR 0019, 0026) |
-| `Enter` · `Esc` | go into the focused node · leave it (ADR 0026) |
-| `w` `s` | select inside the node, marked `▸` (ADR 0026) |
+| `←` `↑` `↓` `→` · WASD | move between nodes (between topics on the map zoom; ADR 0019, 0026, 0028) |
+| `Enter` · `Esc` | on a card attach; go into the master · leave it (ADR 0028) |
+| `↑` `↓` `w` `s` | inside the master, select an element, marked `▸` (ADR 0028) |
 | `c` · `Ctrl+m` | center on master · focus the master from any view, the session too (ADR 0026) |
 | `z` `Z` | zoom out (map) / zoom in (topics; on a card in topics, into its session) |
 | `Esc` | one level up (outside a node) |
@@ -106,7 +106,7 @@ Status never relies on colour alone except idle and archived, which are delibera
 | Key | Action |
 |-----|--------|
 | `i` | reply · `Tab` opens recent replies |
-| `Enter` | act on `▸`: attach on the card itself · `Ctrl+g` back |
+| `Enter` | attach the card · inside the master, act on `▸` · `Ctrl+g` back |
 | `o` | open PR |
 | `f` | watch (remind master when done) |
 | `p` | pin / unpin: keep for reuse under `pinned`; never done, resumed on attach (ADR 0022) |

@@ -389,10 +389,10 @@ describe("holdOrder", () => {
 	});
 });
 
-test("topic card outlines take a light status colour; focus is always white", () => {
-	expect(frameColor("waiting", false)).toBe("yellowBright");
-	expect(frameColor("working", false)).toBe("blueBright");
-	expect(frameColor("done", false)).toBe("greenBright");
+test("topic card outlines take their status colour, drawn dim; focus is always white", () => {
+	expect(frameColor("waiting", false)).toBe("yellow");
+	expect(frameColor("working", false)).toBe("blue");
+	expect(frameColor("done", false)).toBe("green");
 	expect(frameColor("idle", false)).toBe("gray");
 	expect(frameColor("dead", false)).toBe("gray");
 	for (const status of ["waiting", "working", "done", "idle"] as const)
