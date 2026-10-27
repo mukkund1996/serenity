@@ -1,7 +1,7 @@
 import type { GithubState, PrInfo } from "./pr";
 import type { SlackState } from "./slack";
 
-export const VERSION = "0.4.0"; // x-release-please-version
+export const VERSION = "0.5.0"; // x-release-please-version
 
 /** Set by scripts/build.ts: the commit and time of a compiled build. */
 declare const SERENITY_BUILD: string | undefined;
