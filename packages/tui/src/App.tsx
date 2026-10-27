@@ -9,6 +9,7 @@ import {
 	needsYou,
 	type Session,
 	type Suggestion,
+	type TopicGroup,
 	topicOf,
 	UNSORTED,
 	type Usage,
@@ -63,6 +64,8 @@ import {
 	holdOrder,
 	moveFocus,
 	type NodeBox,
+	SIDE_MIN_W,
+	splitSides,
 	stepTopic,
 } from "./topics";
 import { usageParts } from "./usage";
@@ -295,8 +298,16 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	/** Rows of the archived list shown at once: the screen less its frame, padding and hints. */
 	const archivedHeight = Math.max(3, rows - 8);
 	const archived = useMemo(() => archivedRows(allSessions), [allSessions]);
-	/** The master panel docks left in the topics zoom; the map draws it itself. */
+	/**
+	 * The master panel sits in the centre of the topics zoom, topics on both
+	 * sides, when each side fits a bubble; otherwise it docks left (ADR 0027).
+	 * The map draws it itself.
+	 */
 	const panelWidth = zoom === "topics" ? masterWidth : 0;
+	const leftWidth =
+		zoom === "topics" && columns - masterWidth >= 2 * SIDE_MIN_W
+			? Math.floor((columns - masterWidth) / 2)
+			: 0;
 	const masterRow = Math.floor(bodyHeight / 2);
 	const calm = groups.filter((g) => g.attention === 0).length;
 	const conversation = state?.conversation ?? [];
@@ -357,6 +368,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			const masterBox = { ...map.master, id: MASTER };
 			return {
 				canvas: map.canvas,
+				left: null,
 				nodes: [masterBox, ...map.rows.map((r) => ({ ...r, id: r.sessionId }))],
 				// The arrow keys move between topic bubbles here; w s walk the agents inside.
 				moves: [
@@ -365,22 +377,34 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				],
 			};
 		}
-		const topics = drawTopics({
-			width: Math.max(1, columns - panelWidth),
-			height: Math.max(1, bodyHeight),
-			masterRow,
-			groups,
-			focusId: card?.id ?? null,
-			focusElement,
-			focusSuggestion: cardSuggestion?.label ?? null,
-			replyText: onMaster ? null : replyText,
-		});
-		// The master sits left of the canvas.
+		const sides = leftWidth ? splitSides(groups) : { left: [], right: groups };
+		const side = (width: number, list: TopicGroup[], at: "left" | "right") =>
+			drawTopics({
+				width: Math.max(1, width),
+				height: Math.max(1, bodyHeight),
+				masterRow,
+				groups: list,
+				focusId: card?.id ?? null,
+				focusElement,
+				focusSuggestion: cardSuggestion?.label ?? null,
+				replyText: onMaster ? null : replyText,
+				side: at,
+			});
+		const right = side(columns - leftWidth - panelWidth, sides.right, "right");
+		const left = leftWidth ? side(leftWidth, sides.left, "left") : null;
+		// Nodes in screen columns: left canvas, master, right canvas.
+		const rightX = leftWidth + panelWidth;
 		const nodes = [
-			{ id: MASTER, x: -panelWidth, y: 0, w: panelWidth, h: bodyHeight },
-			...topics.cards.map((c) => ({ ...c, id: c.sessionId })),
+			{ id: MASTER, x: leftWidth, y: 0, w: panelWidth, h: bodyHeight },
+			...(left?.cards ?? []).map((c) => ({ ...c, id: c.sessionId })),
+			...right.cards.map((c) => ({ ...c, x: c.x + rightX, id: c.sessionId })),
 		];
-		return { canvas: topics.canvas, nodes, moves: nodes };
+		return {
+			canvas: right.canvas,
+			left: left?.canvas ?? null,
+			nodes,
+			moves: nodes,
+		};
 	})();
 	/** The focusable nodes on screen, in canvas cells. */
 	const nodes: NodeBox[] = layout.nodes;
@@ -1019,6 +1043,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				averageWaitMs={state?.averageWaitMs ?? null}
 			/>
 			<Box height={bodyHeight}>
+				{layout.left ? <CanvasView canvas={layout.left} /> : null}
 				{zoom === "topics" ? (
 					<Box
 						width={masterWidth}

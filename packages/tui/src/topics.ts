@@ -11,10 +11,11 @@ import {
 import { cardText, frameColor, glyph, nameColor } from "./theme";
 
 /**
- * Draws the topics zoom's right-hand side (design screen 2): every topic as a
+ * Draws one side of the topics zoom (design screen 2): every topic as a
  * bubble of 40-col cards, neediest first, side by side in shelves that fill
- * the width, all linked back to the master on the left edge. When they don't
- * fit, the shelves scroll to the focused card.
+ * the width, all linked back to the master at the inner edge (the left edge
+ * of the right side, the right edge of the left side, ADR 0027). When they
+ * don't fit, the shelves scroll to the focused card.
  */
 
 export const CARD_W = 40;
@@ -29,6 +30,8 @@ const BUBBLE_X = 5;
 const BUBBLE_GAP_X = 5;
 /** Blank rows between a shelf's bubbles and the next shelf's bus. */
 const SHELF_GAP_Y = 1;
+/** The narrowest side that still fits a one-card bubble. */
+export const SIDE_MIN_W = BUBBLE_X + CARD_W + PAD_X * 2 + 1;
 
 export interface CardBox {
 	sessionId: string;
@@ -51,6 +54,8 @@ export interface TopicsInput {
 	focusSuggestion?: string | null;
 	/** Text being typed into the focused card's input row, or null when not replying. */
 	replyText: string | null;
+	/** Which side of the master this canvas sits on; the master is at its inner edge. Default right. */
+	side?: "left" | "right";
 }
 
 /** What the arrow keys step through on a focused card; `card` is the card itself. */
@@ -360,6 +365,12 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 	const cards: CardBox[] = [];
 	const links = new Links();
 
+	// Shelves are laid out by distance from the master's edge; on the left
+	// side the canvas is mirrored, so bubbles grow leftwards from it.
+	const mirrored = input.side === "left";
+	const xOf = (dist: number, w: number) =>
+		mirrored ? input.width - dist - w : dist;
+	const trunkX = xOf(TRUNK_X, 1);
 	const right = input.width - 1;
 	const room = right - BUBBLE_X - PAD_X * 2 + CARD_GAP_X;
 	const maxCols = Math.max(1, Math.floor(room / (CARD_W + CARD_GAP_X)));
@@ -386,21 +397,21 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 			rowHeights.reduce((a, b) => a + b, 0) +
 			Math.max(0, rowHeights.length - 1) * CARD_GAP_Y;
 		const w = cols * CARD_W + (cols - 1) * CARD_GAP_X + PAD_X * 2;
-		let at = ends.findIndex((end) => end + w <= right);
-		if (at < 0) {
-			at = shelves.push([]) - 1;
+		let shelf = ends.findIndex((end) => end + w <= right);
+		if (shelf < 0) {
+			shelf = shelves.push([]) - 1;
 			ends.push(BUBBLE_X);
 		}
-		const x = ends[at] as number;
-		(shelves[at] as Placed[]).push({
+		const dist = ends[shelf] as number;
+		(shelves[shelf] as Placed[]).push({
 			group,
 			cols,
 			rowHeights,
-			x,
+			x: xOf(dist, w),
 			w,
 			h: 2 + 1 + cardsH + 1,
 		});
-		ends[at] = x + w + BUBBLE_GAP_X;
+		ends[shelf] = dist + w + BUBBLE_GAP_X;
 	}
 
 	// Laid out from row 0, then shifted to centre on the master's row, or on
@@ -444,19 +455,21 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 		const buses = busRows.map((r) => r + offset);
 		const top = Math.min(input.masterRow, ...buses);
 		const bottom = Math.max(input.masterRow, ...buses);
-		links.horizontal(0, TRUNK_X, input.masterRow);
-		links.vertical(TRUNK_X, top, bottom);
+		if (mirrored) links.horizontal(trunkX, right, input.masterRow);
+		else links.horizontal(0, trunkX, input.masterRow);
+		links.vertical(trunkX, top, bottom);
 		shelves.forEach((shelf, i) => {
 			const bus = buses[i] as number;
 			const drops = shelf.map((b) => b.x + 1);
-			links.horizontal(TRUNK_X, Math.max(...drops), bus);
+			if (mirrored) links.horizontal(Math.min(...drops), trunkX, bus);
+			else links.horizontal(trunkX, Math.max(...drops), bus);
 			for (const d of drops) links.vertical(d, bus, bus + 1);
 		});
 		links.draw(canvas);
 	}
-	if (offset < 0) canvas.text(TRUNK_X, 0, "▲", { fg: "magenta" });
+	if (offset < 0) canvas.text(trunkX, 0, "▲", { fg: "magenta" });
 	if (total + offset > input.height)
-		canvas.text(TRUNK_X, input.height - 1, "▼", { fg: "magenta" });
+		canvas.text(trunkX, input.height - 1, "▼", { fg: "magenta" });
 
 	// Bubbles are drawn after their links so frames win where they meet.
 	shelves.forEach((shelf, i) => {
@@ -503,6 +516,31 @@ function drawBubble(
 		}
 		rowY += rowH + CARD_GAP_Y;
 	});
+}
+
+/**
+ * Splits topics between the two sides of a centred master (ADR 0027),
+ * neediest first, each to the side with fewer cards; right wins a tie, so
+ * the neediest topic sits right of the master.
+ */
+export function splitSides(groups: TopicGroup[]): {
+	left: TopicGroup[];
+	right: TopicGroup[];
+} {
+	const left: TopicGroup[] = [];
+	const right: TopicGroup[] = [];
+	let leftCards = 0;
+	let rightCards = 0;
+	for (const g of groups) {
+		if (rightCards <= leftCards) {
+			right.push(g);
+			rightCards += g.sessions.length;
+		} else {
+			left.push(g);
+			leftCards += g.sessions.length;
+		}
+	}
+	return { left, right };
 }
 
 /** First card of the next (`step` 1) or previous (-1) topic, wrapping around. */
