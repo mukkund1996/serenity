@@ -146,15 +146,15 @@ export function NewSessionDialog({
 
 /**
  * Kept to a fixed handful of rows: related keys share one, so a new key
- * joins a row rather than growing the panel. The footer covers WASD, c,
- * z Z, / and g.
+ * joins a row rather than growing the panel. The footer covers the moves,
+ * Enter, i, Ctrl+m, z Z and /.
  */
 const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 	[
 		"ON A NODE",
 		[
-			["Enter Esc", "go in, then act on ▸ · leave"],
-			["w s i Z", "select ▸ · reply · attach"],
+			["Enter i", "attach · quick message"],
+			["Enter Esc", "into the master, act on ▸ · leave"],
 			["o f p", "open PR · watch · pin"],
 			["r K x", "rename · kill agent · clean up"],
 		],

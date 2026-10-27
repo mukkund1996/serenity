@@ -291,11 +291,17 @@ function drawCard(
 	canvas.frame(x, y, CARD_W, h, focused ? "heavy" : "light", {
 		fg: frameColor(s.status, focused),
 		bold: focused,
+		dim: !focused,
 	});
 
 	const g = glyph(s.status);
 	let col = canvas.text(x + 1, y, " ");
-	if (g) col = canvas.text(col, y, `${g.ch} `, { fg: g.color, bold: true });
+	if (g)
+		col = canvas.text(col, y, `${g.ch} `, {
+			fg: g.color,
+			bold: focused,
+			dim: !focused,
+		});
 	col = canvas.text(col, y, truncate(s.name, CARD_W - 18), {
 		fg: focused ? "whiteBright" : nameColor(s.status),
 		bold: true,

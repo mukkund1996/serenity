@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { PrInfo, ReviewRequest, SlackItem } from "@serenity/core";
-import { makeSession } from "@serenity/core/testing";
+import type { ReviewRequest, SlackItem } from "@serenity/core";
 import {
 	type MasterPlanInput,
-	type MyPr,
 	needLines,
 	planMaster,
 	slackRows,
@@ -30,10 +28,6 @@ const slackItem = (id: string): SlackItem => ({
 	permalink: null,
 	at: 1000,
 });
-const mine = (number: number): MyPr => ({
-	session: makeSession({ id: `s${number}` }),
-	pr: { number, url: `u${number}`, title: `t${number}` } as PrInfo,
-});
 
 /** 1 need item (2 rows), no conversation: 2 + 4 + 1 + 4 + 3 = 14 fixed rows. */
 function input(height: number, more: Partial<MasterPlanInput> = {}) {
@@ -46,30 +40,20 @@ function input(height: number, more: Partial<MasterPlanInput> = {}) {
 		conversation: [],
 		slack: null,
 		reviews: [review(1), review(2), review(3)],
-		mine: [mine(7), mine(6)],
 		...more,
 	};
 }
 
 describe("planMaster", () => {
 	test("with room for everything, every section shows in full", () => {
-		const plan = planMaster(input(60));
-		expect(plan.reviews).toHaveLength(3);
-		expect(plan.mine).toHaveLength(2);
+		expect(planMaster(input(60)).reviews).toHaveLength(3);
 	});
 
-	test("the rows left go to REVIEW, then MY PRS", () => {
-		// 14 fixed; 5 for REVIEW, 4 for MY PRS.
-		let plan = planMaster(input(14 + 5 + 4));
-		expect(plan.reviews).toHaveLength(3);
-		expect(plan.mine).toHaveLength(2);
-
-		plan = planMaster(input(14 + 5 + 3));
-		expect(plan.mine).toHaveLength(1);
-
-		plan = planMaster(input(14 + 4));
-		expect(plan.reviews).toHaveLength(2);
-		expect(plan.mine).toHaveLength(0);
+	test("the rows left go to REVIEW, trimmed to fit", () => {
+		// 14 fixed; 5 for REVIEW.
+		expect(planMaster(input(14 + 5)).reviews).toHaveLength(3);
+		expect(planMaster(input(14 + 4)).reviews).toHaveLength(2);
+		expect(planMaster(input(14 + 2)).reviews).toHaveLength(0);
 	});
 
 	test("NEEDS YOU items are a blank row apart", () => {
@@ -104,12 +88,6 @@ describe("planMaster", () => {
 		);
 		expect(plan.needs).toEqual({ start: 1, count: 5, hidden: 1 });
 		expect(plan.reviews).toHaveLength(0);
-		expect(plan.mine).toHaveLength(0);
-	});
-
-	test("empty sections take no rows", () => {
-		const plan = planMaster(input(14 + 4 + 3, { reviews: [] }));
-		expect(plan.mine).toHaveLength(2);
 	});
 });
 
@@ -139,6 +117,25 @@ test("Slack takes its rows before REVIEW, whole or not at all", () => {
 	const short = planMaster(input(14 + 2 + 2, { slack }));
 	expect(short.slack).toBe(false);
 	expect(short.reviews).toHaveLength(2);
+});
+
+test("Slack is sized for its tallest item, so [ ] never drop it", () => {
+	const slack = {
+		items: [slackItem("a"), slackItem("b")],
+		error: null,
+		checkedAt: 1,
+		suggestions: [
+			{
+				itemId: "b",
+				kind: "reply" as const,
+				label: "Reply",
+				text: "ok",
+				sessionId: null,
+				status: "pending" as const,
+			},
+		],
+	};
+	expect(slackRows(slack)).toBe(4);
 });
 
 test("Slack with nothing waiting takes no rows; an error takes one", () => {

@@ -1,6 +1,6 @@
 # 0026 · Arrow keys between nodes, Enter into a node, `Ctrl+m` to the master
 
-**Status:** Accepted · 2026-10-27
+**Status:** Accepted · 2026-10-27 · Enter into a card superseded by 0028
 
 ## Context
 WASD moved between nodes and the arrow keys selected inside the focused node (0012, 0019). Arrow keys are what people reach for to move around, and having both key sets live at once meant any stray `↑` changed the selection inside a node you had only passed through. The way back to the master was `c` on the map, `Ctrl+g` and then `c` from a session.
