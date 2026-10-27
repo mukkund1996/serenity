@@ -63,6 +63,11 @@ export interface Session {
 	topicCandidate: string | null;
 	lastPrompt: string | null;
 	lastAssistantMessage: string | null;
+	/**
+	 * Subagents started and not yet stopped. A turn that ends while any run
+	 * (background agents) is still working on their results.
+	 */
+	subagents: string[];
 	transcriptPath: string | null;
 	claudeSessionId: string | null;
 	watched: boolean;
@@ -101,10 +106,13 @@ export interface ImportCandidate {
 export const HOOK_KINDS = [
 	"SessionStart",
 	"UserPromptSubmit",
+	"PreToolUse",
 	"PostToolUse",
 	"PermissionRequest",
 	"Notification",
 	"Stop",
+	"SubagentStart",
+	"SubagentStop",
 	"SessionEnd",
 ] as const;
 
@@ -125,6 +133,8 @@ export interface HookPayload {
 	notification_type?: string;
 	last_assistant_message?: string;
 	tool_name?: string;
+	/** Set on events from inside a subagent, and on SubagentStart/Stop. */
+	agent_id?: string;
 	[key: string]: unknown;
 }
 

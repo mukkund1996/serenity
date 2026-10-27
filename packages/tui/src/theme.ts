@@ -16,6 +16,24 @@ export function glyph(
 	}
 }
 
+/**
+ * A topic card's outline: a light shade of its status glyph's colour, grey
+ * when quiet. The focused card is always white, whatever its status.
+ */
+export function frameColor(status: SessionStatus, focused: boolean): Color {
+	if (focused) return "whiteBright";
+	switch (status) {
+		case "waiting":
+			return "yellowBright";
+		case "working":
+			return "blueBright";
+		case "done":
+			return "greenBright";
+		default:
+			return "gray";
+	}
+}
+
 /** Name colour on cards and lists; idle and archived are deliberately quiet. */
 export function nameColor(status: SessionStatus): Color {
 	if (status === "idle") return "white";

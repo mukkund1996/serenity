@@ -14,7 +14,10 @@ export type Color =
 	| "cyan"
 	| "white"
 	| "gray"
-	| "whiteBright";
+	| "whiteBright"
+	| "yellowBright"
+	| "blueBright"
+	| "greenBright";
 
 export interface Style {
 	fg?: Color;

@@ -35,6 +35,8 @@ function permissionAsk(payload: HookPayload): string {
 /**
  * Applies one hook event to a session. Pure: returns the fields that change.
  * Archived is sticky; the master (milestone 2) decides finished vs idle after Stop.
+ * A turn that ends while subagents still run (background agents) stays working:
+ * Claude resumes the turn when they report back.
  */
 export function reduceHook(
 	session: Session,
@@ -51,6 +53,7 @@ export function reduceHook(
 			patch.status = "idle";
 			patch.ask = null;
 			patch.waitingOn = null;
+			if (session.subagents.length) patch.subagents = [];
 			break;
 		case "UserPromptSubmit":
 			patch.status = "working";
@@ -60,12 +63,27 @@ export function reduceHook(
 			// The previous reply is older than this prompt now.
 			patch.lastAssistantMessage = null;
 			break;
+		// PreToolUse comes before the permission check, so it never ends a
+		// wait; PostToolUse means the tool ran, an approved one included.
+		case "PreToolUse":
+			resume(session, patch, false);
+			break;
 		case "PostToolUse":
-			if (session.status === "waiting" || session.status === "idle") {
-				patch.status = "working";
-				patch.ask = null;
-				patch.waitingOn = null;
-			}
+			resume(session, patch, true);
+			break;
+		case "SubagentStart":
+			if (payload.agent_id)
+				patch.subagents = [
+					...session.subagents.filter((id) => id !== payload.agent_id),
+					payload.agent_id,
+				];
+			resume(session, patch, false);
+			break;
+		case "SubagentStop":
+			if (payload.agent_id && session.subagents.includes(payload.agent_id))
+				patch.subagents = session.subagents.filter(
+					(id) => id !== payload.agent_id,
+				);
 			break;
 		case "PermissionRequest":
 			patch.status = "waiting";
@@ -91,7 +109,7 @@ export function reduceHook(
 			break;
 		}
 		case "Stop":
-			patch.status = "idle";
+			patch.status = session.subagents.length ? "working" : "idle";
 			patch.ask = null;
 			patch.waitingOn = null;
 			patch.lastAssistantMessage = oneLine(
@@ -103,7 +121,24 @@ export function reduceHook(
 			patch.status = "dead";
 			patch.ask = null;
 			patch.waitingOn = null;
+			if (session.subagents.length) patch.subagents = [];
 			break;
 	}
 	return patch;
+}
+
+/**
+ * Activity seen (a tool call, a subagent): back to working from idle or done,
+ * and from waiting when it shows the wait is over.
+ */
+function resume(
+	session: Session,
+	patch: Partial<Session>,
+	endsWait: boolean,
+): void {
+	const quiet = session.status === "idle" || session.status === "done";
+	if (!quiet && !(endsWait && session.status === "waiting")) return;
+	patch.status = "working";
+	patch.ask = null;
+	patch.waitingOn = null;
 }

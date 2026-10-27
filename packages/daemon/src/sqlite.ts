@@ -65,6 +65,7 @@ const SESSION_DEFAULTS: Pick<
 	| "tracking"
 	| "claudePid"
 	| "pinned"
+	| "subagents"
 > = {
 	waitingOn: null,
 	waitingSince: null,
@@ -75,6 +76,7 @@ const SESSION_DEFAULTS: Pick<
 	tracking: "hooks",
 	claudePid: null,
 	pinned: false,
+	subagents: [],
 };
 
 /** Rows written before "category" was renamed to "topic". */

@@ -26,6 +26,7 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
 		topicCandidate: null,
 		lastPrompt: null,
 		lastAssistantMessage: null,
+		subagents: [],
 		transcriptPath: null,
 		claudeSessionId: null,
 		watched: false,

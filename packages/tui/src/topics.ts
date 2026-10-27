@@ -8,7 +8,7 @@ import {
 	truncate,
 	wrap,
 } from "@serenity/core";
-import { cardText, glyph, nameColor } from "./theme";
+import { cardText, frameColor, glyph, nameColor } from "./theme";
 
 /**
  * Draws the topics zoom's right-hand side (design screen 2): every topic as a
@@ -283,12 +283,10 @@ function drawCard(
 ): number {
 	const focused = focus !== null;
 	const h = cardHeight(s, focused, focus?.suggestion ?? null);
-	const frameStyle: Style = focused
-		? { fg: "whiteBright", bold: true }
-		: s.status === "waiting"
-			? { fg: "yellow" }
-			: DIM;
-	canvas.frame(x, y, CARD_W, h, focused ? "heavy" : "light", frameStyle);
+	canvas.frame(x, y, CARD_W, h, focused ? "heavy" : "light", {
+		fg: frameColor(s.status, focused),
+		bold: focused,
+	});
 
 	const g = glyph(s.status);
 	let col = canvas.text(x + 1, y, " ");
