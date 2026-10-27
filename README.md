@@ -8,9 +8,23 @@ Status: milestone 4 (map and navigation). Sessions with live status from hooks, 
 - Using it daily while developing it: [`docs/dogfooding.md`](docs/dogfooding.md)
 - Screen specs: [`docs/design/handover.md`](docs/design/handover.md)
 
-## Requirements
+## Install
 
-macOS or Linux, [tmux](https://github.com/tmux/tmux) 3.2+, [Claude Code](https://claude.com/claude-code), git. [`gh`](https://cli.github.com), logged in, for PR status (optional: without it cards say why).
+macOS or Linux. One command installs serenity and what it needs: [tmux](https://github.com/tmux/tmux) 3.2+, git, [`gh`](https://cli.github.com) and [Claude Code](https://claude.com/claude-code), skipping any you already have:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mukkund1996/serenity/main/scripts/install.sh | sh
+```
+
+Or with Homebrew (tmux, git and gh come as dependencies; Claude Code is a cask):
+
+```bash
+brew install --cask claude-code; brew install mukkund1996/tap/serenity
+```
+
+Then `gh auth login` for PR status (optional: without it cards say why), and run `serenity` inside any git repo. `serenity doctor` checks the setup. The installer takes `SERENITY_VERSION`, `SERENITY_INSTALL_DIR` (default `~/.local/bin`) and `SERENITY_NO_DEPS=1`.
+
+Releases: merging the release-please PR on `main` tags a version; the release workflow attaches the binaries and bumps the tap ([0025](docs/adr/0025-install-script-and-homebrew.md)).
 
 ## Development
 
