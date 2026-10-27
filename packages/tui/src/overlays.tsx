@@ -153,7 +153,8 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 	[
 		"ON A NODE",
 		[
-			["i Enter Z", "reply · act on ▸ · attach"],
+			["Enter Esc", "go in, then act on ▸ · leave"],
+			["w s i Z", "select ▸ · reply · attach"],
 			["o f p", "open PR · watch · pin"],
 			["r K x", "rename · kill agent · clean up"],
 		],
@@ -161,8 +162,8 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 	[
 		"MAP",
 		[
-			["↑↓ [ ]", "select in node · prev / next topic, Slack"],
-			["N I", "new session · import from tmux"],
+			["[ ] Ctrl+m", "topic or Slack · master"],
+			["N I g", "new session · import · chat"],
 			["Tab Esc H", "next need · zoom out · archived"],
 			["y e n", "approve · edit · decline"],
 		],

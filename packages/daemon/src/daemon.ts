@@ -259,9 +259,7 @@ export class Daemon {
 				change: (session, patch) => this.change(session, patch),
 				broadcast: (repo) => this.broadcast(repo),
 				markEnded: (session) => this.markEnded(session),
-				bindDetachKey: async () => {
-					await this.tmux.bindDetachKey(this.detachCommand());
-				},
+				bindSessionKeys: () => this.tmux.bindSessionKeys(this.detachCommand()),
 				log: this.log,
 			},
 			opts.claudeConfigDir,
@@ -305,7 +303,11 @@ export class Daemon {
 		this.subscriptions.set(peer, new Set());
 		peer.onClose(() => {
 			this.subscriptions.delete(peer);
+			const pane = this.mapPanes.get(peer);
 			this.mapPanes.delete(peer);
+			// The pane may outlive the map, as a shell; Ctrl+m is Enter there again.
+			if (pane)
+				void this.tmux.unsetPaneOption(pane, "@serenity_map").catch(() => {});
 		});
 		peer.onRequest((method, params) => {
 			const handler = this.handlers[method as Method] as
@@ -391,7 +393,10 @@ export class Daemon {
 
 		"state.subscribe": ({ repo, clientPane }, peer) => {
 			this.subscriptions.get(peer)?.add(repo);
-			if (clientPane) this.mapPanes.set(peer, clientPane);
+			if (clientPane) {
+				this.mapPanes.set(peer, clientPane);
+				void this.bindMapKeys(clientPane);
+			}
 			this.prs.refreshRepo(repo);
 			this.reviews.watch(repo);
 			if (this.slackRepos.has(repo)) {
@@ -416,7 +421,7 @@ export class Daemon {
 			return null;
 		},
 
-		"session.detach": async ({ pane, id, clientPane }) => {
+		"session.detach": async ({ pane, id, clientPane, master }) => {
 			const sessionId = clientPane
 				? [...this.attached.values()].find((a) => a.clientPane === clientPane)
 						?.sessionId
@@ -425,7 +430,7 @@ export class Daemon {
 					: this.opts.storage.sessions
 							.listAll()
 							.find((s) => s.tmuxPane === pane)?.id;
-			if (sessionId) await this.detach(sessionId);
+			if (sessionId) await this.detach(sessionId, master);
 			return null;
 		},
 
@@ -637,6 +642,20 @@ export class Daemon {
 	}
 
 	/**
+	 * Marks the map pane and binds Ctrl+g / Ctrl+m, so Ctrl+m reaches the map
+	 * before any session is attached. Extended keys let tmux tell it from Enter.
+	 */
+	private async bindMapKeys(pane: string): Promise<void> {
+		try {
+			await this.tmux.setPaneOption(pane, "@serenity_map", "1");
+			await this.tmux.bindSessionKeys(this.detachCommand());
+			await this.tmux.enableClaudeKeys();
+		} catch (e) {
+			this.log(`tmux map keys: ${(e as Error).message}`);
+		}
+	}
+
+	/**
 	 * `--mcp-config` for a repo's master chat: `serenity mcp <repo>` (ADR
 	 * 0008), and Slack when the repo has it on (ADR 0023).
 	 */
@@ -688,7 +707,8 @@ export class Daemon {
 		this.timers.add(timer);
 	}
 
-	private async detach(sessionId: string): Promise<void> {
+	/** Detaches; with `master`, then presses Ctrl+m in the map so it focuses the master. */
+	private async detach(sessionId: string, master = false): Promise<void> {
 		const session = this.requireSession(sessionId);
 		const attached = this.attached.get(session.repo);
 		if (attached?.sessionId !== sessionId) return;
@@ -709,8 +729,10 @@ export class Daemon {
 				session.name,
 			);
 		}
-		if (await this.tmux.paneExists(attached.clientPane))
+		if (await this.tmux.paneExists(attached.clientPane)) {
 			await this.tmux.selectPane(attached.clientPane);
+			if (master) await this.tmux.pressCtrlM(attached.clientPane);
+		}
 		this.prs.schedule(session.id, 0);
 		this.broadcast(session.repo);
 	}
@@ -771,7 +793,7 @@ export class Daemon {
 		const pane = await this.requireLivePane(session);
 		const current = this.attached.get(session.repo);
 		if (current) await this.detach(current.sessionId);
-		await this.tmux.bindDetachKey(this.detachCommand());
+		await this.tmux.bindSessionKeys(this.detachCommand());
 		await this.tmux
 			.enableClaudeKeys()
 			.catch((e: Error) => this.log(`tmux claude keys: ${e.message}`));

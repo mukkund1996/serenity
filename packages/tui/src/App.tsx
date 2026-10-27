@@ -21,7 +21,14 @@ import {
 	useInput,
 	useWindowSize,
 } from "ink";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import {
 	CanvasView,
 	Key,
@@ -132,10 +139,10 @@ function useLiveState<T>(
 ): [T, (next: T) => void, { readonly current: T }] {
 	const [value, setValue] = useState(initial);
 	const ref = useRef(initial);
-	const set = (next: T) => {
+	const set = useCallback((next: T) => {
 		ref.current = next;
 		setValue(next);
-	};
+	}, []);
 	return [value, set, ref];
 }
 
@@ -143,9 +150,11 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const { exit } = useApp();
 	const { columns, rows } = useWindowSize();
 	const { state, connected, call } = useDaemon(home, repo, tmuxPane);
-	/** The focused node: MASTER or a session card's id (WASD). */
+	/** The focused node: MASTER or a session card's id (arrow keys). */
 	const [node, setNode] = useState<string>(MASTER);
-	/** The element selected inside the node (arrow keys); null means its first. */
+	/** Whether Enter has gone into the focused node, so w s select inside it. */
+	const [inside, setInside, insideRef] = useLiveState(false);
+	/** The element selected inside the node (w s); null means its first. */
 	const [element, setElement] = useState<string | null>(null);
 	const [replyText, setReplyText, replyRef] = useLiveState<string | null>(null);
 	/** The suggestion whose reply is being edited (e), if any. */
@@ -227,7 +236,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					(onMaster && element === s.id && replyText !== null ? 1 : 0),
 			})),
 		],
-		selected: onMaster ? element : null,
+		selected: onMaster && inside ? element : null,
 		conversation: state?.conversation ?? [],
 		slack,
 		slackIndex: slackAt,
@@ -251,7 +260,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const card = onMaster ? null : (sessions.find((s) => s.id === node) ?? null);
 	const cardSuggestion = suggestionFor(card?.id);
 
-	/** What ↑↓ step through: the master's requests, NEEDS YOU, its PR rows and input, or a card's rows. */
+	/** What w s step through: the master's requests, NEEDS YOU, its PR rows and input, or a card's rows. */
 	const elements: string[] = onMaster
 		? [
 				...permissions.map((p) => `${PERM}${p.id}`),
@@ -292,7 +301,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const calm = groups.filter((g) => g.attention === 0).length;
 	const conversation = state?.conversation ?? [];
 	/** The selected NEEDS YOU item, as the map's master box shows it. */
-	const masterItem: MasterItem | null = !onMaster
+	const masterItem: MasterItem | null = !(onMaster && inside)
 		? null
 		: focusedPermission
 			? { kind: "permission", permission: focusedPermission }
@@ -305,7 +314,10 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					}
 				: null;
 	const layout = (() => {
-		const focusElement = (onMaster ? "card" : selected) as CardElement;
+		// Outside a node nothing inside it is selected (ADR 0026).
+		const focusElement = (
+			onMaster || !inside ? "card" : selected
+		) as CardElement;
 		if (zoom === "map") {
 			const map = drawMap({
 				width: Math.max(1, columns),
@@ -323,7 +335,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					calmTopics: calm,
 					empty: sessions.length === 0,
 					item: masterItem,
-					inputSelected: onMaster && selected === MASTER_INPUT,
+					inputSelected: onMaster && inside && selected === MASTER_INPUT,
 					inputText: masterText,
 					lastMessage: conversation[conversation.length - 1] ?? null,
 				},
@@ -346,7 +358,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			return {
 				canvas: map.canvas,
 				nodes: [masterBox, ...map.rows.map((r) => ({ ...r, id: r.sessionId }))],
-				// WASD moves between topic bubbles here; ↑↓ walk the agents inside.
+				// The arrow keys move between topic bubbles here; w s walk the agents inside.
 				moves: [
 					masterBox,
 					...map.bubbles.map((b) => ({ ...b, id: `${TOPIC}${b.id}` })),
@@ -374,21 +386,23 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const nodes: NodeBox[] = layout.nodes;
 	const nodeIds = nodes.map((n) => n.id).join(" ");
 
-	const focusNode = (id: string, at: string | null = null) => {
+	/** Focuses a node; `enter` also goes into it, as Enter does. */
+	const focusNode = (id: string, at: string | null = null, enter = false) => {
 		setNode(id);
 		setElement(at);
+		setInside(enter);
 	};
-	/** The agent last focused in each topic, where WASD lands on the map. */
+	/** The agent last focused in each topic, where the arrow keys land on the map. */
 	const lastInTopic = useRef(new Map<string, string>());
 	const cardTopic = card ? topicOf(card) : null;
 	if (card && cardTopic) lastInTopic.current.set(cardTopic, card.id);
-	/** WASD on the map: to the next bubble's last-focused agent, or its first. */
+	/** Arrow keys on the map: to the next bubble's last-focused agent, or its first. */
 	const moveToTopic = (dir: "up" | "down" | "left" | "right") => {
 		const from = cardTopic === null ? MASTER : `${TOPIC}${cardTopic}`;
 		const to = moveFocus(layout.moves, from, dir);
 		const group = groups.find((g) => `${TOPIC}${g.name}` === to);
 		if (!group) return focusNode(MASTER);
-		if (group.name === cardTopic) return;
+		if (group.name === cardTopic) return setInside(false);
 		const last = lastInTopic.current.get(group.name);
 		const id = group.sessions.some((s) => s.id === last)
 			? (last as string)
@@ -396,8 +410,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		if (id) focusNode(id);
 	};
 	/**
-	 * ↑↓ on the map: through the focused agent's rows (it, its suggestion,
-	 * its reply), then on to the next or previous agent in the bubble.
+	 * w s inside a bubble on the map: through the focused agent's rows (it, its
+	 * suggestion, its reply), then on to the next or previous agent in the bubble.
 	 */
 	const stepInTopic = (up: boolean) => {
 		const at = selected ? elements.indexOf(selected) : 0;
@@ -407,7 +421,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		const list = groups.find((g) => g.name === cardTopic)?.sessions ?? [];
 		const i = list.findIndex((s) => s.id === card?.id);
 		const to = list[i + (up ? -1 : 1)];
-		if (to) focusNode(to.id);
+		if (to) focusNode(to.id, null, true);
 	};
 	/** A session just created or imported, focused before the daemon reports it. */
 	const arriving = useRef<string | null>(null);
@@ -421,7 +435,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		arriving.current = null;
 		setNode(MASTER);
 		setElement(null);
-	}, [nodeIds, node, allSessions]);
+		setInside(false);
+	}, [nodeIds, node, allSessions, setInside]);
 
 	useEffect(() => {
 		if (!notice) return;
@@ -442,12 +457,13 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		const at = onMaster ? order.indexOf(selected ?? "") : -1;
 		const next =
 			at === -1 ? 0 : (at + (back ? order.length - 1 : 1)) % order.length;
-		focusNode(MASTER, order[next] ?? null);
+		focusNode(MASTER, order[next] ?? null, true);
 	};
 
 	const startReply = () => {
 		setReplyEdit(null);
 		setReplyText("");
+		setInside(true);
 		if (!onMaster) setElement("reply");
 	};
 
@@ -458,7 +474,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		);
 	};
 
-	/** Enter acts on the selected element; on the card itself it attaches. */
+	/** Enter inside a node acts on the selected element; on the card itself it attaches. */
 	const activate = () => {
 		if (onMaster) {
 			if (selected === MASTER_INPUT) return setMasterText("");
@@ -586,10 +602,26 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 	useInput(
 		function onKey(input: string, key: InkKey) {
+			// Ctrl+m focuses the master from every view, the session zoom too.
+			// tmux passes it here as an extended key; Enter stays Enter (ADR 0026).
+			const toMasterKey = key.ctrl && input === "m";
 			if (attached) {
-				if (key.escape || (key.ctrl && input === "g"))
+				if (key.escape || (key.ctrl && input === "g") || toMasterKey)
 					call("session.detach", { id: attached.id }).catch(fail);
+				if (toMasterKey) focusNode(MASTER);
 				return;
+			}
+
+			const busy =
+				(overlay?.kind === "confirm" || overlay?.kind === "kill") &&
+				overlay.busy;
+			if (toMasterKey && !busy) {
+				setOverlay(null);
+				setSearch(null);
+				setMasterText(null);
+				setReplyText(null);
+				setReplyEdit(null);
+				return focusNode(MASTER);
 			}
 
 			if (overlay?.kind === "confirm") {
@@ -721,24 +753,33 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			}
 
 			if (key.tab) return cycleNeeds(key.shift);
-			// One level up: topics › map. The map is the top.
+			// Esc leaves the node; outside one it goes up a level: topics › map.
 			if (key.escape) {
+				if (insideRef.current) return focusNode(node);
 				if (zoom === "topics") setZoom("map");
 				return;
 			}
-			const dir = { w: "up", s: "down", a: "left", d: "right" } as const;
-			const move = dir[input as keyof typeof dir];
+			const move = key.upArrow
+				? "up"
+				: key.downArrow
+					? "down"
+					: key.leftArrow
+						? "left"
+						: key.rightArrow
+							? "right"
+							: null;
 			if (move) {
 				if (zoom === "map") return moveToTopic(move);
 				return focusNode(moveFocus(nodes, node, move) ?? MASTER);
 			}
-			if ((key.upArrow || key.downArrow) && zoom === "map" && card)
-				return stepInTopic(key.upArrow);
-			if (key.upArrow || key.downArrow) {
+			// Enter goes into the focused node; inside it, w s select and Enter acts.
+			if (key.return && !insideRef.current) return setInside(true);
+			if ((input === "w" || input === "s") && insideRef.current) {
+				if (zoom === "map" && card) return stepInTopic(input === "w");
 				const at = selected ? elements.indexOf(selected) : 0;
 				const next = Math.max(
 					0,
-					Math.min(elements.length - 1, at + (key.upArrow ? -1 : 1)),
+					Math.min(elements.length - 1, at + (input === "w" ? -1 : 1)),
 				);
 				return setElement(elements[next] ?? null);
 			}
@@ -831,6 +872,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					if (focusedSuggestion.kind === "reply") {
 						setReplyEdit(focusedSuggestion.id);
 						setReplyText(focusedSuggestion.text ?? "");
+						setInside(true);
 						if (!onMaster) setElement("reply");
 					} else if (focusedSuggestion.kind === "cleanup") {
 						void openConfirm(focused, focusedSuggestion.id);
@@ -997,7 +1039,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							slack={slack}
 							slackIndex={slackAt}
 							focused={onMaster}
-							selected={onMaster ? selected : null}
+							selected={onMaster && inside ? selected : null}
 							inputText={masterText}
 							replyText={onMaster ? replyText : null}
 						/>
@@ -1025,8 +1067,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					</Text>
 				) : (
 					<Text color="gray" wrap="truncate">
-						<Key>WASD</Key> move · <Key>c</Key> center on master ·{" "}
-						<Key>z Z</Key> zoom · <Key>/</Key> search · <Key>g</Key> master
+						<Key>←↑↓→</Key> move · <Key>Enter</Key> into · <Key>Ctrl+m</Key>{" "}
+						master · <Key>z Z</Key> zoom · <Key>/</Key> search
 					</Text>
 				)}
 				<Text color="gray">
@@ -1249,7 +1291,7 @@ function SessionZoom({
 				</Box>
 				<Box flexShrink={0} marginLeft={1}>
 					<Text color="gray">
-						<Key>Ctrl+g</Key> map
+						<Key>Ctrl+g</Key> map · <Key>Ctrl+m</Key> master
 					</Text>
 				</Box>
 			</Box>
