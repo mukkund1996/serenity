@@ -22,6 +22,7 @@ const message = (ts: string) => ({
 	author: "Ana",
 	text: "ping",
 	reason: "mention",
+	action: "Check the deploy",
 	ts,
 	threadTs: ts,
 	permalink: null,

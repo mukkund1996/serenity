@@ -30,6 +30,7 @@ import {
 	useState,
 } from "react";
 import {
+	Brand,
 	CanvasView,
 	Key,
 	MASTER_INPUT,
@@ -37,7 +38,7 @@ import {
 	REVIEW_ROW,
 	SessionCounts,
 	SessionMaster,
-	SLACK_ROW,
+	SLACK_NEED,
 } from "./components";
 import { drawMap, type MasterItem, rowElements } from "./map";
 import { needLines, planMaster, suggestionLines } from "./master-layout";
@@ -168,8 +169,6 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const [zoom, setZoom] = useState<Zoom>("topics");
 	const [search, setSearch, searchRef] = useLiveState<Search | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
-	/** The Slack item shown, by id so new items do not move it; `[` `]` step it while SLACK is selected. */
-	const [slackId, setSlackId, slackIdRef] = useLiveState<string | null>(null);
 
 	const allSessions = state?.sessions ?? [];
 	/** Archived sessions are off the map; `H` lists them. */
@@ -208,14 +207,10 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 	const github = state?.github ?? { user: null, reviewRequests: [] };
 	const slack = state?.slack ?? null;
+	/** Slack's mentions and DMs that need the user; they close NEEDS YOU (ADR 0031). */
 	const slackItems = slack?.items ?? [];
-	const slackAt = Math.max(
-		0,
-		slackItems.findIndex((i) => i.id === slackId),
-	);
-	const slackItem = slackItems[slackAt] ?? null;
-	const slackSuggestion =
-		slack?.suggestions.find((g) => g.itemId === slackItem?.id) ?? null;
+	const slackSuggestionFor = (itemId: string | undefined) =>
+		slack?.suggestions.find((g) => g.itemId === itemId) ?? null;
 	// Planned with the raw selection: only its place in NEEDS YOU matters here.
 	const plan = planMaster({
 		height: bodyHeight,
@@ -235,15 +230,26 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 						.length +
 					(onMaster && element === s.id && replyText !== null ? 1 : 0),
 			})),
+			...slackItems.map((m) => ({
+				id: `${SLACK_NEED}${m.id}`,
+				// Its reply input takes the suggestion's row.
+				rows:
+					1 +
+					needLines(m.action, masterInner).length +
+					(slackSuggestionFor(m.id) ? 1 : 0),
+			})),
 		],
 		selected: onMaster && inside ? element : null,
 		conversation: state?.conversation ?? [],
-		slack,
+		slackError: !!slack?.error,
 		reviews: github.reviewRequests,
 	});
 	/** The URL of a row selected in the master: the Slack item or a review request. */
 	const linkOf = (id: string | null): string | null => {
-		if (id === SLACK_ROW) return slackItem?.permalink ?? null;
+		if (id?.startsWith(SLACK_NEED))
+			return (
+				slackItems.find((m) => `${SLACK_NEED}${m.id}` === id)?.permalink ?? null
+			);
 		if (id?.startsWith(REVIEW_ROW))
 			return (
 				plan.reviews.find((r) => `${REVIEW_ROW}${r.number}` === id)?.url ?? null
@@ -258,8 +264,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		? [
 				...permissions.map((p) => `${PERM}${p.id}`),
 				...needs.map((s) => s.id),
-				// The map draws Slack in its own box under the master.
-				...(slackItem && (zoom === "map" || plan.slack) ? [SLACK_ROW] : []),
+				...slackItems.map((m) => `${SLACK_NEED}${m.id}`),
 				// The map's master box has no PR rows to select.
 				...(zoom === "topics"
 					? plan.reviews.map((r) => `${REVIEW_ROW}${r.number}`)
@@ -285,6 +290,11 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		? (sessions.find((s) => s.id === selected) ?? null)
 		: card;
 	const focusedSuggestion = suggestionFor(focused?.id);
+	/** The selected Slack item in NEEDS YOU: y e n act on its suggestion, Enter or o opens it. */
+	const slackItem =
+		(onMaster && slackItems.find((m) => `${SLACK_NEED}${m.id}` === selected)) ||
+		null;
+	const slackSuggestion = slackSuggestionFor(slackItem?.id);
 	const selectedLink = onMaster ? linkOf(selected) : null;
 
 	/** Rows of the archived list shown at once: the screen less its frame, padding and hints. */
@@ -308,14 +318,22 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		? null
 		: focusedPermission
 			? { kind: "permission", permission: focusedPermission }
-			: focused
+			: slackItem
 				? {
-						kind: "session",
-						session: focused,
-						suggestion: focusedSuggestion?.label ?? null,
+						kind: "slack",
+						item: slackItem,
+						suggestion: slackSuggestion,
 						replyText,
+						now: Date.now(),
 					}
-				: null;
+				: focused
+					? {
+							kind: "session",
+							session: focused,
+							suggestion: focusedSuggestion?.label ?? null,
+							replyText,
+						}
+					: null;
 	const layout = (() => {
 		const focusElement = (onMaster ? "card" : selected) as CardElement;
 		if (zoom === "map") {
@@ -331,7 +349,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					focused: onMaster,
 					thinking: master.status === "thinking",
 					error: master.error,
-					needCount: needs.length + permissions.length,
+					needCount: needs.length + permissions.length + slackItems.length,
+					slackError: slack?.error ?? null,
 					calmTopics: calm,
 					empty: sessions.length === 0,
 					item: masterItem,
@@ -339,20 +358,6 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					inputText: masterText,
 					lastMessage: conversation[conversation.length - 1] ?? null,
 				},
-				slack:
-					slack && (slackItem || slack.error)
-						? {
-								item: slackItem,
-								index: slackAt,
-								count: slackItems.length,
-								error: slack.error,
-								suggestion: slackSuggestion,
-								replyText:
-									onMaster && selected === SLACK_ROW ? replyText : null,
-								selected: onMaster && selected === SLACK_ROW,
-								now: Date.now(),
-							}
-						: null,
 			});
 			const masterBox = { ...map.master, id: MASTER };
 			return {
@@ -457,11 +462,12 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const fail = (e: unknown) =>
 		setNotice(e instanceof Error ? e.message : String(e));
 
-	/** Tab order: the master's permission requests, then NEEDS YOU. Focuses the master. */
+	/** Tab order: the master's permission requests, then NEEDS YOU, Slack last. Focuses the master. */
 	const cycleNeeds = (back: boolean) => {
 		const order = [
 			...permissions.map((p) => `${PERM}${p.id}`),
 			...needs.map((s) => s.id),
+			...slackItems.map((m) => `${SLACK_NEED}${m.id}`),
 		];
 		if (!order.length) return;
 		const at = onMaster ? order.indexOf(selected ?? "") : -1;
@@ -558,7 +564,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 	/** y on a Slack suggestion: post the reply, or type the question to its session. */
 	const acceptSlack = (itemId: string, text?: string) => {
-		const ask = slackSuggestion?.kind === "ask";
+		const ask = slackSuggestionFor(itemId)?.kind === "ask";
 		call("slack.accept", { repo, itemId, ...(text ? { text } : {}) }).then(
 			() =>
 				setNotice(ask ? "asked; its answer becomes a reply" : "sent to Slack"),
@@ -780,31 +786,14 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			// Enter goes into the master; on a card it attaches (activate).
 			if (key.return && onMaster && !insideRef.current) return setInside(true);
 			if (input === "[" || input === "]") {
-				// On the SLACK section they step through its items instead.
-				if (onMaster && selected === SLACK_ROW) {
-					const n = slackItems.length;
-					if (n < 2) return;
-					// From the live id: two presses can land before a re-render.
-					const at = Math.max(
-						0,
-						slackItems.findIndex((i) => i.id === slackIdRef.current),
-					);
-					const next = slackItems[(at + (input === "]" ? 1 : n - 1)) % n];
-					if (next) setSlackId(next.id);
-					return;
-				}
 				const id = stepTopic(groups, card?.id ?? null, input === "]" ? 1 : -1);
 				if (id) focusNode(id);
 				return;
 			}
 
-			// y e n on the SLACK section act on its suggestion (ADR 0024).
-			if (
-				onMaster &&
-				selected === SLACK_ROW &&
-				["y", "e", "n"].includes(input)
-			) {
-				if (slackSuggestion?.status !== "pending" || !slackItem) return;
+			// y e n on a Slack item act on its suggestion (ADR 0024).
+			if (slackItem && ["y", "e", "n"].includes(input)) {
+				if (slackSuggestion?.status !== "pending") return;
 				if (input === "y") return acceptSlack(slackItem.id);
 				if (input === "n")
 					return void call("slack.decline", {
@@ -1040,7 +1029,6 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							calmTopics={calm}
 							plan={plan}
 							slack={slack}
-							slackIndex={slackAt}
 							focused={onMaster}
 							selected={onMaster ? selected : null}
 							inputText={masterText}
@@ -1202,9 +1190,7 @@ function Header({
 		<Box width="100%" backgroundColor="black" paddingX={1}>
 			<Box flexShrink={1} overflow="hidden">
 				<Text wrap="truncate">
-					<Text color="magenta" bold>
-						◆ serenity
-					</Text>
+					<Brand />
 					<Text color="gray"> {basename(repo)}</Text>
 				</Text>
 			</Box>
@@ -1286,9 +1272,7 @@ function SessionZoom({
 			>
 				<Box flexShrink={1} overflow="hidden">
 					<Text wrap="truncate">
-						<Text color="magenta" bold>
-							◆ serenity
-						</Text>
+						<Brand />
 						<Text color="gray"> › {topicOf(session)} › </Text>
 						<Text>{session.name}</Text>
 					</Text>

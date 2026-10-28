@@ -3,8 +3,8 @@ import { prLine } from "./master";
 import type { ReviewRequest } from "./pr";
 
 /**
- * Slack for the master (ADR 0023): the threads and mentions still waiting on
- * the user, read through Slack's MCP server by a one-shot `claude -p`. Pure:
+ * Slack for the master (ADR 0023, 0031): the mentions and DMs that still need
+ * the user to act, read through Slack's MCP server by a one-shot `claude -p`. Pure:
  * the prompt, the JSON schema, and parsing of what the model returns.
  */
 
@@ -34,13 +34,14 @@ export const SLACK_READ_TOOLS = [
 	"slack_list_user_channels",
 ].map((tool) => `mcp__${SLACK_SERVER}__${tool}`);
 
-/** Items shown at most; `[` `]` cycle through them. */
-export const SLACK_LIMIT = 5;
+/** Items shown at most: they join NEEDS YOU, so only the few that matter. */
+export const SLACK_LIMIT = 3;
 const TEXT_MAX = 200;
+const ACTION_MAX = 80;
 
-export type SlackReason = "mention" | "thread";
+export type SlackReason = "mention" | "dm";
 
-/** One mention or thread reply the user has not answered yet. */
+/** One mention or DM that needs the user to act. */
 export interface SlackItem {
 	/** `<channel id>:<thread ts>`: one item per thread. */
 	id: string;
@@ -51,6 +52,8 @@ export interface SlackItem {
 	/** The message waiting on the user, one line. */
 	text: string;
 	reason: SlackReason;
+	/** What the user has to do, e.g. "Answer whether the auth fix shipped". */
+	action: string;
 	/** The waiting message's ts. */
 	ts: string;
 	/** The thread's root ts; the message's own when it starts the thread. */
@@ -112,7 +115,8 @@ export const SLACK_INBOX_SCHEMA = {
 					channel: { type: "string" },
 					author: { type: "string" },
 					text: { type: "string" },
-					reason: { type: "string", enum: ["mention", "thread"] },
+					reason: { type: "string", enum: ["mention", "dm"] },
+					action: { type: "string" },
 					ts: { type: "string" },
 					threadTs: { type: "string" },
 					permalink: { type: ["string", "null"] },
@@ -123,6 +127,7 @@ export const SLACK_INBOX_SCHEMA = {
 					"author",
 					"text",
 					"reason",
+					"action",
 					"ts",
 					"threadTs",
 					"permalink",
@@ -138,19 +143,22 @@ export const SLACK_INBOX_SCHEMA = {
 export function slackInboxPrompt(now: number): string {
 	const since = new Date(now - 7 * 24 * 3600_000).toISOString().slice(0, 10);
 	return [
-		"Find the Slack messages still waiting on the user, using only the Slack tools, which read.",
+		"Find the Slack messages that need the user to act, using only the Slack tools, which read.",
 		"",
 		"1. Find the user's own Slack user id (read their profile).",
-		`2. Mentions: search for messages that mention the user (<@USER_ID>) since ${since}.`,
-		`3. Threads: search for thread replies the user wrote since ${since}; read each such thread and keep it when someone else replied after the user's last reply.`,
-		"4. Drop anything the user has already answered: a reply from the user later in the same thread, or a reaction from the user on the message. Drop messages the user wrote, bots, and channel joins.",
+		`2. Mentions: search for messages that mention the user by name (<@USER_ID>) since ${since}. @here, @channel and group mentions do not count.`,
+		`3. DMs: search for direct messages and group DMs sent to the user since ${since}.`,
+		"4. Drop anything the user has already answered: a reply from the user later in the thread or DM, or a reaction from the user on the message. Drop messages the user wrote, bots and integrations, and channel joins.",
+		"5. Read the thread or DM around each one that is left, and keep it only when the user has to do something: answer a question put to them, decide, review or approve, unblock someone, or do a task asked of them.",
+		"   Drop FYI and announcements, thanks and acknowledgements, small talk, questions someone else already answered, requests the author resolved or withdrew, and anything aimed at someone else. When unsure, drop it.",
 		"",
-		`Return at most ${SLACK_LIMIT} items, newest first, one per thread:`,
-		"- channelId: the channel's id. channel: #name, or the DM's name.",
-		"- author: the display name of who wrote the waiting message.",
+		`Return only those, at most ${SLACK_LIMIT}, one per thread; with more, keep the ${SLACK_LIMIT} most pressing. None is a fine answer.`,
+		"- channelId: the channel's id. channel: #name, or for a DM the other person's name.",
+		"- author: the display name of who wrote the message.",
 		"- text: that message, in one line, user ids replaced by names.",
-		"- reason: mention when it mentions the user, otherwise thread.",
-		"- ts: the waiting message's ts. threadTs: its thread's root ts (the message's own ts if it is not in a thread).",
+		"- reason: dm for a direct or group message, otherwise mention.",
+		`- action: what the user has to do, starting with a verb, under ${ACTION_MAX} characters, e.g. Answer whether the auth fix shipped, Review Ana's migration PR.`,
+		"- ts: the message's ts. threadTs: its thread's root ts (the message's own ts if it is not in a thread).",
 		"- permalink: the message's link, or null.",
 		"",
 		"access: no_access when the Slack tools are missing or fail with an authentication error, with the error in problem; otherwise ok and problem null.",
@@ -169,8 +177,9 @@ function line(text: string, max: number): string {
 }
 
 /**
- * The inbox worker's answer: items, newest first, one per thread, or why
- * Slack could not be read. Null when the answer is unusable.
+ * The inbox worker's answer: mentions and DMs that need an action, newest
+ * first, one per thread, or why Slack could not be read. Null when the
+ * answer is unusable.
  */
 export function parseSlackInbox(
 	raw: unknown,
@@ -193,7 +202,11 @@ export function parseSlackInbox(
 		const channelId = str("channelId");
 		const ts = str("ts");
 		const text = str("text");
-		if (!channelId || !ts || !text) continue;
+		const action = str("action");
+		// Only mentions and DMs, and only with something for the user to do.
+		const reason = entry.reason;
+		if (reason !== "mention" && reason !== "dm") continue;
+		if (!channelId || !ts || !text || !action) continue;
 		const threadTs = str("threadTs") || ts;
 		const item: SlackItem = {
 			id: `${channelId}:${threadTs}`,
@@ -201,7 +214,8 @@ export function parseSlackInbox(
 			channel: str("channel") || channelId,
 			author: str("author") || "someone",
 			text: line(text, TEXT_MAX),
-			reason: entry.reason === "mention" ? "mention" : "thread",
+			reason,
+			action: line(action, ACTION_MAX),
 			ts,
 			threadTs,
 			permalink: str("permalink") || null,
@@ -285,6 +299,7 @@ export function slackSuggestionPrompt(
 		"",
 		`Channel: ${item.channel} (id ${item.channelId}), thread ts ${item.threadTs}`,
 		`${item.author} wrote: ${item.text}`,
+		`What they need from the user: ${item.action}`,
 		"",
 		"First read the thread with the Slack tools for context. You can also search Slack. You cannot write to Slack.",
 		"",

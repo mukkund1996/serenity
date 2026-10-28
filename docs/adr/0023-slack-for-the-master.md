@@ -1,6 +1,6 @@
 # 0023 · Slack for the master: what waits on you, read through Slack's MCP server
 
-**Status:** Accepted · 2026-10-27
+**Status:** Accepted · 2026-10-27 · Amended by [0031](0031-slack-joins-needs-you.md): only mentions and DMs that need an action, at most three, shown in NEEDS YOU
 
 ## Context
 A lot of what waits on the user is not in a session: a teammate asks in a Slack thread whether a fix shipped, or mentions them about a PR. The answer usually sits on the map already: in a session's summary, its PR, its branch. ADR 0011 left Slack for v2.

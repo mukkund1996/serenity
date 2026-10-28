@@ -32,8 +32,6 @@ import {
 /** Agents shown per bubble before the rest fold into `+N more`. */
 export const MAP_ROWS = 5;
 const MASTER_H = 8;
-/** The Slack box under the master: frame, channel line, two lines of text, the suggestion. */
-const SLACK_H = 6;
 const GAP = 4;
 const MAX_BUBBLE_W = 34;
 
@@ -46,14 +44,25 @@ export type MasterItem =
 			suggestion: string | null;
 			/** Reply being typed to it, or null. */
 			replyText: string | null;
+	  }
+	| {
+			/** A Slack mention or DM that needs the user (ADR 0031). */
+			kind: "slack";
+			item: SlackItem;
+			suggestion: SlackSuggestion | null;
+			/** The suggestion's text being edited (e), or null. */
+			replyText: string | null;
+			now: number;
 	  };
 
 export interface MapMaster {
 	focused: boolean;
 	thinking: boolean;
 	error: string | null;
-	/** NEEDS YOU items plus permission requests. */
+	/** NEEDS YOU items, Slack's among them, plus permission requests. */
 	needCount: number;
+	/** Why Slack could not be read, or null. */
+	slackError?: string | null;
 	calmTopics: number;
 	/** No sessions at all yet: the first-run hint. */
 	empty: boolean;
@@ -62,22 +71,6 @@ export interface MapMaster {
 	/** Text being typed to the master, or null when its input is closed. */
 	inputText: string | null;
 	lastMessage: MasterMessage | null;
-}
-
-/** The SLACK section, drawn as its own box under the master (ADR 0023). */
-export interface MapSlack {
-	/** The item shown; null when there is none and `error` says why. */
-	item: SlackItem | null;
-	index: number;
-	count: number;
-	error: string | null;
-	/** The master's suggestion for the item (ADR 0024). */
-	suggestion: SlackSuggestion | null;
-	/** Its text being edited (e), or null. */
-	replyText: string | null;
-	/** Selected on the focused master: `[` `]` cycle, Enter opens. */
-	selected: boolean;
-	now: number;
 }
 
 export interface MapInput {
@@ -92,7 +85,6 @@ export interface MapInput {
 	/** Text being typed to the focused agent, or null when not replying. */
 	replyText: string | null;
 	master: MapMaster;
-	slack?: MapSlack | null;
 }
 
 export interface MapLayout {
@@ -242,9 +234,6 @@ export function drawMap(input: MapInput): MapLayout {
 	links.draw(canvas);
 	for (const draw of drawBubbles) draw();
 	drawMaster(canvas, mx, my, mw, input.master);
-	const sy = my + MASTER_H + 1;
-	if (input.slack && sy + SLACK_H <= height)
-		drawSlack(canvas, mx, sy, mw, input.slack);
 	return {
 		canvas,
 		rows,
@@ -354,80 +343,6 @@ function drawRow(
 		canvas.text(col, y, flag, { ...base, fg: waiting ? "black" : "white" });
 }
 
-function drawSlack(
-	canvas: Canvas,
-	x: number,
-	y: number,
-	w: number,
-	s: MapSlack,
-): void {
-	canvas.frame(
-		x,
-		y,
-		w,
-		SLACK_H,
-		s.selected ? "heavy" : "rounded",
-		s.selected ? { fg: "whiteBright", bold: true } : DIM,
-	);
-	const title = s.count > 1 ? ` slack ${s.index + 1}/${s.count} ` : " slack ";
-	canvas.text(x + 2, y, title, { fg: "white", bold: true });
-	if (s.selected && s.count > 1) canvas.text(x + w - 7, y, " [ ] ", DIM);
-	const ix = x + 2;
-	const iw = w - 4;
-	if (!s.item) {
-		canvas.text(ix, y + 1, truncate(s.error ?? "", iw), { fg: "yellow" });
-		return;
-	}
-	if (s.selected)
-		canvas.text(x + 1, y + 1, "▸", { fg: "whiteBright", bold: true });
-	const when = age(s.item.at, s.now);
-	const col = canvas.text(
-		ix,
-		y + 1,
-		truncate(s.item.channel, iw - when.length - 1),
-		{ fg: s.selected ? "whiteBright" : "white", bold: s.selected },
-	);
-	canvas.text(
-		col,
-		y + 1,
-		truncate(` · ${s.item.author}`, ix + iw - when.length - 1 - col),
-		DIM,
-	);
-	canvas.text(ix + iw - when.length, y + 1, when, DIM);
-	wrap(s.item.text, iw, 2).forEach((line, i) => {
-		canvas.text(ix, y + 2 + i, line, { fg: "white" });
-	});
-	const row = y + 4;
-	if (s.replyText !== null) {
-		canvas.fill(ix, row, iw, 1, { bg: "black" });
-		const chars = [...`› ${s.replyText}█`];
-		canvas.text(
-			ix,
-			row,
-			chars.length > iw
-				? `…${chars.slice(-(iw - 1)).join("")}`
-				: chars.join(""),
-			{ fg: "whiteBright", bg: "black" },
-		);
-	} else if (s.suggestion) {
-		const pending = s.suggestion.status === "pending";
-		const chips = pending ? " y e n" : "";
-		const c = canvas.text(ix, row, "◆ ", { fg: "magenta" });
-		canvas.text(
-			c,
-			row,
-			truncate(
-				s.suggestion.status === "sending"
-					? "Sending to Slack…"
-					: s.suggestion.label,
-				iw - 2 - chips.length,
-			),
-			pending ? {} : DIM,
-		);
-		if (chips) canvas.text(ix + iw - chips.length, row, chips, DIM);
-	}
-}
-
 function drawMaster(
 	canvas: Canvas,
 	x: number,
@@ -462,6 +377,8 @@ function drawMaster(
 		if (m.calmTopics > 0 && [...calm].length <= ix + iw - col)
 			canvas.text(col, y + 1, calm, DIM);
 	}
+	if (m.slackError)
+		canvas.text(ix, y + 2, truncate(m.slackError, iw), { fg: "yellow" });
 
 	const body = y + 3;
 	const cursor = (row: number) =>
@@ -512,6 +429,58 @@ function drawMaster(
 			const c = canvas.text(ix + 2, body + 2, "◆ ", { fg: "magenta" });
 			canvas.text(c, body + 2, truncate(suggestion, iw - 4 - chips.length));
 			canvas.text(ix + iw - chips.length, body + 2, chips, DIM);
+		}
+	} else if (m.item?.kind === "slack") {
+		const { item, suggestion, replyText, now } = m.item;
+		cursor(body);
+		const when = age(item.at, now);
+		let col = canvas.text(ix, body, "@ ", { fg: "yellow" });
+		col = canvas.text(
+			col,
+			body,
+			truncate(item.author, ix + iw - col - when.length - 1),
+			{ fg: "whiteBright", bold: true },
+		);
+		canvas.text(
+			col,
+			body,
+			truncate(
+				item.reason === "dm" ? " · dm" : ` in ${item.channel}`,
+				ix + iw - col - when.length - 1,
+			),
+			DIM,
+		);
+		canvas.text(ix + iw - when.length, body, when, DIM);
+		canvas.text(ix + 2, body + 1, truncate(item.action, iw - 2), {
+			fg: "white",
+		});
+		if (replyText !== null) {
+			canvas.fill(ix + 2, body + 2, iw - 2, 1, { bg: "black" });
+			const chars = [...`› ${replyText}█`];
+			canvas.text(
+				ix + 2,
+				body + 2,
+				chars.length > iw - 2
+					? `…${chars.slice(-(iw - 3)).join("")}`
+					: chars.join(""),
+				{ fg: "whiteBright", bg: "black" },
+			);
+		} else if (suggestion) {
+			const pending = suggestion.status === "pending";
+			const chips = pending ? " y e n" : "";
+			const c = canvas.text(ix + 2, body + 2, "◆ ", { fg: "magenta" });
+			canvas.text(
+				c,
+				body + 2,
+				truncate(
+					suggestion.status === "sending"
+						? "Sending to Slack…"
+						: suggestion.label,
+					iw - 4 - chips.length,
+				),
+				pending ? {} : DIM,
+			);
+			if (chips) canvas.text(ix + iw - chips.length, body + 2, chips, DIM);
 		}
 	} else if (m.lastMessage) {
 		const you = m.lastMessage.from === "you";

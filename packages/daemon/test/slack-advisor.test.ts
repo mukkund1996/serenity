@@ -32,6 +32,7 @@ const item: SlackItem = {
 	author: "Ana",
 	text: "did the token fix ship?",
 	reason: "mention",
+	action: "Check the deploy",
 	ts: "100.0",
 	threadTs: "100.0",
 	permalink: null,

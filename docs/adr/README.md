@@ -28,7 +28,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0020](0020-usage-bar.md) | Usage bar in the header: session and weekly plan limits from the status line, average wait on you | Accepted |
 | [0021](0021-z-into-session-counts-in-header.md) | `Z` on a card attaches; session counts in the header, no SESSIONS section; roomier topics zoom | Accepted |
 | [0022](0022-pinned-sessions.md) | `p` pins a session for reuse: a `pinned` topic, never done or cleaned up, resumed on attach | Accepted |
-| [0023](0023-slack-for-the-master.md) | Slack for the master: threads and mentions waiting on you, per repo, read through Slack's MCP server; `[` `]` cycle them | Accepted |
+| [0023](0023-slack-for-the-master.md) | Slack for the master: threads and mentions waiting on you, per repo, read through Slack's MCP server; `[` `]` cycle them | Amended by 0031 |
 | [0024](0024-slack-reply-suggestions.md) | Slack suggestions: a reply from sessions, PRs and reviews, or ask a session first; `y` posts it in the thread | Accepted |
 | [0025](0025-install-script-and-homebrew.md) | Installer and Homebrew formula install tmux, git, gh and Claude Code too; release-please and the release workflow | Accepted |
 | [0026](0026-arrows-between-nodes-enter-into-ctrl-m-master.md) | Arrow keys between nodes, Enter into a node and `w` `s` inside it, Esc out; `Ctrl+m` focuses the master from every view | Accepted |
@@ -36,6 +36,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0028](0028-enter-attaches-enter-into-master-only.md) | Enter attaches a card and `i` messages it; only the master is gone into; WASD back beside the arrows; dim card frames; Slack keeps its place; MY PRS off | Accepted |
 | [0029](0029-website-on-github-pages.md) | The website: static page on GitHub Pages at getserenity.dev, release version filled in at deploy | Accepted |
 | [0030](0030-master-skill-auto-mode-confirmed-slack.md) | The master's skill, auto mode, and Slack messages sent once confirmed in the chat | Accepted |
+| [0031](0031-slack-joins-needs-you.md) | Slack joins NEEDS YOU: only mentions and DMs that need an action, at most three; no SLACK section, `[` `]` back to topics | Accepted |
 
 ## System at a glance
 

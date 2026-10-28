@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { groupTopics, type Session } from "@serenity/core";
 import { makeSession } from "@serenity/core/testing";
-import {
-	drawMap,
-	type MapMaster,
-	type MapSlack,
-	visibleRows,
-} from "../src/map";
+import { drawMap, type MapMaster, visibleRows } from "../src/map";
 import { moveFocus } from "../src/topics";
 
 const sessions = [
@@ -51,7 +46,6 @@ function draw(
 		list?: Session[];
 		master?: Partial<MapMaster>;
 		focusSuggestion?: string;
-		slack?: MapSlack | null;
 	} = {},
 ) {
 	return drawMap({
@@ -62,7 +56,6 @@ function draw(
 		focusSuggestion: opts.focusSuggestion ?? null,
 		replyText: null,
 		master: { ...master, ...opts.master },
-		slack: opts.slack ?? null,
 	});
 }
 
@@ -203,72 +196,83 @@ test("visibleRows keeps the first five and swaps in the focused one", () => {
 	expect(focused.hidden).toBe(2);
 });
 
-test("Slack sits in its own box under the master", () => {
-	const slack: MapSlack = {
-		item: {
-			id: "C1:1",
-			channelId: "C1",
-			channel: "#eng",
-			author: "Ana",
-			text: "is the migration done?",
-			reason: "mention",
-			ts: "1",
-			threadTs: "1",
-			permalink: null,
-			at: 1,
-		},
-		index: 1,
-		count: 3,
-		error: null,
+test("a selected Slack item shows in the master box, like any NEEDS YOU item", () => {
+	const item = {
+		id: "C1:1",
+		channelId: "C1",
+		channel: "#eng",
+		author: "Ana",
+		text: "is the migration done?",
+		reason: "mention" as const,
+		action: "Answer whether the migration is done",
+		ts: "1",
+		threadTs: "1",
+		permalink: null,
+		at: 1,
+	};
+	const slack = {
+		kind: "slack" as const,
+		item,
 		suggestion: null,
 		replyText: null,
-		selected: true,
 		now: 3 * 3600_000 + 1,
 	};
-	const { canvas, master: box } = draw({ slack });
-	const text = canvas.toString();
-	expect(text).toContain("slack 2/3");
-	expect(text).toMatch(/▸#eng · Ana +3h/);
-	expect(text).toContain("is the migration done?");
-	expect(text).toContain("[ ]");
-	const lines = text.split("\n");
-	const at = lines.findIndex((l) => l.includes("slack 2/3"));
-	expect(at).toBe(box.y + box.h + 1);
-	// Not drawn when the screen has no room under the master.
-	expect(draw({ slack, height: 16 }).canvas.toString()).not.toContain("slack");
-	// Without an item, the box says why.
-	const login = draw({
-		slack: { ...slack, item: null, count: 0, error: "Slack needs a login" },
-	});
-	expect(login.canvas.toString()).toContain("Slack needs a login");
-	// The master's suggestion sits on the box's last line, with its keys.
+	const text = draw({
+		master: { focused: true, needCount: 3, item: slack },
+	}).canvas.toString();
+	expect(text).toContain("3 things need you");
+	expect(text).toMatch(/▸@ Ana in #eng +3h/);
+	expect(text).toContain("Answer whether the migration is done");
+	// No Slack box of its own any more.
+	expect(text).not.toContain(" slack ");
+	const dm = draw({
+		master: {
+			focused: true,
+			item: { ...slack, item: { ...item, reason: "dm" } },
+		},
+	}).canvas.toString();
+	expect(dm).toMatch(/▸@ Ana · dm +3h/);
+	// The master's suggestion sits under it, with its keys.
 	const suggested = draw({
-		slack: {
-			...slack,
-			suggestion: {
-				itemId: "C1:1",
-				kind: "reply",
-				label: 'Reply "merged in #42"',
-				text: "merged in #42",
-				sessionId: null,
-				status: "pending",
+		master: {
+			focused: true,
+			item: {
+				...slack,
+				suggestion: {
+					itemId: "C1:1",
+					kind: "reply",
+					label: 'Reply "merged in #42"',
+					text: "merged in #42",
+					sessionId: null,
+					status: "pending",
+				},
 			},
 		},
 	}).canvas.toString();
 	expect(suggested).toMatch(/◆ Reply "merged in #42" +y e n/);
 	const asked = draw({
-		slack: {
-			...slack,
-			suggestion: {
-				itemId: "C1:1",
-				kind: "ask",
-				label: "Asked api-auth; waiting for its answer",
-				text: "did it ship?",
-				sessionId: "s1",
-				status: "asked",
+		master: {
+			focused: true,
+			item: {
+				...slack,
+				suggestion: {
+					itemId: "C1:1",
+					kind: "ask",
+					label: "Asked api-auth; waiting for its answer",
+					text: "did it ship?",
+					sessionId: "s1",
+					status: "asked",
+				},
 			},
 		},
 	}).canvas.toString();
 	expect(asked).toContain("◆ Asked api-auth; waiting for its answer");
 	expect(asked).not.toContain("y e n");
+});
+
+test("why Slack cannot be read shows in the master box", () => {
+	const text = draw({
+		master: { slackError: "Slack needs a login: run serenity slack login" },
+	}).canvas.toString();
+	expect(text).toContain("Slack needs a login");
 });
