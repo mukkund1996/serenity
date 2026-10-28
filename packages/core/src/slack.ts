@@ -1,6 +1,7 @@
 import type { MasterMessage, Session } from "./domain";
 import { prLine } from "./master";
 import type { ReviewRequest } from "./pr";
+import { findSessionByName } from "./session-name";
 
 /**
  * Slack for the master (ADR 0023, 0031): the mentions and DMs that still need
@@ -370,7 +371,7 @@ export function parseSlackSuggestion(
 	const label = typeof r.label === "string" ? line(r.label, LABEL_MAX) : "";
 	const text = typeof r.text === "string" ? r.text.trim() : "";
 	if (!label || !text) return null;
-	const session = sessions.find((s) => s.name === r.session) ?? null;
+	const session = findSessionByName(sessions, r.session) ?? null;
 	if (r.kind === "reply")
 		return {
 			itemId: item.id,
