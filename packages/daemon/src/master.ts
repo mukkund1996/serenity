@@ -15,6 +15,7 @@ import {
 	type MasterPermission,
 	type MasterState,
 	type MasterToolResult,
+	mentionsSession,
 	needsSuggestion,
 	normalizeTopic,
 	PINNED,
@@ -558,9 +559,10 @@ export class MasterSupervisor {
 	}
 
 	/**
-	 * The chat's send_reply (ADR 0035): a reply the user asked for in the chat
-	 * is typed into the session at once; any other text waits for `y` in
-	 * NEEDS YOU, as suggest kind reply does.
+	 * The chat's send_reply (ADR 0035): a reply the user asked for in the chat,
+	 * or to a session they @-mentioned in their latest message (ADR 0036), is
+	 * typed into the session at once; any other text waits for `y` in NEEDS
+	 * YOU, as suggest kind reply does.
 	 */
 	private async sendReply(
 		repo: string,
@@ -577,12 +579,19 @@ export class MasterSupervisor {
 			text || null,
 		);
 		if (problem) return { text: problem, isError: true };
+		const conversation = this.host.storage.conversation.listRecent(repo, 2);
+		// An @mention of the session is the user's go-ahead for whatever text the master writes (ADR 0036).
 		if (
-			!confirmedReply(this.host.storage.conversation.listRecent(repo, 2), text)
+			!mentionsSession(
+				conversation,
+				this.host.storage.sessions.listByRepo(repo),
+				session,
+			) &&
+			!confirmedReply(conversation, text)
 		) {
 			this.propose(session, "reply", label, text, "chat");
 			return {
-				text: `The user did not ask for this exact text, so it waits in NEEDS YOU as "${label}" and runs only if they press y. To send it now, show the exact text and ask; once they confirm, call send_reply again with it.`,
+				text: `The user did not ask for this exact text or @mention ${session.name}, so it waits in NEEDS YOU as "${label}" and runs only if they press y. To send it now, show the exact text and ask; once they confirm, call send_reply again with it.`,
 			};
 		}
 		try {

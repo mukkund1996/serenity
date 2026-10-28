@@ -1,6 +1,6 @@
 # 0018 · Map zoom and navigation keys
 
-**Status:** Accepted · 2026-10-26
+**Status:** Accepted · 2026-10-26 · `g` for the master chat replaced by `i` in 0036
 
 ## Context
 Milestone 4 adds the map zoom (handover screen 1) and the keys that move around it: `z` / `Z`, `Esc`, `c`, `/` and `r`. The canvas shows the map with a handful of topics around a centred master. It does not say where bubbles go when there are many, what the master box holds, or what `/` matches.

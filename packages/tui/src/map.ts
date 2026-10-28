@@ -10,6 +10,7 @@ import {
 	truncate,
 	wrap,
 } from "@serenity/core";
+import { inputRows, PROMPT_W } from "./master-input";
 import { age, askLine, glyph, nameColor } from "./theme";
 import {
 	type CardBox,
@@ -70,6 +71,8 @@ export interface MapMaster {
 	inputSelected: boolean;
 	/** Text being typed to the master, or null when its input is closed. */
 	inputText: string | null;
+	/** Session names offered after an `@` in the input, with the selected one. */
+	mentions?: { names: string[]; selected: number } | null;
 	lastMessage: MasterMessage | null;
 }
 
@@ -164,7 +167,15 @@ export function drawMap(input: MapInput): MapLayout {
 	);
 	const left = Math.max(0, Math.floor((width - mw - 2 * (bw + GAP)) / 2));
 	const mx = left + bw + GAP;
-	const my = Math.max(0, Math.floor((height - MASTER_H) / 2));
+	// The input grows the box downward, so its top and the links stay put.
+	const typed = input.master.inputText;
+	const masterH =
+		MASTER_H +
+		(typed === null ? 0 : inputRows(typed, mw - 4 - PROMPT_W).length - 1);
+	const my = Math.max(
+		0,
+		Math.min(Math.floor((height - MASTER_H) / 2), height - masterH),
+	);
 	const linkY = my + Math.floor(MASTER_H / 2);
 	const sides = {
 		left: { x: left, trunk: mx - 2, bubbles: [] as Bubble[], total: 0 },
@@ -233,12 +244,12 @@ export function drawMap(input: MapInput): MapLayout {
 
 	links.draw(canvas);
 	for (const draw of drawBubbles) draw();
-	drawMaster(canvas, mx, my, mw, input.master);
+	drawMaster(canvas, mx, my, mw, masterH, input.master);
 	return {
 		canvas,
 		rows,
 		bubbles,
-		master: { id: "", x: mx, y: my, w: mw, h: MASTER_H },
+		master: { id: "", x: mx, y: my, w: mw, h: masterH },
 	};
 }
 
@@ -348,13 +359,14 @@ function drawMaster(
 	x: number,
 	y: number,
 	w: number,
+	h: number,
 	m: MapMaster,
 ): void {
 	canvas.frame(
 		x,
 		y,
 		w,
-		MASTER_H,
+		h,
 		m.focused ? "heavy" : "rounded",
 		m.focused ? { fg: "whiteBright", bold: true } : { fg: "magenta" },
 	);
@@ -489,30 +501,39 @@ function drawMaster(
 			canvas.text(ix + 4, body + i, line, you ? {} : { fg: "white" });
 		});
 	} else {
-		canvas.text(ix, body, truncate("Press g to ask the master.", iw), DIM);
+		canvas.text(ix, body, truncate("Press i to ask the master.", iw), DIM);
 	}
 
 	const inputRow = y + MASTER_H - 2;
-	if (m.inputSelected) cursor(inputRow);
-	canvas.fill(ix, inputRow, iw, 1, { bg: "black" });
 	const typed = m.inputText;
+	const rows = typed === null ? [] : inputRows(typed, iw - PROMPT_W);
+	const lines = Math.max(1, rows.length);
+	if (m.inputSelected) cursor(inputRow);
+	canvas.fill(ix, inputRow, iw, lines, { bg: "black" });
 	const col = canvas.text(ix, inputRow, "› ", { fg: "magenta", bg: "black" });
 	if (typed === null)
 		canvas.text(col, inputRow, truncate("message master…", iw - 2), {
 			fg: "gray",
 			bg: "black",
 		});
-	else {
-		// Keep the end of a long message in view, like the topics zoom's input.
-		const chars = [...`${typed}█`];
-		const room = iw - 2;
-		canvas.text(
-			col,
-			inputRow,
-			chars.length > room
-				? `…${chars.slice(-(room - 1)).join("")}`
-				: chars.join(""),
-			{ fg: "whiteBright", bg: "black" },
-		);
-	}
+	else
+		rows.forEach((row, i) => {
+			canvas.text(ix + PROMPT_W, inputRow + i, row, {
+				fg: "whiteBright",
+				bg: "black",
+			});
+		});
+
+	// The @ list sits on the rows just above the input, over the panel's body.
+	const names = m.mentions?.names ?? [];
+	names.forEach((name, i) => {
+		const row = inputRow - names.length + i;
+		const on = i === m.mentions?.selected;
+		canvas.fill(ix, row, iw, 1, { bg: "black" });
+		canvas.text(ix, row, truncate(`${on ? "▸ " : "  "}@${name}`, iw), {
+			fg: on ? "whiteBright" : "white",
+			bold: on,
+			bg: "black",
+		});
+	});
 }

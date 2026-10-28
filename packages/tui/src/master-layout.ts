@@ -27,7 +27,7 @@ export function suggestionLines(label: string, inner: number): string[] {
 /** Width of the "you" / "◆" column before a conversation message. */
 export const SPEAKER_W = 6;
 export const CONVERSATION_EMPTY =
-	"Press g to ask the master about your sessions.";
+	"Press i to ask the master about your sessions.";
 
 export interface MasterPlanInput {
 	/** Rows the panel may take, frame included. */
@@ -43,6 +43,8 @@ export interface MasterPlanInput {
 	/** Why Slack could not be read: one row under the status line. */
 	slackError: boolean;
 	reviews: ReviewRequest[];
+	/** Rows the input takes beyond its one: its extra lines and the @ list over it. */
+	inputExtra?: number;
 }
 
 export interface MasterPlan {
@@ -61,7 +63,7 @@ export function planMaster(input: MasterPlanInput): MasterPlan {
 	const hidden = input.needs.length - shown.length;
 
 	// Frame, then the input's blank line and its own frame.
-	let fixed = 2 + 4 + (input.slackError ? 1 : 0);
+	let fixed = 2 + 4 + (input.inputExtra ?? 0) + (input.slackError ? 1 : 0);
 	if (input.empty) fixed += 3;
 	else
 		fixed +=

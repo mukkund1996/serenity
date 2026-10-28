@@ -153,7 +153,7 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 	[
 		"ON A NODE",
 		[
-			["Enter i", "attach · quick message"],
+			["Enter i", "attach · message · chat"],
 			["Enter Esc", "into the master, act on ▸ · leave"],
 			["o f p", "open PR · watch · pin"],
 			["r K x", "rename · kill agent · clean up"],
@@ -163,7 +163,7 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 		"MAP",
 		[
 			["[ ] Ctrl+m", "topic · master"],
-			["N I g", "new session · import · chat"],
+			["N I", "new session · import"],
 			["Tab Esc H", "next need · zoom out · archived"],
 			["y e n x", "approve · edit · decline · dismiss"],
 		],

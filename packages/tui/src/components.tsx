@@ -14,6 +14,7 @@ import type {
 import { prLine } from "@serenity/core";
 import { Box, Text } from "ink";
 import { type ReactNode, useEffect, useState } from "react";
+import { inputRows, PROMPT_W } from "./master-input";
 import {
 	CONVERSATION_EMPTY,
 	clipLines,
@@ -186,28 +187,56 @@ function Spinner() {
 	return <Text color="magenta">{SPINNER[frame]}</Text>;
 }
 
-/** The master's input row; `text` is null until `g` (or Enter on it) opens it. */
+/**
+ * The master's input: it grows to four lines. `text` is null until `i` (or
+ * Enter on it) opens it. `mentions` is the @ list over it; `width` is the
+ * panel's text width.
+ */
 function MasterInput({
 	text,
 	selected = false,
+	mentions = null,
+	width = 0,
 }: {
 	text: string | null;
 	selected?: boolean;
+	mentions?: { names: string[]; selected: number } | null;
+	width?: number;
 }) {
+	// Frame (2) and the prompt's "› " leave the rest of the row for text.
+	const rows = text === null ? [] : inputRows(text, width - 2 - PROMPT_W);
 	return (
-		<Box
-			borderStyle={selected ? "bold" : "single"}
-			borderColor={text === null && !selected ? "gray" : "whiteBright"}
-			marginTop={1}
-		>
-			<Text wrap="truncate-start">
-				<Text color="magenta">› </Text>
+		<Box flexDirection="column" marginTop={1}>
+			{mentions?.names.map((name, i) => (
+				<Text
+					key={name}
+					wrap="truncate"
+					color={i === mentions.selected ? "whiteBright" : "white"}
+					bold={i === mentions.selected}
+				>
+					{i === mentions.selected ? "▸ " : "  "}@{name}
+				</Text>
+			))}
+			<Box
+				flexDirection="column"
+				borderStyle={selected ? "bold" : "single"}
+				borderColor={text === null && !selected ? "gray" : "whiteBright"}
+			>
 				{text === null ? (
-					<Text color="gray">message master…</Text>
+					<Text wrap="truncate-start">
+						<Text color="magenta">› </Text>
+						<Text color="gray">message master…</Text>
+					</Text>
 				) : (
-					<Text color="whiteBright">{text}█</Text>
+					rows.map((row, i) => (
+						// biome-ignore lint/suspicious/noArrayIndexKey: rows have no identity; they are redrawn as a whole
+						<Text key={i} wrap="truncate-end" color="whiteBright">
+							<Text color="magenta">{i === 0 ? "› " : "  "}</Text>
+							{row}
+						</Text>
+					))
 				)}
-			</Text>
+			</Box>
 		</Box>
 	);
 }
@@ -598,6 +627,7 @@ export function MasterPanel({
 	focused,
 	selected,
 	inputText,
+	mentions,
 	replyText,
 }: {
 	width: number;
@@ -613,6 +643,7 @@ export function MasterPanel({
 	focused: boolean;
 	selected: string | null;
 	inputText: string | null;
+	mentions: { names: string[]; selected: number } | null;
 	replyText: string | null;
 }) {
 	const inner = width - 6;
@@ -731,7 +762,12 @@ export function MasterPanel({
 					<Conversation messages={conversation.slice(-2)} />
 				</>
 			)}
-			<MasterInput text={inputText} selected={selected === MASTER_INPUT} />
+			<MasterInput
+				text={inputText}
+				selected={selected === MASTER_INPUT}
+				mentions={mentions}
+				width={inner}
+			/>
 		</TitledBox>
 	);
 }

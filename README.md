@@ -41,7 +41,7 @@ serenity runs on your existing Claude Code login and subscription.
 |---|---|
 | **Mind map of sessions** | Three zoom levels: the **map** (master in the centre, topics around it), **topics** (every session as a card with its summary and PR), and **session** (the real Claude Code pane, untouched). |
 | **Live status** | Sessions report through Claude Code hooks: `◐` waiting, `●` working, `✓` finished. Only waiting sessions ask for attention. |
-| **The master** | Haiku writes one-line summaries and groups sessions into topics, Sonnet suggests replies, approvals and cleanups you accept with `y` / `e` / `n`, and an Opus chat (`g`) can see and steer everything, and start new sessions from a brief. |
+| **The master** | Haiku writes one-line summaries and groups sessions into topics, Sonnet suggests replies, approvals and cleanups you accept with `y` / `e` / `n`, and an Opus chat (`i` on the master) can see and steer everything, start new sessions from a brief, and act on any session you tag with `@name`. |
 | **Pull requests** | Each card shows its PR and checks via `gh`. `o` opens it, ready PRs get a review request from CODEOWNERS, and a merged PR finishes the session. |
 | **Safe cleanup** | Removing a session checks for uncommitted changes, unpushed commits and PR state before it touches a worktree. |
 | **Worktrees** | New sessions get their own git worktree beside the repo, or reuse an existing branch. |
@@ -122,14 +122,14 @@ serenity is keyboard-only. The footer shows the moves; `?` opens the full list.
 |-----|--------|
 | `←` `↑` `↓` `→` / `WASD` | Move between nodes |
 | `Enter` | Attach to a session, or go into the master |
-| `i` | Send the focused session a quick message |
+| `i` | Send the focused session a quick message; on the master, open its chat input (`@` tags a session, `Esc` closes it) |
 | `Ctrl+g` | Back to the map from inside a session |
 | `z` / `Z` / `Esc` | Zoom out to the map / zoom in / one level up |
 | `Ctrl+m` | Focus the master from anywhere (Enter in Apple Terminal) |
 | `Tab` | Jump to the next session that needs you |
 | `y` `e` `n` | Approve, edit or decline the master's suggestion |
 | `[` `]` | Previous / next topic |
-| `N` `I` `g` | New session · import from tmux · chat with the master |
+| `N` `I` | New session · import from tmux |
 | `o` `f` `p` | Open the PR · watch · pin |
 | `r` `K` `x` | Rename · kill the agent · clean up; on a Slack item, `x` dismisses it |
 | `/` `c` `H` | Search sessions · centre on the master · archived sessions |

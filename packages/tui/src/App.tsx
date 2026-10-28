@@ -2,9 +2,13 @@ import { basename } from "node:path";
 import {
 	type CleanupPlan,
 	type CreateSessionParams,
+	completeMention,
 	groupTopics,
 	type ImportCandidate,
 	type MasterState,
+	MENTION_LIST_MAX,
+	matchMentions,
+	mentionDraft,
 	needsYou,
 	type Session,
 	type Suggestion,
@@ -41,6 +45,7 @@ import {
 	SLACK_NEED,
 } from "./components";
 import { drawMap, type MasterItem, rowElements } from "./map";
+import { inputRows, listWindow, PROMPT_W, stepSelection } from "./master-input";
 import { needLines, planMaster, suggestionLines } from "./master-layout";
 import { openUrl } from "./open-url";
 import {
@@ -164,6 +169,10 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const [masterText, setMasterText, masterRef] = useLiveState<string | null>(
 		null,
 	);
+	/** The selected row of the @ list over the master input. */
+	const [mentionAt, setMentionAt, mentionRef] = useLiveState(0);
+	/** The input text whose @ list Esc closed; the list returns once the text changes. */
+	const [, setMentionOff, mentionOffRef] = useLiveState<string | null>(null);
 	const [sentReplies, setSentReplies] = useState<string[]>([]);
 	const [overlay, setOverlay] = useState<Overlay>(null);
 	const [zoom, setZoom] = useState<Zoom>("topics");
@@ -204,6 +213,20 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const bodyHeight = rows - 2;
 	const masterWidth = Math.max(38, Math.min(72, columns - 50));
 	const masterInner = masterWidth - 6;
+	/** Names the @ list offers for the master input's text; none once Esc closed it. */
+	const mentionOptions = (text: string | null): string[] => {
+		if (text === null || text === mentionOffRef.current) return [];
+		const draft = mentionDraft(text);
+		return draft ? matchMentions(sessions, draft.query) : [];
+	};
+	const mentionNames = mentionOptions(masterText);
+	const mentionList = mentionNames.length
+		? listWindow(
+				mentionNames,
+				Math.min(mentionAt, mentionNames.length - 1),
+				MENTION_LIST_MAX,
+			)
+		: null;
 
 	const github = state?.github ?? { user: null, reviewRequests: [] };
 	const slack = state?.slack ?? null;
@@ -243,6 +266,11 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		conversation: state?.conversation ?? [],
 		slackError: !!slack?.error,
 		reviews: github.reviewRequests,
+		inputExtra:
+			(masterText === null
+				? 0
+				: inputRows(masterText, masterInner - 2 - PROMPT_W).length - 1) +
+			(mentionList?.names.length ?? 0),
 	});
 	/** The URL of a row selected in the master: the Slack item or a review request. */
 	const linkOf = (id: string | null): string | null => {
@@ -356,6 +384,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					item: masterItem,
 					inputSelected: onMaster && selected === MASTER_INPUT,
 					inputText: masterText,
+					mentions: mentionList,
 					lastMessage: conversation[conversation.length - 1] ?? null,
 				},
 			});
@@ -703,16 +732,40 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 			const toMaster = masterRef.current;
 			if (toMaster !== null) {
+				// Sending keeps the input open, cleared, for the next message.
 				const send = (text: string) => {
-					setMasterText(null);
+					setMasterText("");
+					setMentionAt(0);
+					setMentionOff(null);
 					if (text.trim()) call("master.message", { repo, text }).catch(fail);
 				};
-				if (key.escape) return setMasterText(null);
+				const options = mentionOptions(toMaster);
+				// Esc closes the @ list first; with no list it closes the input.
+				if (key.escape) {
+					if (options.length) return setMentionOff(toMaster);
+					setMentionOff(null);
+					return setMasterText(null);
+				}
+				if (options.length) {
+					const at = Math.min(mentionRef.current, options.length - 1);
+					if (key.upArrow || key.downArrow)
+						return setMentionAt(
+							stepSelection(at, options.length, key.upArrow ? -1 : 1),
+						);
+					// Tab, and Enter while the list is open, complete the name.
+					if (key.tab || key.return) {
+						setMasterText(completeMention(toMaster, options[at] as string));
+						setMentionAt(0);
+						return;
+					}
+				}
+				if (key.tab) return;
 				if (key.return) return send(toMaster);
 				const edit = editText(toMaster, input, key);
 				if (!edit) return;
 				if (edit.submit) return send(edit.value);
 				setMasterText(edit.value);
+				setMentionAt(0);
 				return;
 			}
 
@@ -839,8 +892,13 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					return focusNode(MASTER);
 				case "/":
 					return setSearch({ query: "", from: { node, element } });
-				case "g":
-					return setMasterText("");
+				case "i":
+					// On the master i opens its input, unless a session in NEEDS YOU is selected: then it replies to that one.
+					if (onMaster && !focused) {
+						setMentionOff(null);
+						return setMasterText("");
+					}
+					break;
 				case "N":
 					return setOverlay({ kind: "new" });
 				case "H":
@@ -1041,6 +1099,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							focused={onMaster}
 							selected={onMaster ? selected : null}
 							inputText={masterText}
+							mentions={mentionList}
 							replyText={onMaster ? replyText : null}
 						/>
 					</Box>

@@ -149,6 +149,37 @@ describe("drawMap", () => {
 		expect(text).toContain("› hello█");
 	});
 
+	test("a long message grows the master's input to four lines, then keeps its end", () => {
+		const base = draw({ master: { inputText: "hi" } });
+		const words = "word ".repeat(40).trim();
+		const long = draw({ master: { inputText: words } });
+		expect(long.master.h).toBe(base.master.h + 3);
+		expect(long.master.y).toBe(base.master.y);
+		const lines = long.canvas
+			.toString()
+			.split("\n")
+			.filter((l) => l.includes("word"));
+		expect(lines).toHaveLength(4);
+		expect(lines.join("")).toContain("…");
+		expect(lines.at(-1)).toContain("█");
+		expect(long.canvas.toString().match(/┏|╭/g)?.length).toBeGreaterThan(0);
+	});
+
+	test("an @ list shows over the input, the selected name marked", () => {
+		const { canvas, master: box } = draw({
+			master: {
+				focused: true,
+				inputText: "ask @a",
+				mentions: { names: ["api-auth", "sync-worker"], selected: 1 },
+			},
+		});
+		const lines = canvas.toString().split("\n");
+		const at = lines.findIndex((l) => l.includes("› ask @a█"));
+		expect(lines[at - 2]).toContain("  @api-auth");
+		expect(lines[at - 1]).toContain("▸ @sync-worker");
+		expect(box.h).toBe(8);
+	});
+
 	test("first run shows how to start", () => {
 		const { canvas } = draw({
 			list: [],
