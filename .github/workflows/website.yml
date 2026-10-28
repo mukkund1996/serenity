@@ -1,0 +1,62 @@
+name: website
+
+# Deploys website/ to GitHub Pages (getserenity.dev) with the latest release's
+# tag written into the page (ADR 0029). release-please creates releases with
+# GITHUB_TOKEN, which does not fire `release` events, so the deploy also runs
+# whenever the release workflow finishes.
+
+on:
+  push:
+    branches: [main]
+    paths: [website/**, .github/workflows/website.yml]
+  release:
+    types: [published]
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Write the latest release into the page
+        run: |
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null || true)
+          if [ -z "$tag" ]; then
+            tag="v$(jq -r '.["."]' .release-please-manifest.json)"
+            echo "no published release found, using the manifest: $tag"
+          fi
+          echo "version: $tag"
+          mkdir _site
+          cp -R website/. _site/
+          sed -i "s/__SERENITY_VERSION__/$tag/g" _site/index.html
+          if grep -q __SERENITY_VERSION__ _site/index.html; then echo "version placeholder left in the page"; exit 1; fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
