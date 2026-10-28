@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>serenity — one calm map for your Claude Code sessions</title>
+<meta name="description" content="serenity turns every Claude Code session into a node on one calm mind map. Working agents stay quiet, waiting agents call you, and the master keeps the overview.">
+<meta name="theme-color" content="#0d0f12">
+<link rel="canonical" href="https://getserenity.dev/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://getserenity.dev/">
+<meta property="og:title" content="serenity — one calm map for your Claude Code sessions">
+<meta property="og:description" content="Every Claude Code session is a node in the mind map. Working agents stay quiet. Waiting agents call you.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Noto+Sans+Symbols+2&amp;display=swap">
+<style>
+body{margin:0;background:#0d0f12}
+a{color:#d0d4da;text-decoration:none}
+a:hover{color:#ffffff}
+.srn-copy{color:#858c97}
+.srn-copy:hover,.srn-copy:focus-visible{color:#e8eaee;background:#161a1f}
+.srn-copy .srn-idle{display:contents}
+.srn-copy .srn-done{display:none}
+.srn-copy.is-copied .srn-idle{display:none}
+.srn-copy.is-copied .srn-done{display:contents}
+.srn-cur{animation:srn-blink 1.05s steps(1) infinite}
+.srn-pulse{animation:srn-pulse 1.8s ease-in-out infinite}
+.srn-busy{animation:srn-pulse 0.9s ease-in-out infinite}
+@keyframes srn-blink{50%{opacity:0}}
+@keyframes srn-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion: reduce){.srn-cur,.srn-pulse,.srn-busy{animation:none}}
+/* phones: drop the Install nav link so logo, GitHub and the version pill fit on one line */
+@media (max-width: 639px){.srn-wide{display:none}}
+</style>
+</head>
+<body>
+<div id="top" style="background: #0d0f12; color: #d0d4da; font-family: 'Inter', system-ui, -apple-system, sans-serif; font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased">
+
+<!-- ============ SCROLL STORY ============ -->
+<div id="srn-track" style="position: relative; height: 7500px">
+<div id="srn-stage" style="position: sticky; top: 0; height: min(100vh, 1080px); overflow: hidden">
+<!-- soft sage glow: rises from the bottom as you scroll, then settles behind serenity at centre stage -->
+<div aria-hidden="true" style="position: absolute; pointer-events: none; border-radius: 50%; background: radial-gradient(closest-side, rgba(127,199,127,.38), rgba(127,199,127,.14) 55%, rgba(127,199,127,0) 100%)" data-st="position: absolute; pointer-events: none; border-radius: 50%; background: radial-gradient(closest-side, rgba(127,199,127,.38), rgba(127,199,127,.14) 55%, rgba(127,199,127,0) 100%); {{glow}}"></div>
+
+<!-- top bar -->
+<div style="position: absolute; top: 0; left: 0; right: 0; height: 64px; z-index: 20; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; box-sizing: border-box; max-width: 1280px; margin: 0 auto">
+<a href="#top" style="display: flex; align-items: center; gap: 10px; height: 24px; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 15px; font-weight: 500; line-height: 1; color: #e8eaee"><span style="display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; font-size: 17px; line-height: 1; color: #7fc77f; font-family: 'JetBrains Mono', 'Noto Sans Symbols 2', 'Apple Symbols', sans-serif" aria-hidden="true">◈</span><span style="display: inline-flex; align-items: center; height: 18px; line-height: 1">serenity</span></a>
+<nav style="display: flex; align-items: center; font-size: 14px" data-st="display: flex; align-items: center; gap: {{navGap}}; font-size: 14px">
+<a href="#install" style="color: #d0d4da" class="srn-wide">Install</a>
+<a href="https://github.com/mukkund1996/serenity" style="color: #d0d4da">GitHub</a>
+<span title="serenity is in beta" style="display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border: 1px solid #3a3f47; border-radius: 999px; font: 500 11px/1 'JetBrains Mono', Menlo, monospace; letter-spacing: .04em; color: #858c97; white-space: nowrap"><span style="color: #7fc77f; letter-spacing: .1em">BETA</span>__SERENITY_VERSION__</span>
+</nav>
+</div>
+
+<!-- the scene: 1280×800 design space, scaled to fit -->
+<div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 1280px; height: 800px; transform-origin: 0 0; pointer-events: none; user-select: none" data-st="position: absolute; left: 0; top: 0; width: 1280px; height: 800px; transform-origin: 0 0; pointer-events: none; user-select: none; {{scene}}">
+
+<!-- serenity TUI window (the calm destination) -->
+<div style="position: absolute; left: 0; top: 0; width: 1080px; height: 640px; z-index: 0; transform-origin: 0 0" data-st="position: absolute; left: 0; top: 0; width: 1080px; height: 640px; z-index: 0; transform-origin: 0 0; {{tui}}">
+<div style="position: relative; width: 100%; height: 100%; border-radius: 10px; overflow: hidden; background: #0d0f12; box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 30px 80px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.08); display: flex; flex-direction: column; font-family: 'JetBrains Mono', Menlo, monospace">
+<div style="height: 28px; flex: none; position: relative; display: flex; align-items: center; background: #232326; border-bottom: 1px solid #000">
+<div style="display: flex; gap: 8px; padding-left: 12px"><span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840"></span></div>
+<div style="position: absolute; left: 0; right: 0; text-align: center; font: 500 12px/28px -apple-system, 'Inter', system-ui, sans-serif; color: #a1a1a6">serenity — 200×50</div>
+</div>
+<div style="height: 26px; flex: none; position: relative; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; background: #161a1f; font-size: 12px">
+<span><span style="color: #7fc77f; font-family: 'JetBrains Mono', 'Noto Sans Symbols 2', 'Apple Symbols', sans-serif">◈</span> mindmap  <span style="color: #858c97">serenity</span></span>
+<span style="position: absolute; left: 50%; transform: translateX(-50%); background: #f2c14e; color: #0d0f12; padding: 0 8px; font-weight: 700; line-height: 18px" data-st="position: absolute; left: 50%; transform: translateX(-50%); background: #f2c14e; color: #0d0f12; padding: 0 8px; font-weight: 700; line-height: 18px; {{chip}}">2 need you</span>
+<span style="color: #858c97">zoom: map</span>
+</div>
+<div style="flex: 1"></div>
+<div style="height: 26px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font-size: 11.5px; color: #858c97" data-st="height: 26px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font-size: 11.5px; color: #858c97; {{footer}}">
+<span>←↑↓→ WASD move · Enter open · i message · Ctrl+m master</span>
+<span>? shortcuts</span>
+</div>
+</div>
+<!-- links from the master (serenity's own coordinates) -->
+<div style="position: absolute; left: 330px; top: 309px; width: 30px; height: 2px; background: #8a6fae; transform-origin: 100% 50%" data-st="position: absolute; left: 330px; top: 309px; width: 30px; height: 2px; background: #8a6fae; transform-origin: 100% 50%; {{lnLTrunk}}"></div>
+<div style="position: absolute; left: 329px; top: 194px; width: 2px; height: 232px; background: #8a6fae; transform-origin: 50% 50%" data-st="position: absolute; left: 329px; top: 194px; width: 2px; height: 232px; background: #8a6fae; transform-origin: 50% 50%; {{lnLSpine}}"></div>
+<div style="position: absolute; left: 300px; top: 194px; width: 30px; height: 2px; background: #8a6fae; transform-origin: 100% 50%" data-st="position: absolute; left: 300px; top: 194px; width: 30px; height: 2px; background: #8a6fae; transform-origin: 100% 50%; {{lnLB1}}"></div>
+<div style="position: absolute; left: 300px; top: 424px; width: 30px; height: 2px; background: #8a6fae; transform-origin: 100% 50%" data-st="position: absolute; left: 300px; top: 424px; width: 30px; height: 2px; background: #8a6fae; transform-origin: 100% 50%; {{lnLB2}}"></div>
+<div style="position: absolute; left: 296px; top: 191px; width: 8px; height: 8px; border-radius: 50%; background: #c792ea" data-st="position: absolute; left: 296px; top: 191px; width: 8px; height: 8px; border-radius: 50%; background: #c792ea; {{dotL1}}"></div>
+<div style="position: absolute; left: 296px; top: 421px; width: 8px; height: 8px; border-radius: 50%; background: #c792ea" data-st="position: absolute; left: 296px; top: 421px; width: 8px; height: 8px; border-radius: 50%; background: #c792ea; {{dotL2}}"></div>
+<div style="position: absolute; left: 720px; top: 309px; width: 30px; height: 2px; background: #8a6fae; transform-origin: 0 50%" data-st="position: absolute; left: 720px; top: 309px; width: 30px; height: 2px; background: #8a6fae; transform-origin: 0 50%; {{lnTrunk}}"></div>
+<div style="position: absolute; left: 749px; top: 194px; width: 2px; height: 232px; background: #8a6fae; transform-origin: 50% 50%" data-st="position: absolute; left: 749px; top: 194px; width: 2px; height: 232px; background: #8a6fae; transform-origin: 50% 50%; {{lnSpine}}"></div>
+<div style="position: absolute; left: 750px; top: 194px; width: 30px; height: 2px; background: #8a6fae; transform-origin: 0 50%" data-st="position: absolute; left: 750px; top: 194px; width: 30px; height: 2px; background: #8a6fae; transform-origin: 0 50%; {{lnBranch}}"></div>
+<div style="position: absolute; left: 750px; top: 424px; width: 30px; height: 2px; background: #8a6fae; transform-origin: 0 50%" data-st="position: absolute; left: 750px; top: 424px; width: 30px; height: 2px; background: #8a6fae; transform-origin: 0 50%; {{lnBranch}}"></div>
+<div style="position: absolute; left: 776px; top: 191px; width: 8px; height: 8px; border-radius: 50%; background: #c792ea" data-st="position: absolute; left: 776px; top: 191px; width: 8px; height: 8px; border-radius: 50%; background: #c792ea; {{dotR}}"></div>
+<div style="position: absolute; left: 776px; top: 421px; width: 8px; height: 8px; border-radius: 50%; background: #c792ea" data-st="position: absolute; left: 776px; top: 421px; width: 8px; height: 8px; border-radius: 50%; background: #c792ea; {{dotR}}"></div>
+</div>
+
+<!-- ===== Claude window 1 (Apple Terminal) → release-notes node ===== -->
+<div style="position: absolute; transform-origin: 50% 50%" data-st="position: absolute; transform-origin: 50% 50%; {{c1.box}}">
+<div style="position: absolute; left: 0; top: 0; transform-origin: 0 0" data-st="position: absolute; left: 0; top: 0; transform-origin: 0 0; {{c1.a}}">
+<div style="position: relative; width: 100%; height: 100%; border-radius: 10px; overflow: hidden; background: #1e1e1e; box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 24px 60px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.09); display: flex; flex-direction: column">
+<div style="height: 28px; flex: none; position: relative; display: flex; align-items: center; background: #2c2c2e; border-bottom: 1px solid #111">
+<div style="display: flex; gap: 8px; padding-left: 12px"><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{c1.tl.r}}"></span><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{c1.tl.y}}"></span><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{c1.tl.g}}"></span></div>
+<div style="position: absolute; left: 0; right: 0; text-align: center; font: 500 12px/28px -apple-system, 'Inter', system-ui, sans-serif; color: #a1a1a6">serenity — claude — 92×28</div>
+</div>
+<div style="flex: 1; padding: 12px 14px; font: 12px/17px 'JetBrains Mono', Menlo, monospace; color: #e6e6e6; white-space: pre; display: flex; flex-direction: column; gap: 0">
+<div><span style="color: #8b8b8b">~/projects/serenity $</span> claude</div><div style="color: #8b8b8b">session started · cwd ~/projects/serenity</div>
+<div style="margin-top: 12px"><span style="color: #8b8b8b">&gt;</span> write the release notes for v0.4</div>
+<div style="margin-top: 8px"><span style="color: #7fc77f">•</span> Read(CHANGELOG.md)</div>
+<div style="color: #8b8b8b">  └  Read 142 lines</div>
+<div><span style="color: #7fc77f">•</span> Bash(git log v0.3.0..HEAD --oneline)</div>
+<div style="color: #8b8b8b">  └  38 commits</div>
+<div><span style="color: #7fc77f">•</span> Write(docs/release-notes/v0.4.md)</div>
+<div style="margin-top: 8px; color: #a9b1bb"><span class="srn-busy">◦</span> Drafting… <span style="color: #8b8b8b">(14s)</span></div>
+<div style="margin-top: 8px; border: 1px solid #5a5a5a; border-radius: 6px; padding: 4px 10px"><span style="color: #8b8b8b">&gt;</span> <span class="srn-cur">█</span></div>
+<div style="color: #6f6f6f; padding-left: 4px">  ? for shortcuts</div>
+</div>
+<div style="position: absolute; inset: 0; background: #0d0f12; pointer-events: none" data-st="position: absolute; inset: 0; background: #0d0f12; pointer-events: none; {{c1.dim}}"></div>
+</div>
+</div>
+<div style="position: absolute; left: 0; top: 0; transform-origin: 0 0" data-st="position: absolute; left: 0; top: 0; transform-origin: 0 0; {{c1.b}}">
+<div style="position: relative; width: 100%; height: 100%; box-sizing: border-box; border: 1px solid #4c744e; border-radius: 3px; background: #0f1216; padding: 16px 14px 10px; font: 12px/18px 'JetBrains Mono', Menlo, monospace; color: #d0d4da">
+<div style="position: absolute; top: -10px; left: 10px; right: 10px; display: flex; justify-content: space-between; line-height: 18px">
+<span style="background: #0d0f12; padding: 0 6px"><span style="color: #7fc77f">✓</span> release-notes</span>
+</div>
+<div><span style="text-decoration: underline">PR #479</span> <span style="color: #7fc77f">approved</span></div>
+<div style="color: #858c97; white-space: normal">Drafted the v0.4 notes from 38 commits.</div>
+</div>
+</div>
+</div>
+
+<!-- ===== Claude window 3 (long-running task) → install-docs node ===== -->
+<div style="position: absolute; transform-origin: 50% 50%" data-st="position: absolute; transform-origin: 50% 50%; {{c3.box}}">
+<div style="position: absolute; left: 0; top: 0; transform-origin: 0 0" data-st="position: absolute; left: 0; top: 0; transform-origin: 0 0; {{c3.a}}">
+<div style="position: relative; width: 100%; height: 100%; border-radius: 10px; overflow: hidden; background: #1e1e1e; box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 24px 60px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.09); display: flex; flex-direction: column">
+<div style="height: 28px; flex: none; position: relative; display: flex; align-items: center; background: #2c2c2e; border-bottom: 1px solid #111">
+<div style="display: flex; gap: 8px; padding-left: 12px"><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{c3.tl.r}}"></span><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{c3.tl.y}}"></span><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{c3.tl.g}}"></span></div>
+<div style="position: absolute; left: 0; right: 0; text-align: center; font: 500 12px/28px -apple-system, 'Inter', system-ui, sans-serif; color: #a1a1a6">serenity — claude — 88×24</div>
+</div>
+<div style="flex: 1; padding: 12px 14px; font: 12px/17px 'JetBrains Mono', Menlo, monospace; color: #e6e6e6; white-space: pre; display: flex; flex-direction: column">
+<div><span style="color: #8b8b8b">&gt;</span> update the install guide for the new flags</div>
+<div style="margin-top: 8px"><span style="color: #7fc77f">•</span> Read(docs/install.md)</div>
+<div style="color: #8b8b8b">  └  Read 96 lines</div>
+<div><span style="color: #7fc77f">•</span> Update(docs/install.md)</div>
+<div style="color: #8b8b8b">  └  Updated docs/install.md with 12 additions and 4 removals</div>
+<div><span style="color: #7fc77f">•</span> Bash(bun run docs:build)</div>
+<div style="color: #8b8b8b">  └  Running…</div>
+<div style="margin-top: 8px; color: #a9b1bb"><span class="srn-busy">◦</span> Building docs… <span style="color: #8b8b8b">(41s)</span></div>
+<div style="margin-top: 8px; border: 1px solid #5a5a5a; border-radius: 6px; padding: 4px 10px"><span style="color: #8b8b8b">&gt;</span> <span class="srn-cur">█</span></div>
+</div>
+<div style="position: absolute; inset: 0; background: #0d0f12; pointer-events: none" data-st="position: absolute; inset: 0; background: #0d0f12; pointer-events: none; {{c3.dim}}"></div>
+</div>
+</div>
+<div style="position: absolute; left: 0; top: 0; transform-origin: 0 0" data-st="position: absolute; left: 0; top: 0; transform-origin: 0 0; {{c3.b}}">
+<div style="position: relative; width: 100%; height: 100%; box-sizing: border-box; border: 1px solid #3a3f47; border-radius: 3px; background: #0f1216; padding: 16px 14px 10px; font: 12px/18px 'JetBrains Mono', Menlo, monospace; color: #d0d4da">
+<div style="position: absolute; top: -10px; left: 10px; right: 10px; display: flex; justify-content: space-between; line-height: 18px">
+<span style="background: #0d0f12; padding: 0 6px; color: #8b95a7">install-docs</span>
+</div>
+<div style="color: #858c97">no PR yet</div>
+<div style="color: #858c97; white-space: normal">Updated the install guide for the new flags.</div>
+</div>
+</div>
+</div>
+
+<!-- ===== Claude window 2 (permission prompt) → flaky-e2e node ===== -->
+<div style="position: absolute; transform-origin: 50% 50%" data-st="position: absolute; transform-origin: 50% 50%; {{c2.box}}">
+<div style="position: absolute; left: 0; top: 0; transform-origin: 0 0" data-st="position: absolute; left: 0; top: 0; transform-origin: 0 0; {{c2.a}}">
+<div style="position: relative; width: 100%; height: 100%; border-radius: 10px; overflow: hidden; background: #1e1e1e; box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 24px 60px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.09); display: flex; flex-direction: column">
+<div style="height: 28px; flex: none; position: relative; display: flex; align-items: center; background: #2c2c2e; border-bottom: 1px solid #111">
+<div style="display: flex; gap: 8px; padding-left: 12px"><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{c2.tl.r}}"></span><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{c2.tl.y}}"></span><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{c2.tl.g}}"></span></div>
+<div style="position: absolute; left: 0; right: 0; text-align: center; font: 500 12px/28px -apple-system, 'Inter', system-ui, sans-serif; color: #a1a1a6">serenity — claude — 86×26</div>
+</div>
+<div style="flex: 1; padding: 12px 14px; font: 12px/17px 'JetBrains Mono', Menlo, monospace; color: #e6e6e6; white-space: pre; display: flex; flex-direction: column">
+<div><span style="color: #8b8b8b">&gt;</span> make the e2e suite retry on timeouts</div>
+<div style="margin-top: 8px"><span style="color: #7fc77f">•</span> Update(e2e/run.ts)</div>
+<div style="margin-top: 8px; border: 1px solid #6b717b; border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column">
+<div style="font-weight: 700">Edit file</div>
+<div style="color: #8b8b8b">e2e/run.ts</div>
+<div style="margin-top: 6px; background: #3a1d20; color: #f3a6a6"> 41 -   await page.waitForSelector(sel);</div>
+<div style="background: #18351e; color: #a6e0a6"> 41 +   await retry(() =&gt; page.waitForSelector(sel), 3);</div>
+<div style="margin-top: 8px">Do you want to make this edit to run.ts?</div>
+<div style="color: #6b717b">❯ 1. Yes</div>
+<div>  2. Yes, and don't ask again this session</div>
+<div>  3. No, and tell Claude what to do differently</div>
+</div>
+</div>
+<div style="position: absolute; inset: 0; background: #0d0f12; pointer-events: none" data-st="position: absolute; inset: 0; background: #0d0f12; pointer-events: none; {{c2.dim}}"></div>
+</div>
+</div>
+<div style="position: absolute; left: 0; top: 0; transform-origin: 0 0" data-st="position: absolute; left: 0; top: 0; transform-origin: 0 0; {{c2.b}}">
+<div style="position: relative; width: 100%; height: 100%; box-sizing: border-box; border: 1px solid #f2c14e; border-radius: 3px; background: #0f1216; padding: 16px 14px 10px; font: 12px/18px 'JetBrains Mono', Menlo, monospace; color: #d0d4da">
+<div style="position: absolute; top: -10px; left: 10px; right: 10px; display: flex; justify-content: space-between; line-height: 18px">
+<span style="background: #0d0f12; padding: 0 6px"><span class="srn-pulse" style="color: #f2c14e">◐</span> flaky-e2e</span>
+<span style="background: #f2c14e; color: #0d0f12; padding: 0 6px; font-weight: 700">WAITING</span>
+</div>
+<div style="color: #858c97">no PR yet</div>
+<div style="color: #858c97; white-space: normal">Wants to edit e2e/run.ts to retry on timeout.</div>
+</div>
+</div>
+</div>
+
+<!-- ===== VS Code window → auth-refactor node ===== -->
+<div style="position: absolute; transform-origin: 50% 50%" data-st="position: absolute; transform-origin: 50% 50%; {{vs.box}}">
+<div style="position: absolute; left: 0; top: 0; transform-origin: 0 0" data-st="position: absolute; left: 0; top: 0; transform-origin: 0 0; {{vs.a}}">
+<div style="position: relative; width: 100%; height: 100%; border-radius: 10px; overflow: hidden; background: #1f1f1f; box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 24px 60px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.08); display: flex; flex-direction: column; font-family: 'Inter', -apple-system, system-ui, sans-serif">
+<div style="height: 32px; flex: none; position: relative; display: flex; align-items: center; background: #181818; border-bottom: 1px solid #2b2b2b">
+<div style="display: flex; gap: 8px; padding-left: 12px"><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{vs.tl.r}}"></span><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{vs.tl.y}}"></span><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{vs.tl.g}}"></span></div>
+<div style="position: absolute; left: 0; right: 0; text-align: center; font-size: 12px; line-height: 32px; color: #a1a1a6; pointer-events: none">session.ts — serenity</div>
+</div>
+<div style="flex: 1; display: flex; min-height: 0">
+<div style="width: 44px; flex: none; background: #181818; border-right: 1px solid #2b2b2b; display: flex; flex-direction: column; align-items: center; gap: 16px; padding-top: 12px; position: relative">
+<div style="position: absolute; left: 0; top: 10px; width: 2px; height: 28px; background: #6b7280"></div>
+<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d7d7d7" stroke-width="1.5"><path d="M14 3H6v18h12V7z"></path><path d="M14 3v4h4"></path></svg>
+<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#858585" stroke-width="1.5"><circle cx="10" cy="10" r="6"></circle><path d="m15 15 6 6"></path></svg>
+<div style="position: relative; width: 22px; height: 22px"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#858585" stroke-width="1.5"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="8" r="2"></circle><path d="M6 7v10M18 10c0 4-6 3-11 8"></path></svg><span style="position: absolute; right: -6px; bottom: -4px; min-width: 15px; height: 15px; border-radius: 8px; background: #6b7280; color: #fff; font-size: 9px; font-weight: 700; line-height: 15px; text-align: center"><span data-t="vsBadge">3</span></span></div>
+<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#858585" stroke-width="1.5"><path d="M7 4v16l13-8z"></path></svg>
+<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#858585" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>
+</div>
+<div style="width: 168px; flex: none; background: #181818; border-right: 1px solid #2b2b2b; font-size: 12px; line-height: 22px; color: #cccccc; white-space: pre; overflow: hidden">
+<div style="padding: 6px 12px 2px; font-size: 10.5px; letter-spacing: .08em; color: #bbbbbb">EXPLORER</div>
+<div style="padding-left: 8px; font-weight: 700; font-size: 11px">⌄ SERENITY</div>
+<div style="padding-left: 16px">⌄ packages</div>
+<div style="padding-left: 28px">⌄ core</div>
+<div style="padding-left: 40px">⌄ src</div>
+<div style="padding-left: 54px"><span style="color: #3178c6; font-size: 9px; font-weight: 700">TS</span> domain.ts</div>
+<div style="padding-left: 54px"><span style="color: #3178c6; font-size: 9px; font-weight: 700">TS</span> keychain.ts</div>
+<div style="padding-left: 54px; background: #37373d; box-shadow: inset 0 0 0 1px #6b7280; color: #ffffff"><span style="color: #3178c6; font-size: 9px; font-weight: 700">TS</span> session.ts</div>
+<div style="padding-left: 54px"><span style="color: #3178c6; font-size: 9px; font-weight: 700">TS</span> storage.ts</div>
+<div style="padding-left: 28px">› daemon</div>
+<div style="padding-left: 28px">› tui</div>
+<div style="padding-left: 16px"><span style="color: #519aba; font-size: 9px; font-weight: 700">M↓</span> README.md</div>
+</div>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: #1f1f1f">
+<div style="height: 34px; flex: none; display: flex; background: #181818; font-size: 12px">
+<div style="display: flex; align-items: center; gap: 6px; padding: 0 14px; background: #1f1f1f; color: #ffffff; box-shadow: inset 0 1px 0 #6b7280; border-right: 1px solid #2b2b2b"><span style="color: #3178c6; font-size: 9px; font-weight: 700">TS</span>session.ts<span style="color: #cccccc; margin-left: 4px">●</span></div>
+<div style="display: flex; align-items: center; gap: 6px; padding: 0 14px; color: #9d9d9d; border-right: 1px solid #2b2b2b"><span style="color: #3178c6; font-size: 9px; font-weight: 700">TS</span>keychain.ts</div>
+<div style="display: flex; align-items: center; gap: 6px; padding: 0 14px; color: #9d9d9d; border-right: 1px solid #2b2b2b"><span style="color: #519aba; font-size: 9px; font-weight: 700">M↓</span>README.md</div>
+</div>
+<div style="height: 22px; flex: none; display: flex; align-items: center; padding: 0 14px; font-size: 11.5px; color: #a9a9a9">packages › core › src › session.ts</div>
+<div style="flex: 1; overflow: hidden; padding-top: 4px; font: 12px/18px 'JetBrains Mono', Menlo, monospace; white-space: pre; color: #d4d4d4">
+<div><span style="display: inline-block; width: 30px; text-align: right; color: #6e7681; margin-right: 14px">1</span><span style="color: #c586c0">import</span> { <span style="color: #9cdcfe">Keychain</span> } <span style="color: #c586c0">from</span> <span style="color: #ce9178">"./keychain"</span>;</div>
+<div><span style="display: inline-block; width: 30px; text-align: right; color: #6e7681; margin-right: 14px">2</span><span style="color: #c586c0">import</span> <span style="color: #569cd6">type</span> { <span style="color: #4ec9b0">Session</span> } <span style="color: #c586c0">from</span> <span style="color: #ce9178">"./domain"</span>;</div>
+<div><span style="display: inline-block; width: 30px; text-align: right; color: #6e7681; margin-right: 14px">3</span></div>
+<div><span style="display: inline-block; width: 30px; text-align: right; color: #6e7681; margin-right: 14px">4</span><span style="color: #6a9955">// Tokens leave SQLite and live in the OS keychain.</span></div>
+<div><span style="display: inline-block; width: 30px; text-align: right; color: #6e7681; margin-right: 14px">5</span><span style="color: #c586c0">export</span> <span style="color: #569cd6">async function</span> <span style="color: #dcdcaa">saveToken</span>(<span style="color: #9cdcfe">session</span>: <span style="color: #4ec9b0">Session</span>, <span style="color: #9cdcfe">token</span>: <span style="color: #4ec9b0">string</span>) {</div>
+<div><span style="display: inline-block; width: 30px; text-align: right; color: #6e7681; margin-right: 14px">6</span>  <span style="color: #569cd6">const</span> <span style="color: #4fc1ff">key</span> = <span style="color: #ce9178">`serenity:</span><span style="color: #569cd6">${</span><span style="color: #9cdcfe">session</span>.<span style="color: #9cdcfe">id</span><span style="color: #569cd6">}</span><span style="color: #ce9178">`</span>;</div>
+<div style="background: #2a2d2e"><span style="display: inline-block; width: 30px; text-align: right; color: #cccccc; margin-right: 14px">7</span>  <span style="color: #c586c0">await</span> <span style="color: #9cdcfe">Keychain</span>.<span style="color: #dcdcaa">set</span>(<span style="color: #4fc1ff">key</span>, <span style="color: #9cdcfe">token</span>);<span class="srn-cur" style="color: #aeafad">▏</span></div>
+<div><span style="display: inline-block; width: 30px; text-align: right; color: #6e7681; margin-right: 14px">8</span>  <span style="color: #c586c0">return</span> { ...<span style="color: #9cdcfe">session</span>, <span style="color: #9cdcfe">tokenRef</span>: <span style="color: #4fc1ff">key</span> };</div>
+<div><span style="display: inline-block; width: 30px; text-align: right; color: #6e7681; margin-right: 14px">9</span>}</div>
+<div><span style="display: inline-block; width: 30px; text-align: right; color: #6e7681; margin-right: 14px">10</span></div>
+<div><span style="display: inline-block; width: 30px; text-align: right; color: #6e7681; margin-right: 14px">11</span><span style="color: #c586c0">export</span> <span style="color: #569cd6">async function</span> <span style="color: #dcdcaa">loadToken</span>(<span style="color: #9cdcfe">session</span>: <span style="color: #4ec9b0">Session</span>) {</div>
+<div><span style="display: inline-block; width: 30px; text-align: right; color: #6e7681; margin-right: 14px">12</span>  <span style="color: #c586c0">if</span> (!<span style="color: #9cdcfe">session</span>.<span style="color: #9cdcfe">tokenRef</span>) <span style="color: #c586c0">return</span> <span style="color: #569cd6">null</span>;</div>
+<div><span style="display: inline-block; width: 30px; text-align: right; color: #6e7681; margin-right: 14px">13</span>  <span style="color: #c586c0">return</span> <span style="color: #9cdcfe">Keychain</span>.<span style="color: #dcdcaa">get</span>(<span style="color: #9cdcfe">session</span>.<span style="color: #9cdcfe">tokenRef</span>);</div>
+<div><span style="display: inline-block; width: 30px; text-align: right; color: #6e7681; margin-right: 14px">14</span>}</div>
+</div>
+</div>
+</div>
+<div style="height: 22px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; background: #26292e; color: #a9b1bb; border-top: 1px solid #2b2b2b; font-size: 11px; white-space: pre">
+<span>⎇ auth-refactor*    ⊗ 0  ⚠ 2</span>
+<span>Ln 7, Col 31    Spaces: 2    UTF-8    TypeScript</span>
+</div>
+<div style="position: absolute; inset: 0; background: #0d0f12; pointer-events: none" data-st="position: absolute; inset: 0; background: #0d0f12; pointer-events: none; {{vs.dim}}"></div>
+</div>
+</div>
+<div style="position: absolute; left: 0; top: 0; transform-origin: 0 0" data-st="position: absolute; left: 0; top: 0; transform-origin: 0 0; {{vs.b}}">
+<div style="position: relative; width: 100%; height: 100%; box-sizing: border-box; border: 1px solid #41678c; border-radius: 3px; background: #0f1216; padding: 16px 14px 10px; font: 12px/18px 'JetBrains Mono', Menlo, monospace; color: #d0d4da">
+<div style="position: absolute; top: -10px; left: 10px; right: 10px; display: flex; justify-content: space-between; line-height: 18px">
+<span style="background: #0d0f12; padding: 0 6px"><span style="color: #6cb0f0">●</span> auth-refactor</span>
+</div>
+<div><span style="text-decoration: underline">PR #482</span> <span style="color: #858c97">checks running</span></div>
+<div style="color: #858c97; white-space: normal">Moving session tokens into the OS keychain.</div>
+</div>
+</div>
+</div>
+
+<!-- ===== Slack window → master node ===== -->
+<div style="position: absolute; transform-origin: 50% 50%" data-st="position: absolute; transform-origin: 50% 50%; {{sl.box}}">
+<div style="position: absolute; left: 0; top: 0; transform-origin: 0 0" data-st="position: absolute; left: 0; top: 0; transform-origin: 0 0; {{sl.a}}">
+<div style="position: relative; width: 100%; height: 100%; border-radius: 10px; overflow: hidden; background: #1f2125; box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 24px 60px rgba(0,0,0,.55); display: flex; flex-direction: column; font-family: 'Inter', -apple-system, system-ui, sans-serif">
+<div style="height: 38px; flex: none; position: relative; display: flex; align-items: center">
+<div style="display: flex; gap: 8px; padding-left: 12px"><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{sl.tl.r}}"></span><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{sl.tl.y}}"></span><span style="width: 12px; height: 12px; border-radius: 50%" data-st="width: 12px; height: 12px; border-radius: 50%; background: {{sl.tl.g}}"></span></div>
+<div style="position: absolute; left: 50%; top: 8px; transform: translateX(-50%); width: 280px; height: 22px; border-radius: 6px; background: rgba(255,255,255,.14); display: flex; align-items: center; gap: 6px; padding: 0 10px; box-sizing: border-box; font-size: 12px; color: rgba(255,255,255,.75)"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5 14 14"></path></svg>Search Northwind</div>
+</div>
+<div style="flex: 1; display: flex; min-height: 0">
+<div style="width: 56px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 14px; padding-top: 6px">
+<div style="width: 34px; height: 34px; border-radius: 8px; background: #ffffff; color: #1f2125; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center">N</div>
+<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(255,255,255,.2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M3 11 12 4l9 7v9H3z"></path></svg></div>
+<div style="position: relative"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M4 5h16v11H9l-5 4z"></path></svg><span style="position: absolute; right: -9px; top: -6px; min-width: 16px; height: 16px; border-radius: 8px; background: #d9534f; color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; padding: 0 3px; box-sizing: border-box"><span data-t="dmBadge">1</span></span></div>
+<div style="position: relative"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M6 16V10a6 6 0 0 1 12 0v6l2 2H4z"></path><path d="M10 21h4"></path></svg><span style="position: absolute; right: -9px; top: -6px; min-width: 16px; height: 16px; border-radius: 8px; background: #d9534f; color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; padding: 0 3px; box-sizing: border-box"><span data-t="actBadge">2</span></span></div>
+</div>
+<div style="width: 170px; flex: none; background: #26282d; border-radius: 8px 0 0 0; padding: 10px 0; font-size: 13px; line-height: 26px; color: rgba(255,255,255,.72); white-space: nowrap; overflow: hidden">
+<div style="padding: 0 14px 6px; font-size: 15px; font-weight: 700; color: #ffffff">Northwind ⌄</div>
+<div style="padding: 0 14px"># general</div>
+<div style="padding: 0 14px; display: flex; justify-content: space-between; align-items: center; color: #ffffff; font-weight: 700"><span># eng-platform</span><span style="min-width: 18px; height: 16px; border-radius: 8px; background: #d9534f; font-size: 10px; line-height: 16px; text-align: center; padding: 0 4px; box-sizing: border-box"><span data-t="engBadge">1</span></span></div>
+<div style="padding: 0 14px; color: #ffffff; font-weight: 700"># deploys</div>
+<div style="padding: 0 14px"># random</div>
+<div style="padding: 8px 14px 0; font-size: 12px">Direct messages</div>
+<div style="padding: 0 14px; display: flex; justify-content: space-between; align-items: center; color: #ffffff; font-weight: 700"><span><span style="color: #7fc77f">●</span> Priya Raman</span><span style="min-width: 18px; height: 16px; border-radius: 8px; background: #d9534f; font-size: 10px; line-height: 16px; text-align: center; padding: 0 4px; box-sizing: border-box"><span data-t="dmBadge">1</span></span></div>
+<div style="padding: 0 14px"><span style="color: #7fc77f">●</span> Jake Miller</div>
+<div style="padding: 0 14px"><span style="color: rgba(255,255,255,.5)">○</span> Ananya Desai</div>
+</div>
+<div style="flex: 1; min-width: 0; background: #17191c; display: flex; flex-direction: column; color: #e1e3e6">
+<div style="height: 42px; flex: none; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid #e8e8e8; font-size: 15px; font-weight: 700"># eng-platform ⌄</div>
+<div style="flex: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 6px; font-size: 13px; line-height: 19px">
+<div style="display: flex; gap: 10px; padding: 6px 16px"><div style="width: 32px; height: 32px; flex: none; border-radius: 6px; background: #2e7d6b; color: #fff; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center">JM</div><div><div><b>Jake Miller</b> <span style="font-size: 11.5px; color: #8b9099">10:39</span></div><div>CI is red again on main. Anyone on it?</div></div></div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 2px 16px; font-size: 11px; font-weight: 700; color: #d9534f"><div style="flex: 1; height: 1px; background: #d9534f"></div>New</div>
+<div style="display: flex; gap: 10px; padding: 6px 16px"><div style="width: 32px; height: 32px; flex: none; border-radius: 6px; background: #b0613a; color: #fff; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center">PR</div><div><div><b>Priya Raman</b> <span style="font-size: 11.5px; color: #8b9099">10:41</span></div><div><span style="background: #2d3340; color: #9cc3ff; padding: 0 2px; border-radius: 3px">@mukkund</span> is the deploy blocked on #482?</div></div></div>
+<div style="display: flex; gap: 10px; padding: 6px 16px"><div style="width: 32px; height: 32px; flex: none; border-radius: 6px; background: #4b5fbf; color: #fff; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center">AD</div><div><div><b>Ananya Desai</b> <span style="font-size: 11.5px; color: #8b9099">10:42</span></div><div>lunch at 12:30? also who has the standup notes</div></div></div>
+</div>
+<div style="flex: none; margin: 0 14px 12px; border: 1px solid #bbbabb; border-radius: 8px; padding: 8px 10px; font-size: 13px; color: #868686">Message # eng-platform<div style="margin-top: 10px; display: flex; gap: 10px; color: #9a9a9a; font-size: 12px"><b>B</b><i>I</i><s>S</s><span>⌁</span><span style="margin-left: auto">➤</span></div></div>
+</div>
+</div>
+<div style="position: absolute; inset: 0; background: #0d0f12; pointer-events: none" data-st="position: absolute; inset: 0; background: #0d0f12; pointer-events: none; {{sl.dim}}"></div>
+</div>
+</div>
+<div style="position: absolute; left: 0; top: 0; transform-origin: 0 0" data-st="position: absolute; left: 0; top: 0; transform-origin: 0 0; {{sl.b}}">
+<div style="position: relative; width: 100%; height: 100%; box-sizing: border-box; border: 1px solid #8a6fae; border-radius: 12px; background: #0f1216; padding: 18px 16px 12px; font: 12.5px/19px 'JetBrains Mono', Menlo, monospace; color: #d0d4da; display: flex; flex-direction: column">
+<div style="position: absolute; top: -10px; left: 14px; line-height: 19px; background: #0d0f12; padding: 0 6px; color: #c792ea">◆ master</div>
+<div style="color: #858c97">watching 4 sessions, 1 thread</div>
+<div style="margin-top: 10px; font-size: 11px; letter-spacing: .12em; color: #858c97">NEEDS YOU</div>
+<div><span class="srn-pulse" style="color: #f2c14e">◐</span> flaky-e2e</div>
+<div style="color: #858c97; padding-left: 16px">wants to edit e2e/run.ts</div>
+<div style="display: flex; justify-content: space-between; padding-left: 16px"><span><span style="color: #c792ea">◆</span> approve the edit</span><span style="color: #ffffff; font-weight: 700">y e n</span></div>
+<div style="margin-top: 8px"><span style="color: #858c97">#</span> eng-platform · Priya</div>
+<div style="color: #858c97; padding-left: 16px">is the deploy blocked on #482?</div>
+<div style="display: flex; justify-content: space-between; padding-left: 16px"><span><span style="color: #c792ea">◆</span> reply "Not blocked, checks running."</span><span style="color: #ffffff; font-weight: 700">y e n</span></div>
+<div style="flex: 1"></div>
+<div style="border-top: 1px solid #3a3f47; padding-top: 8px; white-space: normal"><span style="color: #c792ea">◆ master ›</span> Two things need you. Everything else is quiet.</div>
+<div style="margin-top: 6px; background: #161a1f; padding: 0 8px; color: #858c97">› <span class="srn-cur" style="color: #d0d4da">█</span></div>
+</div>
+</div>
+</div>
+
+<!-- notification toasts (chaos) -->
+<div style="position: absolute; left: 900px; top: 16px; width: 330px; z-index: 10" data-st="position: absolute; left: 900px; top: 16px; width: 330px; z-index: 10; {{toast1}}">
+<div style="display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: rgba(46,46,50,.96); box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 12px 32px rgba(0,0,0,.5); font-family: 'Inter', -apple-system, system-ui, sans-serif">
+<div style="width: 36px; height: 36px; flex: none; border-radius: 9px; background: #3b3f46; color: #fff; font-weight: 700; font-size: 18px; display: flex; align-items: center; justify-content: center">#</div>
+<div style="min-width: 0; flex: 1"><div style="display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600; color: #f5f5f7">Chat<span style="font-weight: 400; color: #98989d">now</span></div><div style="font-size: 12.5px; color: #d8d8dc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Priya Raman: @mukkund is the deploy blocked?</div></div>
+</div>
+</div>
+<div style="position: absolute; left: 900px; top: 92px; width: 330px; z-index: 10" data-st="position: absolute; left: 900px; top: 92px; width: 330px; z-index: 10; {{toast2}}">
+<div style="display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: rgba(46,46,50,.96); box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 12px 32px rgba(0,0,0,.5); font-family: 'Inter', -apple-system, system-ui, sans-serif">
+<div style="width: 36px; height: 36px; flex: none; border-radius: 9px; background: #24292f; color: #fff; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center">PR</div>
+<div style="min-width: 0; flex: 1"><div style="display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600; color: #f5f5f7">GitHub<span style="font-weight: 400; color: #98989d">now</span></div><div style="font-size: 12.5px; color: #d8d8dc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">3 new comments on serenity#482</div></div>
+</div>
+</div>
+
+</div>
+<!-- /scene -->
+
+<!-- captions -->
+<div style="position: absolute; left: 0; right: 0; height: 110px; z-index: 15; padding: 0 24px; box-sizing: border-box; text-align: center; font-family: 'Instrument Serif', Georgia, serif; font-size: clamp(26px, 3.4vw, 44px); line-height: 1.1; color: #e8eaee" data-st="position: absolute; left: 0; right: 0; height: 110px; z-index: 15; padding: 0 24px; box-sizing: border-box; text-align: center; font-family: 'Instrument Serif', Georgia, serif; font-size: clamp(26px, 3.4vw, 44px); line-height: 1.1; color: #e8eaee; {{capBand}}">
+<p style="position: absolute; left: 24px; right: 24px; top: 0; margin: 0" data-st="position: absolute; left: 24px; right: 24px; top: 0; margin: 0; {{cap0}}">It started with one Claude session.</p>
+<p style="position: absolute; left: 24px; right: 24px; top: 0; margin: 0; font-style: italic" data-st="position: absolute; left: 24px; right: 24px; top: 0; margin: 0; font-style: italic; {{capThen}}">and then…</p>
+<p style="position: absolute; left: 24px; right: 24px; top: 0; margin: 0" data-st="position: absolute; left: 24px; right: 24px; top: 0; margin: 0; {{cap2}}">Bring <i style="color: #7fc77f">serenity</i> into your flow.</p>
+</div>
+
+<!-- the three problem words, each beside the window that brings it -->
+<div style="position: absolute; left: 0; right: 0; top: 0; z-index: 15; pointer-events: none; text-align: right; font-family: 'Instrument Serif', Georgia, serif; line-height: 1; white-space: nowrap; text-shadow: 0 2px 14px rgba(13,15,18,.95)">
+<span style="position: absolute" data-st="position: absolute; {{side1}}">Clutter</span>
+<span style="position: absolute" data-st="position: absolute; {{side2}}">Distraction</span>
+<span style="position: absolute" data-st="position: absolute; {{side3}}">Noise</span>
+</div>
+<div style="position: absolute; left: 0; right: 0; text-align: center; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; letter-spacing: .1em; color: #858c97" data-st="position: absolute; left: 0; right: 0; text-align: center; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; letter-spacing: .1em; color: #858c97; {{hint}}">SCROLL ↓</div>
+
+</div>
+</div>
+<!-- /scroll story -->
+
+<!-- ============ QUICK INSTALL (right after the story) ============ -->
+<section style="max-width: 860px; margin: 0 auto; padding: 96px 24px 8px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center">
+<h2 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: clamp(30px, 4vw, 44px); line-height: 1.1; color: #e8eaee">Bring focus to your Claude Code.</h2>
+<p style="margin: -6px 0 6px; max-width: 52ch; font-size: 16px; line-height: 1.5; color: #b5bac2; text-wrap: balance">Serenity uses your existing Claude subscription.</p>
+<div style="width: 100%; display: flex; align-items: center; gap: 12px; background: #0f1216; border: 1px solid #3a3f47; border-radius: 6px; padding: 8px 8px 8px 18px; box-sizing: border-box; text-align: left">
+<code style="flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 14px; line-height: 28px; color: #e8eaee"><span style="color: #858c97">$</span> curl -fsSL https://raw.githubusercontent.com/mukkund1996/serenity/main/scripts/install.sh | sh</code>
+<button type="button" class="srn-copy" data-copy="quick" aria-label="Copy the install command" title="Copy the install command" style="flex: none; width: 44px; height: 44px; border: 0; border-radius: 4px; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0"><span class="srn-done"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7fc77f" stroke-width="2" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span><span class="srn-idle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg></span></button>
+</div>
+<p style="margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; font-size: 14px; color: #858c97"><span>macOS and Linux</span><a href="#install" style="color: #d0d4da">Full install guide ↓</a></p>
+</section>
+
+<!-- ============ THE THREE ANSWERS (static recap of the pull-outs) ============ -->
+<section style="max-width: 1200px; margin: 0 auto; padding: 120px 24px 40px; box-sizing: border-box">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 24px; align-items: stretch">
+
+<div style="display: flex; flex-direction: column; align-items: center; gap: 28px; text-align: center; border: 1px solid #23272e; border-radius: 8px; padding: 40px 24px 36px; box-sizing: border-box">
+<div style="min-height: 320px; width: 100%; display: flex; align-items: center; justify-content: center">
+<div style="position: relative; width: 100%; max-width: 340px; box-sizing: border-box; border: 1px solid #41678c; border-radius: 3px; background: #0f1216; padding: 22px 18px 14px; font: 14px/21px 'JetBrains Mono', Menlo, monospace; color: #d0d4da; text-align: left">
+<div style="position: absolute; top: -11px; left: 12px; right: 12px; display: flex; justify-content: space-between; line-height: 21px">
+<span style="background: #0d0f12; padding: 0 6px"><span style="color: #6cb0f0">●</span> auth-refactor</span>
+</div>
+<div><span style="text-decoration: underline">PR #482</span> <span style="color: #858c97">checks running</span></div>
+<div style="color: #858c97">Moving session tokens into the OS keychain.</div>
+</div>
+</div>
+<p style="margin: 0; display: flex; justify-content: center; align-items: baseline; column-gap: .5em; font-family: 'Instrument Serif', Georgia, serif; font-size: clamp(34px, 3.6vw, 44px); line-height: 1.1"><span style="position: relative; display: inline-block; color: #6b717b">Clutter<span style="position: absolute; left: -4%; right: -4%; top: 56%; height: 3px; background: #858c97"></span></span><span style="color: #7fc77f">Harmony</span></p>
+<p style="margin: 0; max-width: 32ch; font-size: 16px; line-height: 1.5; color: #b5bac2; text-wrap: balance">Every Claude Code session is a node in the mind map.</p>
+</div>
+
+<div style="display: flex; flex-direction: column; align-items: center; gap: 28px; text-align: center; border: 1px solid #23272e; border-radius: 8px; padding: 40px 24px 36px; box-sizing: border-box">
+<div style="min-height: 320px; width: 100%; display: flex; align-items: center; justify-content: center">
+<div style="position: relative; width: 100%; max-width: 340px; box-sizing: border-box; border: 1px solid #f2c14e; border-radius: 3px; background: #0f1216; padding: 22px 18px 14px; font: 14px/21px 'JetBrains Mono', Menlo, monospace; color: #d0d4da; text-align: left">
+<div style="position: absolute; top: -11px; left: 12px; right: 12px; display: flex; justify-content: space-between; line-height: 21px">
+<span style="background: #0d0f12; padding: 0 6px"><span class="srn-pulse" style="color: #f2c14e">◐</span> flaky-e2e</span>
+<span style="background: #f2c14e; color: #0d0f12; padding: 0 6px; font-weight: 700">WAITING</span>
+</div>
+<div style="color: #858c97">no PR yet</div>
+<div style="color: #858c97">Wants to edit e2e/run.ts to retry on timeout.</div>
+</div>
+</div>
+<p style="margin: 0; display: flex; justify-content: center; align-items: baseline; column-gap: .5em; font-family: 'Instrument Serif', Georgia, serif; font-size: clamp(34px, 3.6vw, 44px); line-height: 1.1"><span style="position: relative; display: inline-block; color: #6b717b">Distraction<span style="position: absolute; left: -4%; right: -4%; top: 56%; height: 3px; background: #858c97"></span></span><span style="color: #7fc77f">Focus</span></p>
+<p style="margin: 0; max-width: 32ch; font-size: 16px; line-height: 1.5; color: #b5bac2; text-wrap: balance">Working agents stay quiet. Waiting agents call you.</p>
+</div>
+
+<div style="display: flex; flex-direction: column; align-items: center; gap: 28px; text-align: center; border: 1px solid #23272e; border-radius: 8px; padding: 40px 24px 36px; box-sizing: border-box">
+<div style="min-height: 320px; width: 100%; display: flex; align-items: center; justify-content: center">
+<div style="position: relative; width: 100%; max-width: 360px; box-sizing: border-box; border: 1px solid #8a6fae; border-radius: 12px; background: #0f1216; padding: 20px 16px 14px; font: 12.5px/19px 'JetBrains Mono', Menlo, monospace; color: #d0d4da; display: flex; flex-direction: column; text-align: left">
+<div style="position: absolute; top: -10px; left: 14px; line-height: 19px; background: #0d0f12; padding: 0 6px; color: #c792ea">◆ master</div>
+<div style="color: #858c97">watching 4 sessions, 1 thread</div>
+<div style="margin-top: 10px; font-size: 11px; letter-spacing: .12em; color: #858c97">NEEDS YOU</div>
+<div><span class="srn-pulse" style="color: #f2c14e">◐</span> flaky-e2e</div>
+<div style="color: #858c97; padding-left: 16px">wants to edit e2e/run.ts</div>
+<div style="display: flex; justify-content: space-between; gap: 8px; padding-left: 16px"><span><span style="color: #c792ea">◆</span> approve the edit</span><span style="color: #ffffff; font-weight: 700; white-space: nowrap">y e n</span></div>
+<div style="margin-top: 8px"><span style="color: #858c97">#</span> eng-platform · Priya</div>
+<div style="color: #858c97; padding-left: 16px">is the deploy blocked on #482?</div>
+<div style="display: flex; justify-content: space-between; gap: 8px; padding-left: 16px"><span><span style="color: #c792ea">◆</span> reply "Not blocked, checks running."</span><span style="color: #ffffff; font-weight: 700; white-space: nowrap">y e n</span></div>
+<div style="margin-top: 10px; border-top: 1px solid #3a3f47; padding-top: 8px"><span style="color: #c792ea">◆ master ›</span> Two things need you. Everything else is quiet.</div>
+<div style="margin-top: 6px; background: #161a1f; padding: 0 8px; color: #858c97">› <span class="srn-cur" style="color: #d0d4da">█</span></div>
+</div>
+</div>
+<p style="margin: 0; display: flex; justify-content: center; align-items: baseline; column-gap: .5em; font-family: 'Instrument Serif', Georgia, serif; font-size: clamp(34px, 3.6vw, 44px); line-height: 1.1"><span style="position: relative; display: inline-block; color: #6b717b">Noise<span style="position: absolute; left: -4%; right: -4%; top: 56%; height: 3px; background: #858c97"></span></span><span style="color: #7fc77f">Clarity</span></p>
+<p style="margin: 0; max-width: 32ch; font-size: 16px; line-height: 1.5; color: #b5bac2; text-wrap: balance">The master contains the overview and can control everything.</p>
+</div>
+
+</div>
+</section>
+
+<!-- ============ INSTALL ============ -->
+<section id="install" style="max-width: 908px; margin: 0 auto; padding: 100px 24px 120px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; text-align: center">
+<p style="margin: 0 0 16px; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; letter-spacing: .14em; color: #858c97">INSTALL</p>
+<h2 style="margin: 0 0 16px; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: clamp(40px, 5.4vw, 68px); line-height: 1.02; color: #e8eaee; text-wrap: balance"><span style="color: #7fc77f">Serenity</span> in one command.</h2>
+<p style="margin: 0 0 48px; max-width: 60ch; color: #b5bac2">Designed for macOS and Linux.</p>
+<ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 44px; width: 100%; max-width: 860px">
+<li style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: baseline; justify-content: center; gap: 14px"><h3 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 30px; line-height: 1.1; color: #e8eaee">Install</h3></div>
+<p style="margin: 0; text-align: center; font-size: 14px; color: #858c97">Using the script</p>
+<div style="display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; align-items: center; gap: 12px; background: #0f1216; border: 1px solid #3a3f47; border-radius: 6px; padding: 8px 8px 8px 18px; text-align: left">
+<code style="flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 14px; line-height: 28px; color: #e8eaee"><span style="color: #858c97">$</span> curl -fsSL https://raw.githubusercontent.com/mukkund1996/serenity/main/scripts/install.sh | sh</code>
+<button type="button" class="srn-copy" data-copy="curl" aria-label="Copy the install command" title="Copy the install command" style="flex: none; width: 44px; height: 44px; border: 0; border-radius: 4px; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0"><span class="srn-done"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7fc77f" stroke-width="2" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span><span class="srn-idle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg></span></button>
+</div>
+<p style="margin: 8px 0 0; font-size: 14px; color: #858c97">Or with Homebrew</p>
+<div style="display: flex; align-items: center; gap: 12px; background: #0f1216; border: 1px solid #3a3f47; border-radius: 6px; padding: 8px 8px 8px 18px; text-align: left">
+<code style="flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 14px; line-height: 28px; color: #e8eaee"><span style="color: #858c97">$</span> brew install --cask claude-code; brew install mukkund1996/tap/serenity</code>
+<button type="button" class="srn-copy" data-copy="brew" aria-label="Copy the Homebrew command" title="Copy the Homebrew command" style="flex: none; width: 44px; height: 44px; border: 0; border-radius: 4px; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0"><span class="srn-done"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7fc77f" stroke-width="2" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span><span class="srn-idle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg></span></button>
+</div>
+</div>
+</li>
+</ol>
+<div style="margin-top: 56px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px 28px">
+<a href="https://github.com/mukkund1996/serenity" style="display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 20px; border: 1px solid #7fc77f; border-radius: 6px; color: #e8eaee; font-weight: 500; box-sizing: border-box">View the source on GitHub <span aria-hidden="true" style="color: #7fc77f">↗</span></a>
+</div>
+</section>
+
+<footer style="border-top: 1px solid #23272e">
+<div style="max-width: 1120px; margin: 0 auto; padding: 28px 24px; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: center; justify-content: space-between; font-size: 14px; color: #858c97">
+<span style="display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', Menlo, monospace; line-height: 1; color: #d0d4da"><span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 15px; line-height: 1; color: #7fc77f; font-family: 'JetBrains Mono', 'Noto Sans Symbols 2', 'Apple Symbols', sans-serif" aria-hidden="true">◈</span><span style="display: inline-flex; align-items: center; height: 16px">serenity</span></span>
+<div style="display: flex; gap: 24px; flex-wrap: wrap">
+<span>__SERENITY_VERSION__ · beta</span>
+<span>MIT license</span>
+<a href="https://github.com/mukkund1996/serenity" style="color: #d0d4da">github.com/mukkund1996/serenity</a>
+</div>
+<p style="flex-basis: 100%; margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: #b5bac2"><span style="color: #7fc77f; font: 500 11px/1 'JetBrains Mono', Menlo, monospace; letter-spacing: .1em; margin-right: 8px">BETA</span>serenity is still in development: expect rough edges and changes between releases.</p>
+<p style="flex-basis: 100%; margin: 0; font-size: 12px; line-height: 1.6; color: #858c97">serenity is an independent open-source project, not affiliated with or endorsed by Anthropic, Slack or Microsoft. Product names are trademarks of their respective owners.</p>
+</div>
+</footer>
+
+</div>
+<script src="site.js" defer></script>
+</body>
+</html>
