@@ -65,6 +65,7 @@ const CHAT_ALLOWED = [
 	"Bash(gh pr view *)",
 	"Bash(gh pr list *)",
 	"mcp__serenity__suggest",
+	"mcp__serenity__send_reply",
 	"mcp__serenity__set_topic",
 	"mcp__serenity__archive_session",
 	"mcp__serenity__open_session",

@@ -184,6 +184,8 @@ export class Daemon {
 				update: (session, patch) => this.update(session, patch),
 				kill: (session) => this.kill(session),
 				open: (session) => this.open(session),
+				reply: async (session, text) =>
+					this.tmux.sendText(await this.requireLivePane(session), text),
 				create: (params) => this.createSession(params),
 				pluginDir: masterPluginPath(opts.home),
 				mcpConfig: (repo) => this.mcpConfig(repo),
