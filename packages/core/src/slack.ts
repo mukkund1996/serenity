@@ -99,6 +99,27 @@ export interface SlackState {
 /** Slack as read for the whole account, before a repo's suggestions are added. */
 export type SlackInbox = Omit<SlackState, "suggestions">;
 
+/**
+ * A Slack message the user dismissed from NEEDS YOU (ADR 0034), kept for
+ * good. Keyed by the message, not the thread: a newer message in the same
+ * thread or DM is a new item.
+ */
+export interface SlackDismissal {
+	channelId: string;
+	/** The dismissed message's ts. */
+	ts: string;
+	/** When it was dismissed, ms since the epoch. */
+	at: number;
+}
+
+/** One Slack message's identity: its channel and ts. */
+export function slackMessageKey(m: { channelId: string; ts: string }): string {
+	return `${m.channelId}@${m.ts}`;
+}
+
+/** How far back the inbox looks, and so how long a dismissal matters to it. */
+const INBOX_WINDOW_MS = 7 * 24 * 3600_000;
+
 export const SLACK_LOGIN_HINT = "Slack needs a login: run serenity slack login";
 
 export const SLACK_INBOX_SCHEMA = {
@@ -140,8 +161,15 @@ export const SLACK_INBOX_SCHEMA = {
 	additionalProperties: false,
 } as const;
 
-export function slackInboxPrompt(now: number): string {
-	const since = new Date(now - 7 * 24 * 3600_000).toISOString().slice(0, 10);
+export function slackInboxPrompt(
+	now: number,
+	dismissed: SlackDismissal[] = [],
+): string {
+	const since = new Date(now - INBOX_WINDOW_MS).toISOString().slice(0, 10);
+	// Older ones are outside the search anyway.
+	const skip = dismissed.filter(
+		(d) => slackTsMs(d.ts) >= now - INBOX_WINDOW_MS,
+	);
 	return [
 		"Find the Slack messages that need the user to act, using only the Slack tools, which read.",
 		"",
@@ -151,6 +179,12 @@ export function slackInboxPrompt(now: number): string {
 		"4. Drop anything the user has already answered: a reply from the user later in the thread or DM, or a reaction from the user on the message. Drop messages the user wrote, bots and integrations, and channel joins.",
 		"5. Read the thread or DM around each one that is left, and keep it only when the user has to do something: answer a question put to them, decide, review or approve, unblock someone, or do a task asked of them.",
 		"   Drop FYI and announcements, thanks and acknowledgements, small talk, questions someone else already answered, requests the author resolved or withdrew, and anything aimed at someone else. When unsure, drop it.",
+		...(skip.length
+			? [
+					"6. Drop these messages the user dismissed, by channel id and ts; a newer message in the same thread or DM still counts:",
+					...skip.map((d) => `   - ${d.channelId} ${d.ts}`),
+				]
+			: []),
 		"",
 		`Return only those, at most ${SLACK_LIMIT}, one per thread; with more, keep the ${SLACK_LIMIT} most pressing. None is a fine answer.`,
 		"- channelId: the channel's id. channel: #name, or for a DM the other person's name.",

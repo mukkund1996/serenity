@@ -208,5 +208,19 @@ export function storageContract(name: string, open: () => Storage): void {
 				wait("b", 30),
 			]);
 		});
+
+		test("slack dismissals: add once per message, list oldest first", () => {
+			storage.slackDismissals.add({ channelId: "C1", ts: "2.0", at: 20 });
+			storage.slackDismissals.add({ channelId: "C1", ts: "1.0", at: 10 });
+			// The same message again keeps the first dismissal.
+			storage.slackDismissals.add({ channelId: "C1", ts: "2.0", at: 30 });
+			// Same ts in another channel is another message.
+			storage.slackDismissals.add({ channelId: "D9", ts: "2.0", at: 40 });
+			expect(storage.slackDismissals.list()).toEqual([
+				{ channelId: "C1", ts: "1.0", at: 10 },
+				{ channelId: "C1", ts: "2.0", at: 20 },
+				{ channelId: "D9", ts: "2.0", at: 40 },
+			]);
+		});
 	});
 }

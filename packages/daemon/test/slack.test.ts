@@ -1,5 +1,10 @@
 import { beforeEach, expect, test } from "bun:test";
-import { SLACK_LOGIN_HINT, SLACK_READ_TOOLS } from "@serenity/core";
+import {
+	createMemoryStorage,
+	SLACK_LOGIN_HINT,
+	SLACK_READ_TOOLS,
+	type SlackDismissalStore,
+} from "@serenity/core";
 import type { ClaudeRunner, JsonRunOptions } from "../src/claude";
 import { SlackWatcher } from "../src/slack";
 
@@ -34,6 +39,7 @@ let broadcasts: number;
 let inboxes: number[];
 let now: number;
 let watcher: SlackWatcher;
+let dismissals: SlackDismissalStore;
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
 
@@ -43,12 +49,18 @@ beforeEach(() => {
 	broadcasts = 0;
 	inboxes = [];
 	now = 1_000_000;
+	dismissals = createMemoryStorage().slackDismissals;
 	watcher?.stop();
-	watcher = new SlackWatcher({
+	watcher = makeWatcher();
+});
+
+function makeWatcher(): SlackWatcher {
+	return new SlackWatcher({
 		runner,
 		model: "haiku",
 		cwd: "/w",
 		mcpConfig: '{"mcpServers":{"slack":{}}}',
+		dismissals,
 		watching: () => open,
 		broadcast: () => broadcasts++,
 		onInbox: (items) => inboxes.push(items.length),
@@ -56,7 +68,7 @@ beforeEach(() => {
 		now: () => now,
 		pollMs: 20,
 	});
-});
+}
 
 test("opening a map reads Slack with only its read tools", async () => {
 	runner.answer = {
@@ -109,4 +121,70 @@ test("an unchanged inbox is not broadcast again", async () => {
 	now += 1000;
 	await watcher.refresh();
 	expect(broadcasts).toBe(0);
+});
+
+test("a dismissed item leaves at once and stays gone on the next read", async () => {
+	runner.answer = {
+		access: "ok",
+		problem: null,
+		items: [
+			message("1730000000.0"),
+			{ ...message("1730000100.0"), channelId: "D2" },
+		],
+	};
+	await watcher.refresh();
+	expect(watcher.state().items).toHaveLength(2);
+	broadcasts = 0;
+	inboxes = [];
+
+	watcher.dismiss("C1", "1730000000.0");
+	expect(watcher.state().items.map((i) => i.channelId)).toEqual(["D2"]);
+	expect(broadcasts).toBe(1);
+	// The advisor hears of it, so the item's suggestion goes too.
+	expect(inboxes).toEqual([1]);
+
+	// The worker is told to skip it, and it is dropped if it comes back anyway.
+	await watcher.refresh();
+	expect(runner.calls.at(-1)?.prompt).toContain("C1 1730000000.0");
+	expect(watcher.state().items.map((i) => i.channelId)).toEqual(["D2"]);
+});
+
+test("a newer message in a dismissed thread shows again", async () => {
+	runner.answer = {
+		access: "ok",
+		problem: null,
+		items: [message("1730000000.0")],
+	};
+	await watcher.refresh();
+	watcher.dismiss("C1", "1730000000.0");
+	expect(watcher.state().items).toHaveLength(0);
+	runner.answer = {
+		access: "ok",
+		problem: null,
+		items: [{ ...message("1730000500.0"), threadTs: "1730000000.0" }],
+	};
+	await watcher.refresh();
+	expect(watcher.state().items.map((i) => i.ts)).toEqual(["1730000500.0"]);
+});
+
+test("dismissals persist: a new watcher on the same store still hides them", async () => {
+	runner.answer = {
+		access: "ok",
+		problem: null,
+		items: [message("1730000000.0")],
+	};
+	watcher.dismiss("C1", "1730000000.0");
+	watcher.dismiss("C1", "1730000000.0");
+	expect(dismissals.list()).toHaveLength(1);
+	watcher.stop();
+	watcher = makeWatcher();
+	await watcher.refresh();
+	expect(watcher.state().items).toHaveLength(0);
+});
+
+test("dismissing something not shown only records it", () => {
+	watcher.dismiss("C9", "1.0");
+	expect(broadcasts).toBe(0);
+	expect(inboxes).toEqual([]);
+	expect(dismissals.list()).toEqual([{ channelId: "C9", ts: "1.0", at: now }]);
 });

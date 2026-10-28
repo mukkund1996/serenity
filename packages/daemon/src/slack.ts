@@ -2,9 +2,11 @@ import {
 	parseSlackInbox,
 	SLACK_INBOX_SCHEMA,
 	SLACK_READ_TOOLS,
+	type SlackDismissalStore,
 	type SlackInbox,
 	type SlackItem,
 	slackInboxPrompt,
+	slackMessageKey,
 } from "@serenity/core";
 import type { ClaudeRunner } from "./claude";
 
@@ -15,6 +17,8 @@ export interface SlackHost {
 	cwd: string;
 	/** `--mcp-config` JSON holding only the Slack server. */
 	mcpConfig: string;
+	/** Messages the user dismissed (ADR 0034); they never show again. */
+	dismissals: SlackDismissalStore;
 	/** Whether any map of a repo with Slack on is open; polling stops when none is. */
 	watching(): boolean;
 	/** Sends the new state to every open map of a repo with Slack on. */
@@ -41,8 +45,12 @@ export class SlackWatcher {
 	private current: SlackInbox = { items: [], error: null, checkedAt: null };
 	private timer: ReturnType<typeof setInterval> | null = null;
 	private inflight = false;
+	/** slackMessageKey of every dismissed message. */
+	private readonly dismissed: Set<string>;
 
-	constructor(private readonly host: SlackHost) {}
+	constructor(private readonly host: SlackHost) {
+		this.dismissed = new Set(host.dismissals.list().map(slackMessageKey));
+	}
 
 	state(): SlackInbox {
 		return this.current;
@@ -66,7 +74,7 @@ export class SlackWatcher {
 		let next: SlackInbox;
 		try {
 			const raw = await this.host.runner.runJson({
-				prompt: slackInboxPrompt(this.host.now()),
+				prompt: slackInboxPrompt(this.host.now(), this.host.dismissals.list()),
 				model: this.host.model,
 				schema: SLACK_INBOX_SCHEMA,
 				cwd: this.host.cwd,
@@ -76,13 +84,18 @@ export class SlackWatcher {
 			});
 			const inbox = parseSlackInbox(raw);
 			if (!inbox) throw new Error("unusable answer");
-			next = { ...inbox, checkedAt: this.host.now() };
+			// The worker is told to skip dismissed messages; this makes sure.
+			next = {
+				...inbox,
+				items: this.undismissed(inbox.items),
+				checkedAt: this.host.now(),
+			};
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			this.host.log(`slack inbox failed: ${message}`);
 			// A failed read keeps the last items rather than blanking the section.
 			next = {
-				items: this.current.items,
+				items: this.undismissed(this.current.items),
 				error: `Slack: ${message.slice(0, 80)}`,
 				checkedAt: this.host.now(),
 			};
@@ -95,6 +108,27 @@ export class SlackWatcher {
 		this.current = next;
 		if (changed) this.host.broadcast();
 		if (!next.error) this.host.onInbox(next.items);
+	}
+
+	/**
+	 * x on a Slack item (ADR 0034): it leaves NEEDS YOU now and for good,
+	 * across restarts. Only this message: a newer one in its thread shows.
+	 */
+	dismiss(channelId: string, ts: string): void {
+		const key = slackMessageKey({ channelId, ts });
+		if (!this.dismissed.has(key)) {
+			this.host.dismissals.add({ channelId, ts, at: this.host.now() });
+			this.dismissed.add(key);
+		}
+		const items = this.undismissed(this.current.items);
+		if (items.length === this.current.items.length) return;
+		this.current = { ...this.current, items };
+		this.host.broadcast();
+		this.host.onInbox(items);
+	}
+
+	private undismissed(items: SlackItem[]): SlackItem[] {
+		return items.filter((i) => !this.dismissed.has(slackMessageKey(i)));
 	}
 
 	stop(): void {

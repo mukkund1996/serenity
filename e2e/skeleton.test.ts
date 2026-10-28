@@ -105,6 +105,24 @@ async function newSession(name: string): Promise<void> {
 	await until(() => !screen().includes("Working dir"), "the dialog to close");
 }
 
+/** The Slack messages the fake inbox worker returns (SERENITY_FAKE_SLACK). */
+const slackFixture = () => join(dir, "slack.json");
+
+/** A Slack mention, as the inbox worker returns it. */
+function slackMessage(ts: string, threadTs: string, action: string) {
+	return {
+		channelId: "C1",
+		channel: "#eng",
+		author: "Dana",
+		text: "is the deploy out?",
+		reason: "mention",
+		action,
+		ts,
+		threadTs,
+		permalink: null,
+	};
+}
+
 /** Where the fake gh reads PR fixtures (<branch>.json) and logs edits. */
 const ghDir = () => join(dir, "gh");
 
@@ -150,6 +168,13 @@ beforeAll(() => {
 	mkdirSync(home);
 	mkdirSync(join(dir, "gh"));
 	writeFileSync(join(home, ".doctor-ok"), "e2e\n");
+	// Slack on for the demo repo; the fake inbox is empty until a test fills it.
+	mkdirSync(join(dir, "config", "serenity"), { recursive: true });
+	writeFileSync(
+		join(dir, "config", "serenity", "config.json"),
+		JSON.stringify({ slack: { repos: [repo] } }),
+	);
+	writeFileSync(slackFixture(), "[]");
 	const git = (...args: string[]) =>
 		spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
 	git("init", "-q", "-b", "main");
@@ -178,6 +203,9 @@ beforeAll(() => {
 		SERENITY_GH_BIN: FAKE_GH,
 		SERENITY_FAKE_GH_DIR: ghDir(),
 		SERENITY_REVIEW_POLL_MS: "2000",
+		SERENITY_SLACK_POLL_MS: "1000",
+		SERENITY_FAKE_SLACK: slackFixture(),
+		XDG_CONFIG_HOME: join(dir, "config"),
 		CLAUDE_CONFIG_DIR: join(dir, "claude"),
 	};
 	const envArgs = Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
@@ -683,6 +711,65 @@ test(
 		await waitFor(/▸/);
 		keys("Escape");
 		await until(() => !screen().includes("▸"), "Esc to close the message");
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"x dismisses a Slack item for good; a newer message in its thread shows again",
+	async () => {
+		// NEEDS YOU may be long by now: count its items, and step to Dana's.
+		const needCount = () =>
+			Number(screen().match(/(\d+) things? needs? you/)?.[1] ?? 0);
+		const selectedRow = () =>
+			screen()
+				.split("\n")
+				.find((line) => line.includes("▸")) ?? "";
+		const selectDana = async () => {
+			keys("c");
+			keys("Escape");
+			await until(() => !selectedRow(), "Esc to leave the master");
+			keys("Enter");
+			await waitFor(/▸/);
+			for (let i = 0; i < 15 && !selectedRow().includes("Dana"); i++) {
+				keys("Down");
+				await Bun.sleep(150);
+			}
+			expect(selectedRow()).toContain("Dana");
+		};
+		const before = needCount();
+		const now = Math.floor(Date.now() / 1000);
+		const first = `${now - 60}.000100`;
+		writeFileSync(
+			slackFixture(),
+			JSON.stringify([
+				slackMessage(first, first, "Answer whether the deploy is out"),
+			]),
+		);
+		await until(() => needCount() === before + 1, "the Slack item");
+		await selectDana();
+		expect(screen()).toContain("Answer whether the deploy is out");
+		keys("x");
+		await waitFor(/dismissed Dana's message/);
+		expect(needCount()).toBe(before);
+		expect(screen()).not.toContain("Answer whether the deploy is out");
+		// The inbox still returns it; later reads keep it out.
+		await Bun.sleep(2500);
+		expect(needCount()).toBe(before);
+
+		const reply = `${now}.000200`;
+		writeFileSync(
+			slackFixture(),
+			JSON.stringify([
+				slackMessage(reply, first, "Say when the deploy goes out"),
+			]),
+		);
+		await until(() => needCount() === before + 1, "the newer message");
+		await selectDana();
+		expect(screen()).toContain("Say when the deploy goes out");
+		writeFileSync(slackFixture(), "[]");
+		await until(() => needCount() === before, "the item to clear");
+		keys("Escape");
 	},
 	STEP_TIMEOUT,
 );
