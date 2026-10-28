@@ -19,7 +19,7 @@ ADR 0023 shows the Slack threads and mentions waiting on the user. The answer to
 - **`y` on a reply posts it in the thread.** The token is the `claude` CLI's (0023), so a one-shot Haiku call does the posting. It is allowed exactly one tool, `slack_send_message`, and is told to send the text verbatim; it returns whether Slack took it. A failed send keeps the suggestion to try again. After sending, Slack is read again, so the item leaves the inbox.
 - **`e`** edits the reply text (or the question) in the reply input first; `Enter` then does what `y` does.
 - **`n`** declines. The item is not suggested again until someone writes in its thread (a newer message), which also replaces a pending suggestion.
-- **Kept in memory,** not in the suggestions table: Slack items are not sessions, and they are re-read every few minutes. A daemon restart suggests again from the next read.
+- **Kept in memory,** not in the suggestions table: Slack items are not sessions, and they are re-read every minute. A daemon restart suggests again from the next read.
 
 ## Consequences
 - One Sonnet call per new item per open repo with Slack on, plus one per answered question, and one Haiku call per sent reply.

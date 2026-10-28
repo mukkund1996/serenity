@@ -83,7 +83,7 @@ test("opening a map reads Slack with only its read tools", async () => {
 	expect(runner.calls[0]?.mcpConfig).toContain("slack");
 	expect(watcher.state().items.map((i) => i.id)).toEqual(["C1:1730000000.0"]);
 	expect(broadcasts).toBe(1);
-	// Opening another map within a minute does not read again.
+	// Opening another map within 15 s does not read again.
 	watcher.watch();
 	await settle();
 	expect(runner.calls).toHaveLength(1);

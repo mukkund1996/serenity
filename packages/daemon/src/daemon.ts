@@ -107,8 +107,8 @@ const DEFAULT_STARTUP_GRACE_MS = 5000;
 const DEFAULT_WORKER_DEBOUNCE_MS = 1500;
 /** Review requests fire no event, so an open map polls them this often. */
 const DEFAULT_REVIEW_POLL_MS = 5 * 60_000;
-/** Neither do Slack messages; each read is a model call, so it runs as seldom. */
-const DEFAULT_SLACK_POLL_MS = 5 * 60_000;
+/** Neither do Slack messages. Each read is a model call, but a read already in flight is never doubled, so a slow one only skips ticks. */
+const DEFAULT_SLACK_POLL_MS = 60_000;
 /** Messages of the master conversation sent to clients. */
 const CONVERSATION_SHOWN = 4;
 
