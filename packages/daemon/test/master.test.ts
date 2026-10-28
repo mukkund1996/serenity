@@ -393,6 +393,99 @@ describe("chat", () => {
 		expect(opened).toEqual(["api-auth"]);
 	});
 
+	describe("a name shared by an archived and a live session", () => {
+		// "api-auth" was archived, then a new session took the name. The archived
+		// one is listed first, and the newer by every measure but status.
+		beforeEach(() => {
+			put({ id: "old", name: "api-auth", status: "archived", createdAt: 1 });
+			put({ id: "live", name: "api-auth", status: "idle", createdAt: 2 });
+		});
+
+		test("send_reply reaches the live one", async () => {
+			storage.conversation.append({
+				repo: REPO,
+				from: "you",
+				text: "tell api-auth 'yes'",
+				at: ++now,
+			});
+			const result = await master.handleTool(REPO, "send_reply", {
+				session: "api-auth",
+				text: "yes",
+			});
+			expect(result.isError).toBeUndefined();
+			expect(replies).toEqual([{ name: "api-auth", text: "yes" }]);
+		});
+
+		test("suggest is shown for the live one", async () => {
+			storage.sessions.put({
+				...(storage.sessions.get("live") as Session),
+				status: "waiting",
+				waitingOn: "question",
+				ask: "15m?",
+			});
+			const result = await master.handleTool(REPO, "suggest", {
+				session: "api-auth",
+				kind: "reply",
+				label: 'Reply "yes"',
+				text: "yes",
+			});
+			expect(result.isError).toBeUndefined();
+			expect(storage.suggestions.listPending(REPO)).toMatchObject([
+				{ sessionId: "live", text: "yes" },
+			]);
+		});
+
+		test("session_status and watch_session read the live one", async () => {
+			const status = await master.handleTool(REPO, "session_status", {
+				session: "api-auth",
+			});
+			expect(status.text).toContain("idle");
+			expect(status.text).not.toContain("archived");
+			storage.sessions.put({
+				...(storage.sessions.get("live") as Session),
+				status: "working",
+			});
+			const watch = await master.handleTool(REPO, "watch_session", {
+				session: "api-auth",
+				note: "tell the user",
+			});
+			expect(watch.isError).toBeUndefined();
+			expect(watch.text).toContain("Watching api-auth");
+			// Fires for the live session's turn ending, not the archived one's.
+			change("live", { status: "idle" });
+			await settle();
+			expect(runner.sent.join("\n")).toContain("api-auth");
+		});
+
+		test("open_session, set_topic and archive_session act on the live one", async () => {
+			await master.handleTool(REPO, "open_session", { session: "api-auth" });
+			expect(opened).toEqual(["api-auth"]);
+			await master.handleTool(REPO, "set_topic", {
+				session: "api-auth",
+				topic: "auth",
+			});
+			expect(storage.sessions.get("live")?.topic).toBe("auth");
+			expect(storage.sessions.get("old")?.topic).toBeNull();
+			const archive = await master.handleTool(REPO, "archive_session", {
+				session: "api-auth",
+			});
+			expect(archive.text).toBe("Stopped and archived api-auth.");
+			expect(killed).toEqual(["api-auth"]);
+		});
+
+		test("once the live one goes, the archived one is still found", async () => {
+			storage.sessions.put({
+				...(storage.sessions.get("live") as Session),
+				status: "archived",
+			});
+			const status = await master.handleTool(REPO, "session_status", {
+				session: "api-auth",
+			});
+			expect(status.isError).toBeUndefined();
+			expect(status.text).toContain("archived");
+		});
+	});
+
 	test("create_session starts a worktree session with the brief's prompt", async () => {
 		const result = await master.handleTool(REPO, "create_session", {
 			name: "api-auth",

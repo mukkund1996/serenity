@@ -9,6 +9,7 @@ import {
 	chatSnapshot,
 	confirmedReply,
 	confirmedSlackSend,
+	findSessionByName,
 	MASTER_SLACK_PROMPT,
 	MASTER_SYSTEM_PROMPT,
 	type MasterPermission,
@@ -436,9 +437,10 @@ export class MasterSupervisor {
 		if (name === "session_status" && !args.session)
 			return { text: this.snapshot(repo) };
 		if (name === "create_session") return this.createSession(repo, args);
-		const session = this.host.storage.sessions
-			.listByRepo(repo)
-			.find((s) => s.name === args.session);
+		const session = findSessionByName(
+			this.host.storage.sessions.listByRepo(repo),
+			args.session,
+		);
 		if (!session)
 			return {
 				text: `No session named ${String(args.session)}.`,

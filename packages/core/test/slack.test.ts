@@ -165,6 +165,22 @@ describe("suggestions", () => {
 		expect(text).not.toContain("billing [unsorted] working (can be asked)");
 	});
 
+	test("a name shared with an archived session means the live one", () => {
+		const archived = makeSession({ id: "old", status: "archived" });
+		const reply = {
+			kind: "reply",
+			label: 'Reply "yes"',
+			text: "yes",
+			session: "api-auth",
+		};
+		expect(
+			parseSlackSuggestion(reply, slackItem, [archived, idle], false),
+		).toMatchObject({ sessionId: "s1" });
+		expect(
+			parseSlackSuggestion(reply, slackItem, [idle, archived], false),
+		).toMatchObject({ sessionId: "s1" });
+	});
+
 	test("a reply or an ask to a free session; nothing else", () => {
 		const reply = parseSlackSuggestion(
 			{ kind: "reply", label: 'Reply "yes"', text: "yes", session: "api-auth" },
