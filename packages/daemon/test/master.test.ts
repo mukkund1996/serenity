@@ -448,3 +448,158 @@ describe("chat", () => {
 		expect(JSON.parse((await answer).text).behavior).toBe("deny");
 	});
 });
+
+describe("status and watches", () => {
+	const slackSend = (message: string) =>
+		master.handleTool(REPO, "request_permission", {
+			tool_name: "mcp__slack__slack_send_message",
+			input: { channel_id: "C1", message },
+		});
+
+	function confirmDraft(text: string): void {
+		storage.conversation.append({
+			repo: REPO,
+			from: "master",
+			text: `To #eng:\n\n> ${text}\n\nSend it when api finishes?`,
+			at: 1,
+		});
+		storage.conversation.append({
+			repo: REPO,
+			from: "you",
+			text: "yes",
+			at: 2,
+		});
+	}
+
+	test("session_status reads the session as it is now, or every session", async () => {
+		const s = put({ name: "api", status: "working", lastPrompt: "add auth" });
+		change(s.id, { status: "idle", lastAssistantMessage: "Auth added." });
+		const one = await master.handleTool(REPO, "session_status", {
+			session: "api",
+		});
+		expect(one.text).toContain("api [");
+		expect(one.text).toContain("idle");
+		expect(one.text).toContain("last reply: Auth added.");
+		const all = await master.handleTool(REPO, "session_status", {});
+		expect(all.text).toContain("Sessions now:");
+	});
+
+	test("a watch tells the chat when the turn ends, once, and not as the user", async () => {
+		const s = put({ name: "api", status: "working" });
+		const out = await master.handleTool(REPO, "watch_session", {
+			session: "api",
+			note: "tell the user",
+		});
+		expect(out.isError).toBeFalsy();
+		change(s.id, { status: "working", lastPrompt: "more" });
+		expect(runner.sent).toEqual([]);
+		change(s.id, { status: "idle", lastAssistantMessage: "Done." });
+		expect(runner.sent).toHaveLength(1);
+		expect(runner.sent[0]).toContain("serenity: api is now idle");
+		expect(runner.sent[0]).toContain("Its last reply: Done.");
+		expect(storage.conversation.listRecent(REPO, 5)).toEqual([]);
+		change(s.id, { status: "working" });
+		change(s.id, { status: "idle" });
+		expect(runner.sent).toHaveLength(1);
+	});
+
+	test("waiting on the user tells the chat but stays watched", async () => {
+		const s = put({ name: "api", status: "working" });
+		await master.handleTool(REPO, "watch_session", {
+			session: "api",
+			note: "tell the user",
+		});
+		change(s.id, {
+			status: "waiting",
+			waitingOn: "permission",
+			ask: "wants to run make",
+		});
+		expect(runner.sent[0]).toContain("It asks: wants to run make");
+		runner.emit({ type: "result", text: "", isError: false });
+		change(s.id, { status: "working", waitingOn: null, ask: null });
+		change(s.id, { status: "idle" });
+		expect(runner.sent).toHaveLength(2);
+		expect(runner.sent[1]).toContain("The watch is over.");
+	});
+
+	test("a watch that fires while the chat is busy waits for its turn to end", async () => {
+		const s = put({ name: "api", status: "working" });
+		await master.handleTool(REPO, "watch_session", {
+			session: "api",
+			note: "tell the user",
+		});
+		master.message(REPO, "what's up?");
+		change(s.id, { status: "idle" });
+		expect(runner.sent).toHaveLength(1);
+		runner.emit({ type: "result", text: "busy", isError: false });
+		expect(runner.sent).toHaveLength(2);
+		expect(runner.sent[1]).toContain("serenity: api is now idle");
+	});
+
+	test("a confirmed Slack message is held until the session finishes, then sent once", async () => {
+		const s = put({ name: "api", status: "working" });
+		confirmDraft("api is done");
+		const out = await master.handleTool(REPO, "watch_session", {
+			session: "api",
+			note: "send the confirmed message to #eng",
+			slack_text: "api is done",
+		});
+		expect(out.isError).toBeFalsy();
+		storage.conversation.append({
+			repo: REPO,
+			from: "master",
+			text: "I'll send it when api finishes.",
+			at: 3,
+		});
+		// Not finished yet: the send asks the user.
+		const early = slackSend("api is done");
+		expect(master.permissions(REPO)).toHaveLength(1);
+		master.answerPermission(master.permissions(REPO)[0]?.id as string, false);
+		expect(JSON.parse((await early).text).behavior).toBe("deny");
+
+		change(s.id, { status: "idle", lastAssistantMessage: "Done." });
+		expect(runner.sent[0]).toContain("may go out now");
+		expect(JSON.parse((await slackSend("api is done")).text).behavior).toBe(
+			"allow",
+		);
+		// Once only.
+		const again = slackSend("api is done");
+		expect(master.permissions(REPO)).toHaveLength(1);
+		master.answerPermission(master.permissions(REPO)[0]?.id as string, false);
+		expect(JSON.parse((await again).text).behavior).toBe("deny");
+	});
+
+	test("a Slack message the user did not just confirm cannot be staged", async () => {
+		put({ name: "api", status: "working" });
+		confirmDraft("api is done");
+		const out = await master.handleTool(REPO, "watch_session", {
+			session: "api",
+			note: "send it",
+			slack_text: "api is done, deploying now",
+		});
+		expect(out.isError).toBe(true);
+	});
+
+	test("an ended session cannot be watched, and a watch can be cancelled", async () => {
+		const s = put({ name: "api", status: "working" });
+		put({ id: "s2", name: "old", status: "dead" });
+		expect(
+			(
+				await master.handleTool(REPO, "watch_session", {
+					session: "old",
+					note: "x",
+				})
+			).isError,
+		).toBe(true);
+		await master.handleTool(REPO, "watch_session", {
+			session: "api",
+			note: "x",
+		});
+		await master.handleTool(REPO, "watch_session", {
+			session: "api",
+			cancel: true,
+		});
+		change(s.id, { status: "idle" });
+		expect(runner.sent).toEqual([]);
+	});
+});

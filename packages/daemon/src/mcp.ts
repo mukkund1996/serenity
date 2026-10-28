@@ -63,6 +63,43 @@ export const MCP_TOOLS = [
 		},
 	},
 	{
+		name: "session_status",
+		description:
+			"A session's status right now (working, waiting, idle, done, dead, archived), what it waits on, its PR, last prompt and last reply. Without session, every session. The snapshot in the user's message is as old as that message; use this for anything newer.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				session: {
+					type: "string",
+					description: "Session name; leave out for all sessions",
+				},
+			},
+		},
+	},
+	{
+		name: "watch_session",
+		description:
+			'Hear when a session\'s turn ends, for something to do once it finishes ("tell me when api-auth is done", "post this to Slack when it finishes"). Returns at once; serenity sends you a message when the session stops working: finished, waiting on the user (it stays watched), or ended. One watch per session; a new one replaces it, cancel removes it. slack_text: a Slack message the user has just confirmed in the chat, character for character; it may be sent only once the session finishes.',
+		inputSchema: {
+			type: "object",
+			properties: {
+				session: { type: "string" },
+				note: {
+					type: "string",
+					description:
+						"What to do when its turn ends, e.g. send the confirmed Slack message to #eng in Dana's thread",
+				},
+				slack_text: {
+					type: "string",
+					description:
+						"The exact Slack message the user just confirmed, if one goes out when it finishes",
+				},
+				cancel: { type: "boolean", description: "Stop watching it" },
+			},
+			required: ["session"],
+		},
+	},
+	{
 		name: "request_permission",
 		description: "Asks the user in serenity whether a tool call may run.",
 		inputSchema: {

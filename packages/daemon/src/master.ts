@@ -25,9 +25,13 @@ import {
 	SUGGESTION_SCHEMA,
 	type Suggestion,
 	type SuggestionKind,
+	sameSlackText,
+	sessionStatusText,
 	suggestionPrompt,
 	summaryPrompt,
 	summarySchema,
+	turnEnded,
+	watchMessage,
 } from "@serenity/core";
 import type { ChatProcess, ClaudeRunner } from "./claude";
 import MASTER_SKILL from "./master-skill.md" with { type: "text" };
@@ -71,6 +75,16 @@ interface Chat {
 	claudeSessionId: string | null;
 	thinking: boolean;
 	reply: string[];
+	/** serenity's own messages (a watch fired) held until the current turn ends. */
+	queued: string[];
+}
+
+/** A session the chat asked to hear about when its turn ends (watch_session). */
+interface Watch {
+	repo: string;
+	note: string;
+	/** A Slack message the user confirmed, to go out once the session finishes. */
+	slack: string | null;
 }
 
 interface PendingPermission {
@@ -92,6 +106,10 @@ export class MasterSupervisor {
 	/** Claude session ids of chats that ended, to resume them. */
 	private readonly chatSessions = new Map<string, string>();
 	private readonly pending = new Map<string, PendingPermission>();
+	/** session id → its watch. */
+	private readonly watches = new Map<string, Watch>();
+	/** repo → confirmed Slack messages released by a finished watch, each sent once. */
+	private readonly released = new Map<string, string[]>();
 
 	constructor(
 		private readonly host: MasterHost,
@@ -124,6 +142,23 @@ export class MasterSupervisor {
 			this.supersede(after.id);
 		if (before && needsSuggestion(before, after))
 			this.schedule("suggest", after.id, () => this.suggest(after.id));
+		if (before && turnEnded(before, after)) this.fireWatch(after);
+	}
+
+	/** Tells the chat a watched session's turn ended (ADR 0032). */
+	private fireWatch(session: Session): void {
+		const watch = this.watches.get(session.id);
+		if (!watch) return;
+		const finished = session.status === "idle" || session.status === "done";
+		// Waiting on the user is not finished: it stays watched.
+		if (session.status !== "waiting") this.watches.delete(session.id);
+		if (watch.slack && finished)
+			this.released.set(watch.repo, [
+				...(this.released.get(watch.repo) ?? []),
+				watch.slack,
+			]);
+		this.host.log(`watch on ${session.name} fired (${session.status})`);
+		this.tell(watch.repo, watchMessage(session, watch.note, !!watch.slack));
 	}
 
 	// ------------------------------------------------------------ one-shot jobs
@@ -289,15 +324,29 @@ export class MasterSupervisor {
 			text,
 			at: this.host.now(),
 		});
-		const chat = this.chats.get(repo) ?? this.startChat(repo);
-		chat.thinking = true;
-		chat.reply = [];
-		const snapshot = chatSnapshot(
+		this.send(repo, chatMessage(this.snapshot(repo), text));
+	}
+
+	/** serenity's own message to the chat; never stored as the user's, so it confirms nothing. */
+	private tell(repo: string, text: string): void {
+		const chat = this.chats.get(repo);
+		if (chat?.thinking) chat.queued.push(text);
+		else this.send(repo, `${this.snapshot(repo)}\n\n${text}`);
+	}
+
+	private snapshot(repo: string): string {
+		return chatSnapshot(
 			this.host.storage.sessions.listByRepo(repo),
 			this.host.storage.suggestions.listPending(repo),
 			this.host.slack(repo)?.items ?? null,
 		);
-		chat.process.send(chatMessage(snapshot, text));
+	}
+
+	private send(repo: string, text: string): void {
+		const chat = this.chats.get(repo) ?? this.startChat(repo);
+		chat.thinking = true;
+		chat.reply = [];
+		chat.process.send(text);
 		this.host.broadcast(repo);
 	}
 
@@ -307,6 +356,7 @@ export class MasterSupervisor {
 			claudeSessionId: this.chatSessions.get(repo) ?? null,
 			thinking: false,
 			reply: [],
+			queued: [],
 		};
 		const slack = !!this.host.slack(repo);
 		chat.process = this.runner.startChat(
@@ -343,6 +393,8 @@ export class MasterSupervisor {
 						this.errors.set(repo, `master: ${event.text.slice(0, 120)}`);
 					else this.errors.delete(repo);
 					this.host.broadcast(repo);
+					const next = chat.queued.shift();
+					if (next) this.tell(repo, next);
 				} else if (event.type === "exit") {
 					if (this.chats.get(repo) !== chat) return;
 					this.chats.delete(repo);
@@ -354,6 +406,8 @@ export class MasterSupervisor {
 					chat.thinking = false;
 					this.host.log(`master chat for ${repo} exited (${event.code})`);
 					this.host.broadcast(repo);
+					// A fresh chat (resumed) still hears what was held.
+					for (const text of chat.queued.splice(0)) this.tell(repo, text);
 				}
 			},
 		);
@@ -373,6 +427,8 @@ export class MasterSupervisor {
 	): Promise<MasterToolResult> {
 		if (name === "request_permission")
 			return this.requestPermission(repo, args);
+		if (name === "session_status" && !args.session)
+			return { text: this.snapshot(repo) };
 		const session = this.host.storage.sessions
 			.listByRepo(repo)
 			.find((s) => s.name === args.session);
@@ -409,6 +465,17 @@ export class MasterSupervisor {
 			return { text: `Stopped and archived ${session.name}.` };
 		}
 
+		if (name === "session_status")
+			return {
+				text: sessionStatusText(
+					session,
+					this.host.storage.suggestions.listPending(repo),
+					this.host.now(),
+				),
+			};
+
+		if (name === "watch_session") return this.watch(repo, session, args);
+
 		if (name === "open_session") {
 			await this.host.open(session);
 			return { text: `Opened ${session.name} beside the map.` };
@@ -432,19 +499,68 @@ export class MasterSupervisor {
 		return { text: `Unknown tool ${name}.`, isError: true };
 	}
 
+	private watch(
+		repo: string,
+		session: Session,
+		args: Record<string, unknown>,
+	): MasterToolResult {
+		if (args.cancel === true) {
+			const had = this.watches.delete(session.id);
+			return {
+				text: had
+					? `Stopped watching ${session.name}.`
+					: `${session.name} was not watched.`,
+			};
+		}
+		if (session.status === "dead" || session.status === "archived")
+			return { text: `${session.name} has ended.`, isError: true };
+		const note = typeof args.note === "string" ? args.note.trim() : "";
+		if (!note)
+			return {
+				text: "Say in note what to do when its turn ends.",
+				isError: true,
+			};
+		const slack =
+			typeof args.slack_text === "string" && args.slack_text.trim()
+				? args.slack_text
+				: null;
+		// The same proof as a send in the chat (ADR 0030): the user's latest message answered the draft.
+		if (
+			slack &&
+			!confirmedSlackSend(
+				this.host.storage.conversation.listRecent(repo, 2),
+				slack,
+			)
+		)
+			return {
+				text: "slack_text must be the exact message your last reply showed and the user just confirmed. Show the draft and ask first.",
+				isError: true,
+			};
+		this.watches.set(session.id, { repo, note, slack });
+		const now =
+			session.status === "working"
+				? "It is working now; serenity messages you when its turn ends."
+				: `It is ${session.status} now, not working; serenity messages you when its next turn ends.`;
+		return {
+			text: `Watching ${session.name}. ${now}${slack ? " The confirmed Slack message goes out only once it finishes." : ""} End your turn now; don't wait or poll.`,
+		};
+	}
+
 	private requestPermission(
 		repo: string,
 		args: Record<string, unknown>,
 	): Promise<MasterToolResult> {
 		const input = (args.input ?? {}) as Record<string, unknown>;
 		const toolName = String(args.tool_name ?? "a tool");
-		// A Slack message the user just confirmed in the chat goes out (ADR 0030).
+		// A Slack message the user just confirmed in the chat goes out (ADR 0030),
+		// and so does one confirmed for a watched session that has finished (0032).
 		if (
 			toolName === SLACK_SEND_TOOL &&
-			confirmedSlackSend(
+			(confirmedSlackSend(
 				this.host.storage.conversation.listRecent(repo, 2),
 				input.message,
-			)
+			) ||
+				this.takeReleased(repo, input.message))
 		) {
 			this.host.log(`master sent a confirmed Slack message for ${repo}`);
 			return Promise.resolve({
@@ -480,6 +596,15 @@ export class MasterSupervisor {
 			this.pending.set(permission.id, { permission, resolve: finish, timer });
 			this.host.broadcast(repo);
 		});
+	}
+
+	/** Uses up a released Slack message with this text; false if there is none. */
+	private takeReleased(repo: string, message: unknown): boolean {
+		const released = this.released.get(repo) ?? [];
+		const i = released.findIndex((text) => sameSlackText(text, message));
+		if (i === -1) return false;
+		released.splice(i, 1);
+		return true;
 	}
 
 	answerPermission(id: string, allow: boolean): boolean {

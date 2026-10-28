@@ -37,6 +37,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0029](0029-website-on-github-pages.md) | The website: static page on GitHub Pages at getserenity.dev, release version filled in at deploy | Accepted |
 | [0030](0030-master-skill-auto-mode-confirmed-slack.md) | The master's skill, auto mode, and Slack messages sent once confirmed in the chat | Accepted |
 | [0031](0031-slack-joins-needs-you.md) | Slack joins NEEDS YOU: only mentions and DMs that need an action, at most three; no SLACK section, `[` `]` back to topics | Accepted |
+| [0032](0032-master-watches-sessions.md) | The master reads status on demand and watches sessions; hook status is checked against Claude's own | Accepted |
 
 ## System at a glance
 
@@ -51,7 +52,7 @@ All `claude` processes run on the user's own Claude login (0007).
              ┌──────────────── serenityd (one per machine, state keyed by repo) ───────────────┐
              │ session registry · status reducer · tmux driver · git/worktree driver · gh driver │
              │ storage (interface) ── SQLite                                                    │
-             │ MCP server for the chat (suggest / set_topic / archive / open / permission)     │
+             │ MCP server for the chat (suggest / topic / archive / open / status / watch)     │
              │ master supervisor                                                                │
              │   ├─ Opus: long-lived `claude -p` stream-json  (chat; uses the MCP tools)       │
              │   ├─ Haiku: one-shot per event → JSON (summary, ask, finished, topic)        │
