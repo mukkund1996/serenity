@@ -377,7 +377,7 @@ function Conversation({ messages }: { messages: MasterMessage[] }) {
 export const MASTER_INPUT = "input";
 /** Element id prefix of the master's review-request rows. */
 export const REVIEW_ROW = "rv:";
-/** Element id prefix of a Slack item in NEEDS YOU (ADR 0030). */
+/** Element id prefix of a Slack item in NEEDS YOU (ADR 0031). */
 export const SLACK_NEED = "sl:";
 
 /** A row with text on the left and a fixed part on the right. */
@@ -459,7 +459,7 @@ function ReviewSection({
 }
 
 /**
- * A Slack mention or DM in NEEDS YOU (ADR 0030): who wrote and where, its
+ * A Slack mention or DM in NEEDS YOU (ADR 0031): who wrote and where, its
  * age, what the user has to do, and the ◆ suggestion (ADR 0024).
  */
 function SlackNeedItem({

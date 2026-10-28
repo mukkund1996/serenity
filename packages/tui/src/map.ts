@@ -46,7 +46,7 @@ export type MasterItem =
 			replyText: string | null;
 	  }
 	| {
-			/** A Slack mention or DM that needs the user (ADR 0030). */
+			/** A Slack mention or DM that needs the user (ADR 0031). */
 			kind: "slack";
 			item: SlackItem;
 			suggestion: SlackSuggestion | null;

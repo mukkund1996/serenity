@@ -1,4 +1,4 @@
-# 0030 · Slack joins NEEDS YOU: only mentions and DMs that need an action, at most three
+# 0031 · Slack joins NEEDS YOU: only mentions and DMs that need an action, at most three
 
 **Status:** Accepted · 2026-10-28 · Amends 0023
 

@@ -207,7 +207,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 	const github = state?.github ?? { user: null, reviewRequests: [] };
 	const slack = state?.slack ?? null;
-	/** Slack's mentions and DMs that need the user; they close NEEDS YOU (ADR 0030). */
+	/** Slack's mentions and DMs that need the user; they close NEEDS YOU (ADR 0031). */
 	const slackItems = slack?.items ?? [];
 	const slackSuggestionFor = (itemId: string | undefined) =>
 		slack?.suggestions.find((g) => g.itemId === itemId) ?? null;

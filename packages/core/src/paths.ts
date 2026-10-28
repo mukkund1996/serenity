@@ -14,6 +14,8 @@ export function serenityHome(env: NodeJS.ProcessEnv = process.env): string {
 export const socketPath = (home: string) => join(home, "serenity.sock");
 export const dbPath = (home: string) => join(home, "serenity.db");
 export const daemonLogPath = (home: string) => join(home, "daemon.log");
+/** The plugin holding the master chat's skill, rewritten on every daemon start. */
+export const masterPluginPath = (home: string) => join(home, "master-plugin");
 export const hookSettingsPath = (home: string) =>
 	join(home, "claude-hooks.json");
 /** Claude Code's own config dir; CLAUDE_CONFIG_DIR moves it, as in Claude Code. */

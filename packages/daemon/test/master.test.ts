@@ -78,6 +78,7 @@ beforeEach(() => {
 			open: async (session) => {
 				opened.push(session.name);
 			},
+			pluginDir: "/tmp/master-plugin",
 			mcpConfig: () => "{}",
 			slack: () => null,
 			workerCwd: "/tmp",
@@ -388,6 +389,54 @@ describe("chat", () => {
 		});
 		expect(master.permissions(REPO)).toEqual([]);
 		expect(master.answerPermission(request?.id as string, true)).toBe(false);
+	});
+
+	test("a Slack message the user confirmed in the chat is sent without asking", async () => {
+		storage.conversation.append({
+			repo: REPO,
+			from: "master",
+			text: "To #eng:\n\n> merged in #42\n\nSend it?",
+			at: 1,
+		});
+		storage.conversation.append({
+			repo: REPO,
+			from: "you",
+			text: "yes",
+			at: 2,
+		});
+		const input = { channel_id: "C1", message: "merged in #42" };
+		const answer = await master.handleTool(REPO, "request_permission", {
+			tool_name: "mcp__slack__slack_send_message",
+			input,
+		});
+		expect(JSON.parse(answer.text)).toEqual({
+			behavior: "allow",
+			updatedInput: input,
+		});
+		expect(master.permissions(REPO)).toEqual([]);
+	});
+
+	test("a Slack message with other text waits for y", async () => {
+		storage.conversation.append({
+			repo: REPO,
+			from: "master",
+			text: "> merged in #42",
+			at: 1,
+		});
+		storage.conversation.append({
+			repo: REPO,
+			from: "you",
+			text: "yes",
+			at: 2,
+		});
+		const answer = master.handleTool(REPO, "request_permission", {
+			tool_name: "mcp__slack__slack_send_message",
+			input: { channel_id: "C1", message: "merged in #43" },
+		});
+		const [request] = master.permissions(REPO);
+		expect(request?.toolName).toBe("mcp__slack__slack_send_message");
+		master.answerPermission(request?.id as string, false);
+		expect(JSON.parse((await answer).text).behavior).toBe("deny");
 	});
 
 	test("a denied permission tells claude so", async () => {

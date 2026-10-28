@@ -1,9 +1,9 @@
-import type { Session } from "./domain";
+import type { MasterMessage, Session } from "./domain";
 import { prLine } from "./master";
 import type { ReviewRequest } from "./pr";
 
 /**
- * Slack for the master (ADR 0023, 0030): the mentions and DMs that still need
+ * Slack for the master (ADR 0023, 0031): the mentions and DMs that still need
  * the user to act, read through Slack's MCP server by a one-shot `claude -p`. Pure:
  * the prompt, the JSON schema, and parsing of what the model returns.
  */
@@ -380,4 +380,32 @@ export function slackSendPrompt(item: SlackItem, text: string): string {
 		">>>",
 		"Send it once. Return sent true when the tool succeeded; otherwise sent false and the error in problem.",
 	].join("\n");
+}
+
+/** Quote markers and whitespace dropped, so a draft shown as a quote block matches what is sent. */
+function plain(text: string): string {
+	return text
+		.replace(/^[ \t]*>[ \t]?/gm, "")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+/**
+ * Whether the chat's Slack message was confirmed (ADR 0030): the user's
+ * latest message answers a master reply that showed this exact text. Only
+ * then is it sent without asking again in NEEDS YOU. `conversation` is the
+ * repo's newest messages, oldest first.
+ */
+export function confirmedSlackSend(
+	conversation: MasterMessage[],
+	message: unknown,
+): boolean {
+	if (typeof message !== "string" || !plain(message)) return false;
+	const last = conversation.at(-1);
+	const draft = conversation.at(-2);
+	return (
+		last?.from === "you" &&
+		draft?.from === "master" &&
+		plain(draft.text).includes(plain(message))
+	);
 }
