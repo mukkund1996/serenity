@@ -72,6 +72,7 @@ function render(st) {
 	// the later node pull-out / word-pair act is skipped (its code stays inert past 0.6)
 	const holds = [
 		[0.03, 0.03],
+		[0.048, 0.03],
 		[0.096, 0.025],
 		[0.145, 0.025],
 		[0.21, 0.03],
@@ -230,7 +231,7 @@ function render(st) {
 		c3: {
 			A: { x: 315, y: 190, w: 540, h: 320, r: -2.2 },
 			N: { x: 50, y: 375, w: 250, h: 100 },
-			enter: [0.07, 0.12],
+			enter: [0.08, 0.125],
 			pull: [0.71, 0.81],
 			z: 3,
 		},
