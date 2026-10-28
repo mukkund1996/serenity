@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
 	applySummary,
 	capTopic,
 	chatMessage,
 	chatSnapshot,
+	confirmedSlackSend,
 	MASTER_SLACK_PROMPT,
 	MASTER_SYSTEM_PROMPT,
 	type MasterPermission,
@@ -16,6 +19,7 @@ import {
 	parseSummary,
 	type Session,
 	SLACK_READ_TOOLS,
+	SLACK_SEND_TOOL,
 	type SlackInbox,
 	type Storage,
 	SUGGESTION_SCHEMA,
@@ -26,6 +30,7 @@ import {
 	summarySchema,
 } from "@serenity/core";
 import type { ChatProcess, ClaudeRunner } from "./claude";
+import MASTER_SKILL from "./master-skill.md" with { type: "text" };
 
 export interface MasterModels {
 	chat: string;
@@ -44,6 +49,8 @@ export interface MasterHost {
 	kill(session: Session): Promise<void>;
 	/** Attaches a session beside the user's map, as Enter on its card does. */
 	open(session: Session): Promise<void>;
+	/** `--plugin-dir` for the chat: the plugin with the master's skill (writeMasterPlugin). */
+	pluginDir: string;
 	/** `--mcp-config` JSON for a repo's chat; its server is `serenity mcp <repo>`. */
 	mcpConfig(repo: string): string;
 	/** The repo's Slack inbox, or null when Slack is off for it (ADR 0023). */
@@ -307,6 +314,7 @@ export class MasterSupervisor {
 				cwd: repo,
 				model: this.host.models.chat,
 				mcpConfigPath: this.host.mcpConfig(repo),
+				pluginDir: this.host.pluginDir,
 				// Slack's read tools never ask; anything that writes asks the user.
 				extraAllowed: slack ? SLACK_READ_TOOLS : [],
 				systemPrompt: slack
@@ -429,10 +437,24 @@ export class MasterSupervisor {
 		args: Record<string, unknown>,
 	): Promise<MasterToolResult> {
 		const input = (args.input ?? {}) as Record<string, unknown>;
+		const toolName = String(args.tool_name ?? "a tool");
+		// A Slack message the user just confirmed in the chat goes out (ADR 0030).
+		if (
+			toolName === SLACK_SEND_TOOL &&
+			confirmedSlackSend(
+				this.host.storage.conversation.listRecent(repo, 2),
+				input.message,
+			)
+		) {
+			this.host.log(`master sent a confirmed Slack message for ${repo}`);
+			return Promise.resolve({
+				text: JSON.stringify({ behavior: "allow", updatedInput: input }),
+			});
+		}
 		const permission: MasterPermission = {
 			id: randomUUID(),
 			repo,
-			toolName: String(args.tool_name ?? "a tool"),
+			toolName,
 			detail: describeToolInput(input),
 			at: this.host.now(),
 		};
@@ -519,4 +541,18 @@ export function describeToolInput(input: Record<string, unknown>): string {
 	const pick = input.command ?? input.file_path ?? input.path ?? input.url;
 	const text = typeof pick === "string" ? pick : JSON.stringify(input);
 	return text.length > 100 ? `${text.slice(0, 99)}…` : text;
+}
+
+/**
+ * Writes the plugin that gives the master chat its `serenity` skill
+ * (ADR 0030); `--setting-sources ""` loads no other skills.
+ */
+export function writeMasterPlugin(dir: string): void {
+	mkdirSync(join(dir, ".claude-plugin"), { recursive: true });
+	mkdirSync(join(dir, "skills", "serenity"), { recursive: true });
+	writeFileSync(
+		join(dir, ".claude-plugin", "plugin.json"),
+		`${JSON.stringify({ name: "serenity-master", description: "The serenity master's skill.", version: "1" }, null, 2)}\n`,
+	);
+	writeFileSync(join(dir, "skills", "serenity", "SKILL.md"), MASTER_SKILL);
 }

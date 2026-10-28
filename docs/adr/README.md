@@ -35,6 +35,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0027](0027-master-centred-in-topics-zoom.md) | The master sits in the centre of the topics zoom, topics on both sides; docks left when too narrow | Accepted |
 | [0028](0028-enter-attaches-enter-into-master-only.md) | Enter attaches a card and `i` messages it; only the master is gone into; WASD back beside the arrows; dim card frames; Slack keeps its place; MY PRS off | Accepted |
 | [0029](0029-website-on-github-pages.md) | The website: static page on GitHub Pages at getserenity.dev, release version filled in at deploy | Accepted |
+| [0030](0030-master-skill-auto-mode-confirmed-slack.md) | The master's skill, auto mode, and Slack messages sent once confirmed in the chat | Accepted |
 
 ## System at a glance
 

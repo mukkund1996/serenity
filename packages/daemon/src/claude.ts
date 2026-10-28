@@ -1,3 +1,5 @@
+import { MASTER_SKILL, SLACK_SEND_TOOL } from "@serenity/core";
+
 /**
  * Runs the master's `claude -p` processes (ADR 0007), through the user's own
  * logged-in CLI. Behind an interface so the supervisor can be tested with a fake.
@@ -19,6 +21,8 @@ export interface ChatOptions {
 	cwd: string;
 	model: string;
 	mcpConfigPath: string;
+	/** Plugin with the master's skill, loaded with `--plugin-dir`. */
+	pluginDir: string;
 	/** Tools allowed beyond CHAT_ALLOWED, e.g. Slack's read tools. */
 	extraAllowed?: string[];
 	systemPrompt: string;
@@ -47,11 +51,12 @@ export interface ClaudeRunner {
 }
 
 /** Built-in tools the chat may use, and the subset that never asks (ADR 0008). */
-const CHAT_TOOLS = "Read,Grep,Glob,Bash";
+const CHAT_TOOLS = "Read,Grep,Glob,Bash,Skill";
 const CHAT_ALLOWED = [
 	"Read",
 	"Grep",
 	"Glob",
+	`Skill(${MASTER_SKILL})`,
 	"Bash(git log *)",
 	"Bash(git diff *)",
 	"Bash(git status *)",
@@ -65,6 +70,10 @@ const CHAT_ALLOWED = [
 	"mcp__serenity__open_session",
 ].join(",");
 export const PERMISSION_TOOL = "mcp__serenity__request_permission";
+/** Posting to Slack always reaches PERMISSION_TOOL, never the auto-mode classifier (ADR 0030). */
+const CHAT_SETTINGS = JSON.stringify({
+	permissions: { ask: [SLACK_SEND_TOOL] },
+});
 
 const JSON_TIMEOUT_MS = 120_000;
 
@@ -154,8 +163,14 @@ export class CliClaudeRunner implements ClaudeRunner {
 				[CHAT_ALLOWED, ...(opts.extraAllowed ?? [])].join(","),
 				"--mcp-config",
 				opts.mcpConfigPath,
+				"--permission-mode",
+				"auto",
 				"--permission-prompt-tool",
 				PERMISSION_TOOL,
+				"--settings",
+				CHAT_SETTINGS,
+				"--plugin-dir",
+				opts.pluginDir,
 				"--append-system-prompt",
 				opts.systemPrompt,
 				...ISOLATION,
