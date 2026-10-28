@@ -11,6 +11,7 @@ import {
 	isHookKind,
 	loadConfig,
 	type Method,
+	masterPluginPath,
 	type Params,
 	parseRateLimits,
 	type RepoState,
@@ -49,7 +50,11 @@ import {
 	siblingWorktreePath,
 } from "./git";
 import { agentCommand, shellQuote, writeHookSettings } from "./hooks";
-import { type MasterModels, MasterSupervisor } from "./master";
+import {
+	type MasterModels,
+	MasterSupervisor,
+	writeMasterPlugin,
+} from "./master";
 import { PrWatcher, workDir } from "./prs";
 import { ReviewWatcher } from "./reviews";
 import { SlackWatcher } from "./slack";
@@ -177,6 +182,7 @@ export class Daemon {
 				update: (session, patch) => this.update(session, patch),
 				kill: (session) => this.kill(session),
 				open: (session) => this.open(session),
+				pluginDir: masterPluginPath(opts.home),
 				mcpConfig: (repo) => this.mcpConfig(repo),
 				slack: (repo) =>
 					this.slackRepos.has(repo) ? this.slack.state() : null,
@@ -272,6 +278,7 @@ export class Daemon {
 	async start(): Promise<void> {
 		mkdirSync(join(this.opts.home, "workers"), { recursive: true });
 		writeHookSettings(hookSettingsPath(this.opts.home), this.self);
+		writeMasterPlugin(masterPluginPath(this.opts.home));
 		const path = socketPath(this.opts.home);
 		if (existsSync(path)) rmSync(path);
 		this.server = createServer((socket) => this.accept(new RpcPeer(socket)));

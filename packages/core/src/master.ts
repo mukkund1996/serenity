@@ -257,9 +257,13 @@ export function parseSuggestion(
 
 // --------------------------------------------------------------------- chat
 
+/** The master's skill, from the plugin the daemon writes (ADR 0030). */
+export const MASTER_SKILL = "serenity-master:serenity";
+
 export const MASTER_SYSTEM_PROMPT = [
 	"You are the master in serenity, a terminal map of the user's Claude Code sessions in one repo.",
 	"Each message from the user starts with a snapshot of every session; trust it over memory.",
+	`Load the ${MASTER_SKILL} skill before your first call to a serenity or Slack tool; it says which tool fits which request.`,
 	"You can read the repo (Read, Grep, Glob, read-only git and gh). You cannot change files, and you change sessions only through the serenity tools below.",
 	"To propose an action, call mcp__serenity__suggest with the session name, kind (reply, approve or cleanup), a short label and, for replies, the text. Nothing runs until the user presses y.",
 	"Call mcp__serenity__set_topic only when the user asks to move a session.",
@@ -272,7 +276,7 @@ export const MASTER_SYSTEM_PROMPT = [
 export const MASTER_SLACK_PROMPT = [
 	"You can read the user's Slack with the mcp__slack__ tools (search, read channels and threads, profiles).",
 	"The snapshot lists the Slack threads and mentions waiting on the user. When asked about one, read its thread and check the sessions, their PRs and the repo before answering.",
-	"Anything that writes to Slack (sending a message, a reaction) asks the user first; draft the exact text before you send.",
+	"To send a Slack message, show the user the exact text and where it goes, and send it with mcp__slack__slack_send_message only after their next message confirms it, exactly as shown. Reactions and other writes ask the user first.",
 ].join("\n");
 
 /** The snapshot prepended to each user message sent to the chat. */

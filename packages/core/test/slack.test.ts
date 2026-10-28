@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	askable,
+	confirmedSlackSend,
 	parseSlackInbox,
 	parseSlackSuggestion,
 	SLACK_LOGIN_HINT,
@@ -169,5 +170,56 @@ describe("suggestions", () => {
 		expect(prompt).toContain("It answered: Yes, in #42.");
 		expect(prompt).not.toContain("- ask:");
 		expect(slackSendPrompt(slackItem, "merged")).toContain("<<<\nmerged\n>>>");
+	});
+});
+
+describe("confirmedSlackSend", () => {
+	const msg = (from: "you" | "master", text: string, id: number) => ({
+		id,
+		repo: "/r",
+		from,
+		text,
+		at: id,
+	});
+	const draft = msg(
+		"master",
+		"To #eng, in the thread from Dana:\n\n> merged in #42,\n> deploys today\n\nSend it?",
+		1,
+	);
+
+	test("sends the text shown in the reply the user just answered", () => {
+		expect(
+			confirmedSlackSend(
+				[draft, msg("you", "yes", 2)],
+				"merged in #42, deploys today",
+			),
+		).toBe(true);
+		expect(
+			confirmedSlackSend(
+				[draft, msg("you", "yes", 2)],
+				"merged in #42,\ndeploys today",
+			),
+		).toBe(true);
+	});
+
+	test("asks again for text the user did not see", () => {
+		const said = [draft, msg("you", "yes", 2)];
+		expect(confirmedSlackSend(said, "merged in #42, deploys tomorrow")).toBe(
+			false,
+		);
+		expect(confirmedSlackSend(said, "")).toBe(false);
+		expect(confirmedSlackSend(said, undefined)).toBe(false);
+	});
+
+	test("asks again when the user has not answered the draft", () => {
+		expect(confirmedSlackSend([draft], "merged in #42, deploys today")).toBe(
+			false,
+		);
+		expect(
+			confirmedSlackSend(
+				[msg("you", "draft it", 0), msg("you", "yes", 2)],
+				"merged in #42, deploys today",
+			),
+		).toBe(false);
 	});
 });
