@@ -5,6 +5,7 @@ import type {
 	HookPayload,
 	MasterMessage,
 	Session,
+	SlackDismissal,
 	Storage,
 	Suggestion,
 	Wait,
@@ -51,6 +52,12 @@ const MIGRATIONS = [
 		ended_at INTEGER NOT NULL
 	);
 	CREATE INDEX waits_repo ON waits (repo, ended_at);`,
+	`CREATE TABLE slack_dismissals (
+		channel_id TEXT NOT NULL,
+		ts TEXT NOT NULL,
+		at INTEGER NOT NULL,
+		PRIMARY KEY (channel_id, ts)
+	);`,
 ];
 
 /** Fields added after a session row may have been written; filled in on read. */
@@ -126,6 +133,12 @@ interface WaitRow {
 	ended_at: number;
 }
 
+interface DismissalRow {
+	channel_id: string;
+	ts: string;
+	at: number;
+}
+
 interface EventRow {
 	id: number;
 	session_id: string;
@@ -192,6 +205,13 @@ export function createSqliteStorage(path: string): Storage {
 	);
 	const listWaits = db.query<WaitRow, [string, number]>(
 		"SELECT * FROM waits WHERE repo = ? AND ended_at >= ? ORDER BY ended_at, id",
+	);
+
+	const insertDismissal = db.query<unknown, [string, string, number]>(
+		"INSERT OR IGNORE INTO slack_dismissals (channel_id, ts, at) VALUES (?, ?, ?)",
+	);
+	const listDismissals = db.query<DismissalRow, []>(
+		"SELECT * FROM slack_dismissals ORDER BY at, rowid",
 	);
 
 	const parse = (row: { data: string } | null): Session | null =>
@@ -282,6 +302,19 @@ export function createSqliteStorage(path: string): Storage {
 						sessionId: row.session_id,
 						startedAt: row.started_at,
 						endedAt: row.ended_at,
+					}),
+				),
+		},
+		slackDismissals: {
+			add: (d) => {
+				insertDismissal.run(d.channelId, d.ts, d.at);
+			},
+			list: () =>
+				listDismissals.all().map(
+					(row): SlackDismissal => ({
+						channelId: row.channel_id,
+						ts: row.ts,
+						at: row.at,
 					}),
 				),
 		},

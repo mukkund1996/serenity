@@ -20,7 +20,8 @@
  *   command with fixed `rate_limits` (session 42%, week 17%).
  *
  * `-p --json-schema` (the master's Haiku/Sonnet workers): answers the summary
- * or suggestion schema from the prompt on stdin.
+ * or suggestion schema from the prompt on stdin. The Slack inbox worker gets
+ * the items in the JSON file at SERENITY_FAKE_SLACK, or none.
  *
  * `-p --input-format stream-json` (the master chat): replies "Heard: <text>".
  * "suggest a reply to <name>" calls serenity's MCP `suggest` tool and "ask
@@ -74,6 +75,14 @@ function answerSchema(prompt: string, schema: string): unknown {
 			.find((l) => l.startsWith(label))
 			?.slice(label.length)
 			.trim() ?? "";
+	if (schema.includes('"access"')) {
+		const fixture = process.env.SERENITY_FAKE_SLACK;
+		let items: unknown = [];
+		try {
+			if (fixture) items = JSON.parse(readFileSync(fixture, "utf8"));
+		} catch {}
+		return { access: "ok", problem: null, items };
+	}
 	if (schema.includes('"finished"')) {
 		const reply = line("The agent's last reply:");
 		return {

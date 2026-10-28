@@ -290,7 +290,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		? (sessions.find((s) => s.id === selected) ?? null)
 		: card;
 	const focusedSuggestion = suggestionFor(focused?.id);
-	/** The selected Slack item in NEEDS YOU: y e n act on its suggestion, Enter or o opens it. */
+	/** The selected Slack item in NEEDS YOU: y e n act on its suggestion, Enter or o opens it, x dismisses it. */
 	const slackItem =
 		(onMaster && slackItems.find((m) => `${SLACK_NEED}${m.id}` === selected)) ||
 		null;
@@ -791,6 +791,15 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				return;
 			}
 
+			// x dismisses a Slack item for good (ADR 0034).
+			if (slackItem && input === "x")
+				return void call("slack.dismiss", {
+					channelId: slackItem.channelId,
+					ts: slackItem.ts,
+				}).then(
+					() => setNotice(`dismissed ${slackItem.author}'s message`),
+					fail,
+				);
 			// y e n on a Slack item act on its suggestion (ADR 0024).
 			if (slackItem && ["y", "e", "n"].includes(input)) {
 				if (slackSuggestion?.status !== "pending") return;

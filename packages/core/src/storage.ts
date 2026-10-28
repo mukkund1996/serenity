@@ -7,6 +7,7 @@ import type {
 	Suggestion,
 	Wait,
 } from "./domain";
+import { type SlackDismissal, slackMessageKey } from "./slack";
 
 /**
  * Storage interfaces (ADR 0009). They speak domain types only, so a backend
@@ -57,12 +58,21 @@ export interface WaitStore {
 	listSince(repo: string, since: number): Wait[];
 }
 
+export interface SlackDismissalStore {
+	/** Records a dismissal; the same message again is a no-op. */
+	add(dismissal: SlackDismissal): void;
+	/** Every dismissal, oldest first. */
+	list(): SlackDismissal[];
+}
+
 export interface Storage {
 	readonly sessions: SessionStore;
 	readonly events: EventStore;
 	readonly suggestions: SuggestionStore;
 	readonly conversation: ConversationStore;
 	readonly waits: WaitStore;
+	/** Slack messages dismissed from NEEDS YOU; per account, not per repo (ADR 0034). */
+	readonly slackDismissals: SlackDismissalStore;
 	/** Runs `fn` atomically; nested calls join the outer transaction. */
 	transaction<T>(fn: () => T): T;
 	close(): void;
@@ -74,6 +84,7 @@ export function createMemoryStorage(): Storage {
 	const suggestions = new Map<string, Suggestion>();
 	const messages: MasterMessage[] = [];
 	const waits: Wait[] = [];
+	const dismissals = new Map<string, SlackDismissal>();
 	let nextEventId = 1;
 	let nextMessageId = 1;
 
@@ -146,6 +157,16 @@ export function createMemoryStorage(): Storage {
 					.filter((w) => w.repo === repo && w.endedAt >= since)
 					.sort((a, b) => a.endedAt - b.endedAt)
 					.map((w) => ({ ...w })),
+		},
+		slackDismissals: {
+			add: (d) => {
+				const key = slackMessageKey(d);
+				if (!dismissals.has(key)) dismissals.set(key, { ...d });
+			},
+			list: () =>
+				[...dismissals.values()]
+					.sort((a, b) => a.at - b.at)
+					.map((d) => ({ ...d })),
 		},
 		transaction: (fn) => fn(),
 		close: () => {},

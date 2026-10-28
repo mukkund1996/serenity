@@ -106,6 +106,11 @@ export interface Methods {
 		result: null;
 	};
 	"slack.decline": { params: { repo: string; itemId: string }; result: null };
+	/**
+	 * x on a Slack item (ADR 0034): hides that message from NEEDS YOU and the
+	 * master for good. Per account, so it leaves every repo's map.
+	 */
+	"slack.dismiss": { params: { channelId: string; ts: string }; result: null };
 	/** Claude's status line `rate_limits`, forwarded by `serenity statusline` (ADR 0020). */
 	"usage.report": { params: { rateLimits: unknown }; result: null };
 	"master.message": { params: { repo: string; text: string }; result: null };
