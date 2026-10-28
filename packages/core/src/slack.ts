@@ -390,6 +390,16 @@ function plain(text: string): string {
 		.trim();
 }
 
+/** The same Slack text, quote markers and whitespace aside. */
+export function sameSlackText(a: unknown, b: unknown): boolean {
+	return (
+		typeof a === "string" &&
+		typeof b === "string" &&
+		!!plain(a) &&
+		plain(a) === plain(b)
+	);
+}
+
 /**
  * Whether the chat's Slack message was confirmed (ADR 0030): the user's
  * latest message answers a master reply that showed this exact text. Only

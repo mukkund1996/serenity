@@ -5,6 +5,7 @@ import {
 	parseClaudeProcess,
 	permissionPrompt,
 	readTranscriptTail,
+	reconcileHooked,
 	reduceObserved,
 	STARTUP_ASK,
 	transcriptPathFor,
@@ -29,6 +30,7 @@ const proc = (overrides: Partial<ClaudeProcess> = {}): ClaudeProcess => ({
 	name: null,
 	status: "idle",
 	waitingFor: null,
+	statusAt: null,
 	...overrides,
 });
 
@@ -50,6 +52,7 @@ describe("parseClaudeProcess", () => {
 			name: "perry-poc-7a",
 			status: "busy",
 			waitingFor: null,
+			statusAt: null,
 		});
 	});
 
@@ -207,6 +210,78 @@ describe("reduceObserved", () => {
 				process: proc({ status: "busy" }),
 				tail: tail(),
 			}),
+		).toEqual({});
+	});
+});
+
+describe("reconcileHooked", () => {
+	const hooked = (overrides: Partial<Parameters<typeof makeSession>[0]>) =>
+		makeSession({ tracking: "hooks", ...overrides });
+
+	test("an interrupted turn (no Stop hook) goes idle once Claude's idle has held", () => {
+		const working = hooked({ status: "working" });
+		const claude = proc({ status: "idle", statusAt: 5000 });
+		expect(reconcileHooked(working, claude, 4000, 5400)).toEqual({
+			patch: {},
+			wait: 600,
+		});
+		expect(reconcileHooked(working, claude, 4000, 6000)).toEqual({
+			patch: { status: "idle", ask: null, waitingOn: null },
+			wait: 0,
+		});
+	});
+
+	test("a prompt answered in the pane is working again before the tool finishes", () => {
+		const waiting = hooked({
+			status: "waiting",
+			waitingOn: "permission",
+			ask: "wants to run make",
+		});
+		expect(
+			reconcileHooked(
+				waiting,
+				proc({ status: "busy", statusAt: 5000 }),
+				4000,
+				7000,
+			).patch,
+		).toEqual({ status: "working", ask: null, waitingOn: null });
+	});
+
+	test("hooks newer than Claude's status win, and so do running subagents", () => {
+		const working = hooked({ status: "working" });
+		const idle = proc({ status: "idle", statusAt: 5000 });
+		expect(reconcileHooked(working, idle, 5000, 9000).patch).toEqual({});
+		expect(
+			reconcileHooked(
+				hooked({ status: "working", subagents: ["a1"] }),
+				idle,
+				0,
+				9000,
+			).patch,
+		).toEqual({});
+		expect(
+			reconcileHooked(
+				working,
+				proc({ status: "idle", statusAt: null }),
+				0,
+				9000,
+			).patch,
+		).toEqual({});
+	});
+
+	test("leaves agreeing, finished and archived sessions alone", () => {
+		const idle = proc({ status: "idle", statusAt: 5000 });
+		for (const status of ["idle", "done", "archived", "dead"] as const)
+			expect(reconcileHooked(hooked({ status }), idle, 0, 9000).patch).toEqual(
+				{},
+			);
+		expect(
+			reconcileHooked(
+				hooked({ status: "working" }),
+				proc({ status: "busy", statusAt: 5000 }),
+				0,
+				9000,
+			).patch,
 		).toEqual({});
 	});
 });

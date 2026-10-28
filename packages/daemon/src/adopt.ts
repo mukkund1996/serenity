@@ -20,6 +20,7 @@ import {
 	parseClaudeProcess,
 	permissionPrompt,
 	readTranscriptTail,
+	reconcileHooked,
 	reduceObserved,
 	type Session,
 	type SessionStatus,
@@ -38,6 +39,8 @@ export interface AdoptHost {
 	change(session: Session, patch: Partial<Session>): Session;
 	broadcast(repo: string): void;
 	markEnded(session: Session): void;
+	/** When the daemon last heard a hook from this session (epoch ms; 0 if never). */
+	lastHookAt(sessionId: string): number;
 	/** Binds Ctrl+g and Ctrl+m so an adopted pane can return to the map. */
 	bindSessionKeys(): Promise<void>;
 	log(line: string): void;
@@ -47,8 +50,12 @@ export interface AdoptHost {
 const TAIL_BYTES = 512 * 1024;
 /** Settles a burst of session-file writes into one sweep. */
 const SETTLE_MS = 200;
-/** Catches anything the file watcher missed (it can, on some filesystems). */
-const SWEEP_MS = 30_000;
+/**
+ * Catches anything the file watcher missed (it can, on some filesystems, and
+ * the session folder may appear only after the daemon starts). A sweep reads
+ * a few small files, so it can run often.
+ */
+const SWEEP_MS = 5_000;
 
 const live = (s: Session) => s.status !== "dead" && s.status !== "archived";
 
@@ -76,7 +83,10 @@ export class ClaudeObserver {
 
 	start(): void {
 		this.watchSessions();
-		this.sweepTimer = setInterval(() => void this.sweep(), SWEEP_MS);
+		this.sweepTimer = setInterval(() => {
+			this.watchSessions();
+			void this.sweep();
+		}, SWEEP_MS);
 		this.sweepTimer.unref?.();
 		void this.sweep();
 	}
@@ -97,9 +107,9 @@ export class ClaudeObserver {
 		if (this.settleTimer) clearTimeout(this.settleTimer);
 	}
 
-	private settle(): void {
+	private settle(ms = SETTLE_MS): void {
 		if (this.settleTimer) clearTimeout(this.settleTimer);
-		this.settleTimer = setTimeout(() => void this.sweep(), SETTLE_MS);
+		this.settleTimer = setTimeout(() => void this.sweep(), ms);
 	}
 
 	/** Every live interactive claude running in a tmux pane. */
@@ -222,13 +232,21 @@ export class ClaudeObserver {
 		return adopted.map((s) => this.host.storage.sessions.get(s.id) ?? s);
 	}
 
-	/** Brings every observed session up to date; ends those whose claude is gone. */
+	/**
+	 * Brings every observed session up to date and ends those whose claude is
+	 * gone; corrects hook-tracked ones where Claude's own status shows a
+	 * missed hook (reconcileHooked).
+	 */
 	async sweep(): Promise<void> {
-		const observed = this.host.storage.sessions
-			.listAll()
-			.filter((s) => s.tracking === "observed" && live(s));
-		if (!observed.length) return;
-		const byPid = new Map(this.processes().map((p) => [p.pid, p]));
+		const sessions = this.host.storage.sessions.listAll().filter(live);
+		if (!sessions.length) return;
+		const procs = this.processes();
+		this.reconcile(
+			sessions.filter((s) => s.tracking === "hooks"),
+			procs,
+		);
+		const observed = sessions.filter((s) => s.tracking === "observed");
+		const byPid = new Map(procs.map((p) => [p.pid, p]));
 		for (const session of observed) {
 			const proc = session.claudePid ? byPid.get(session.claudePid) : undefined;
 			if (!proc || proc.sessionId !== session.claudeSessionId) {
@@ -264,6 +282,34 @@ export class ClaudeObserver {
 				this.host.broadcast(session.repo);
 			}
 		}
+	}
+
+	private reconcile(hooked: Session[], procs: ClaudeProcess[]): void {
+		if (!hooked.length) return;
+		const bySessionId = new Map(procs.map((p) => [p.sessionId, p]));
+		const byPane = new Map(procs.map((p) => [p.pane, p]));
+		let wait = Number.POSITIVE_INFINITY;
+		for (const session of hooked) {
+			const proc =
+				(session.claudeSessionId && bySessionId.get(session.claudeSessionId)) ||
+				(session.tmuxPane && byPane.get(session.tmuxPane));
+			if (!proc) continue;
+			const result = reconcileHooked(
+				session,
+				proc,
+				this.host.lastHookAt(session.id),
+				this.host.now(),
+			);
+			if (result.wait > 0) wait = Math.min(wait, result.wait);
+			if (!Object.keys(result.patch).length) continue;
+			this.host.log(
+				`${session.name}: ${session.status} → ${result.patch.status} (Claude reports ${proc.status}; a hook was missed)`,
+			);
+			this.host.change(session, result.patch);
+			this.host.broadcast(session.repo);
+		}
+		// Claude's status has not held long enough yet: look again when it has.
+		if (Number.isFinite(wait)) this.settle(wait + 50);
 	}
 
 	/** Forget what was applied, e.g. after a session is restarted under hooks. */

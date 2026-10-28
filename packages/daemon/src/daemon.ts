@@ -152,6 +152,8 @@ export class Daemon {
 	/** The Slack MCP server entry, for the inbox worker and the chat. */
 	private readonly slackMcp: Record<string, unknown>;
 	private readonly observer: ClaudeObserver;
+	/** session id → when its last hook arrived; the observer checks Claude's status against it. */
+	private readonly hookAt = new Map<string, number>();
 	/** Plan usage is per account, so the latest report covers every repo. */
 	private usage: Usage | null = null;
 	private stopped: (() => void) | null = null;
@@ -265,6 +267,7 @@ export class Daemon {
 				change: (session, patch) => this.change(session, patch),
 				broadcast: (repo) => this.broadcast(repo),
 				markEnded: (session) => this.markEnded(session),
+				lastHookAt: (id) => this.hookAt.get(id) ?? 0,
 				bindSessionKeys: () => this.tmux.bindSessionKeys(this.detachCommand()),
 				log: this.log,
 			},
@@ -599,12 +602,14 @@ export class Daemon {
 				throw new RpcError(RpcErrorCode.InvalidParams, `unknown hook ${kind}`);
 			const session = this.opts.storage.sessions.get(sessionId);
 			if (!session) return null;
+			const at = this.now();
+			this.hookAt.set(sessionId, at);
 			this.opts.storage.transaction(() => {
 				this.opts.storage.events.append({
 					sessionId,
 					kind,
 					payload,
-					at: this.now(),
+					at,
 				});
 				this.change(session, reduceHook(session, kind, payload));
 			});

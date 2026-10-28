@@ -269,6 +269,8 @@ export const MASTER_SYSTEM_PROMPT = [
 	"Call mcp__serenity__set_topic only when the user asks to move a session.",
 	"Call mcp__serenity__open_session when the user asks to open, show or go to a session; it opens beside their map.",
 	"Call mcp__serenity__archive_session only when the user asks to kill, stop or archive a session; it stops the agent at once.",
+	"Call mcp__serenity__session_status for a session's status right now; the snapshot is as old as the user's message.",
+	"Call mcp__serenity__watch_session when the user wants something done once a session finishes; serenity messages you when its turn ends. Never wait or poll in a loop.",
 	"Answer in at most 3 short sentences; your replies are shown in a small panel. No markdown headings or tables.",
 ].join("\n");
 
@@ -317,6 +319,75 @@ function sessionSnapshot(
 		return parts.join(" · ");
 	});
 	return ["Sessions now:", ...lines].join("\n");
+}
+
+/** A session's status right now, for the chat's session_status tool. */
+export function sessionStatusText(
+	session: Session,
+	suggestions: Suggestion[],
+	now: number,
+): string {
+	const lines = [sessionSnapshot([session], suggestions).split("\n")[1]];
+	lines.push(`status changed ${ago(now - session.updatedAt)} ago`);
+	if (session.lastPrompt)
+		lines.push(`last prompt: ${clip(session.lastPrompt, 300)}`);
+	if (session.lastAssistantMessage)
+		lines.push(`last reply: ${clip(session.lastAssistantMessage, 600)}`);
+	if (session.subagents.length)
+		lines.push(`${session.subagents.length} subagent(s) still running`);
+	return lines.join("\n");
+}
+
+function ago(ms: number): string {
+	const s = Math.max(0, Math.round(ms / 1000));
+	return s < 120 ? `${s}s` : `${Math.round(s / 60)}m`;
+}
+
+/** Whether a watched session's turn just ended (watch_session): it stopped working, or ended. */
+export function turnEnded(before: Session, after: Session): boolean {
+	if (before.status === after.status) return false;
+	if (after.status === "dead" || after.status === "archived") return true;
+	return before.status === "working" && after.status !== "working";
+}
+
+/**
+ * What the chat is told when a watched session's turn ends. A session that
+ * waits on the user stays watched; finished or ended, the watch is over.
+ */
+export function watchMessage(
+	session: Session,
+	note: string,
+	stagedSlack: boolean,
+): string {
+	const status = `${session.status}${session.waitingOn ? ` on ${session.waitingOn}` : ""}`;
+	const finished = session.status === "idle" || session.status === "done";
+	const slack = !stagedSlack
+		? []
+		: finished
+			? [
+					"The Slack message the user confirmed for this may go out now: send it exactly as confirmed.",
+				]
+			: session.status === "waiting"
+				? [
+						"The Slack message the user confirmed for this is still held until it finishes.",
+					]
+				: ["The Slack message the user confirmed for this will not go out."];
+	return [
+		`serenity: ${session.name} is now ${status}; you were watching it for: ${note}`,
+		...(session.ask ? [`It asks: ${session.ask}`] : []),
+		...(session.lastAssistantMessage
+			? [`Its last reply: ${clip(session.lastAssistantMessage, 600)}`]
+			: []),
+		session.status === "waiting"
+			? "It still is watched: serenity tells you again when it finishes."
+			: "The watch is over.",
+		...slack,
+		finished
+			? "This message is from serenity, not the user. Do what the note says now, then tell the user in one or two sentences."
+			: session.status === "waiting"
+				? "This message is from serenity, not the user. Tell the user in one or two sentences; don't act on the note yet."
+				: "This message is from serenity, not the user. It ended without finishing: tell the user in one or two sentences and don't act on the note.",
+	].join("\n");
 }
 
 export function chatMessage(snapshot: string, text: string): string {

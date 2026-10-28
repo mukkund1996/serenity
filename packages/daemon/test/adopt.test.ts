@@ -100,6 +100,8 @@ let storage: Storage;
 let tmux: FakeTmux;
 let ended: string[];
 let observer: ClaudeObserver;
+let clock: number;
+let hookAt: number;
 
 beforeEach(() => {
 	rmSync(join(config, "sessions"), { recursive: true, force: true });
@@ -108,11 +110,13 @@ beforeEach(() => {
 	tmux = new FakeTmux();
 	tmux.panes.set("%7", { session: "work", window: "1", name: "polish" });
 	ended = [];
+	clock = 1;
+	hookAt = 0;
 	observer = new ClaudeObserver(
 		{
 			storage,
 			tmux,
-			now: () => 1,
+			now: () => clock,
 			change: (session, patch) => {
 				const next = { ...session, ...patch };
 				storage.sessions.put(next);
@@ -123,6 +127,7 @@ beforeEach(() => {
 				ended.push(session.name);
 				storage.sessions.put({ ...session, status: "dead" });
 			},
+			lastHookAt: () => hookAt,
 			bindSessionKeys: async () => {},
 			log: () => {},
 		},
@@ -220,5 +225,32 @@ describe("ClaudeObserver", () => {
 		await observer.sweep();
 		expect(ended).toEqual(["polish"]);
 		expect(tmux.options.has("%7")).toBe(false);
+	});
+
+	test("corrects a hook-tracked session when Claude's own status shows a missed hook", async () => {
+		const session = makeSession({
+			repo,
+			name: "hooked",
+			tracking: "hooks",
+			status: "working",
+			tmuxPane: "%7",
+			claudeSessionId: "c1",
+		});
+		storage.sessions.put(session);
+		writeProcess({ pid: PID, status: "idle", statusUpdatedAt: 5000 });
+		hookAt = 4000;
+		clock = 5200;
+		await observer.sweep();
+		// Not held long enough yet: a Stop hook may still be on its way.
+		expect(storage.sessions.get(session.id)?.status).toBe("working");
+		clock = 7000;
+		await observer.sweep();
+		expect(storage.sessions.get(session.id)?.status).toBe("idle");
+		// A hook after Claude's change wins.
+		storage.sessions.put({ ...session, status: "working" });
+		hookAt = 6000;
+		await observer.sweep();
+		expect(storage.sessions.get(session.id)?.status).toBe("working");
+		observer.stop();
 	});
 });

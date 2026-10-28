@@ -22,6 +22,8 @@ export interface ClaudeProcess {
 	status: string;
 	/** Why it waits, e.g. "input needed". */
 	waitingFor: string | null;
+	/** When Claude last changed `status` (epoch ms); null if it doesn't say. */
+	statusAt: number | null;
 }
 
 const TMUX_FIELD = /:@\d+\.(%\d+)$/;
@@ -48,6 +50,7 @@ export function parseClaudeProcess(raw: unknown): ClaudeProcess | null {
 		name: typeof o.name === "string" ? o.name : null,
 		status: typeof o.status === "string" ? o.status : "idle",
 		waitingFor: typeof o.waitingFor === "string" ? o.waitingFor : null,
+		statusAt: typeof o.statusUpdatedAt === "number" ? o.statusUpdatedAt : null,
 	};
 }
 
@@ -206,6 +209,46 @@ export function reduceObserved(
 			([key, value]) => session[key as keyof Session] !== value,
 		),
 	) as Partial<Session>;
+}
+
+/** How long Claude's status must hold before it overrules the hooks. */
+export const RECONCILE_SETTLE_MS = 1000;
+
+/**
+ * Corrects a hook-tracked session from Claude's own session file, for what
+ * hooks never report: an interrupted turn (Esc fires no Stop), a prompt
+ * answered in the pane (no hook until the tool finishes), a lost hook call.
+ * Claude's status counts only when it changed after the last hook arrived
+ * and has held for RECONCILE_SETTLE_MS; `wait` is how much longer to give it
+ * when it hasn't yet. Background subagents keep a session working (ADR 0006).
+ */
+export function reconcileHooked(
+	session: Session,
+	process: ClaudeProcess,
+	lastHookAt: number,
+	now: number,
+): { patch: Partial<Session>; wait: number } {
+	const none = { patch: {}, wait: 0 };
+	const at = process.statusAt;
+	if (at === null || at <= lastHookAt) return none;
+	const busy = process.status === "busy";
+	const idle = process.status === "idle";
+	const wrong = busy
+		? ["idle", "done", "waiting"].includes(session.status)
+		: idle &&
+			(session.status === "waiting" ||
+				(session.status === "working" && !session.subagents.length));
+	if (!wrong) return none;
+	const wait = at + RECONCILE_SETTLE_MS - now;
+	if (wait > 0) return { patch: {}, wait };
+	return {
+		patch: {
+			status: busy ? "working" : "idle",
+			ask: null,
+			waitingOn: null,
+		},
+		wait: 0,
+	};
 }
 
 const AUTOMATIC_NAME = /^(\d+(\.\d+)+|zsh|bash|fish|sh|claude|node|)$/;
