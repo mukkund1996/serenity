@@ -271,7 +271,7 @@ export const MASTER_SYSTEM_PROMPT = [
 /** Added to the chat's system prompt when the repo has Slack on (ADR 0023). */
 export const MASTER_SLACK_PROMPT = [
 	"You can read the user's Slack with the mcp__slack__ tools (search, read channels and threads, profiles).",
-	"The snapshot lists the Slack threads and mentions waiting on the user. When asked about one, read its thread and check the sessions, their PRs and the repo before answering.",
+	"The snapshot lists the Slack mentions and DMs that need the user to act. When asked about one, read its thread and check the sessions, their PRs and the repo before answering.",
 	"Anything that writes to Slack (sending a message, a reaction) asks the user first; draft the exact text before you send.",
 ].join("\n");
 
@@ -284,10 +284,10 @@ export function chatSnapshot(
 	const waiting = slack?.length
 		? [
 				"",
-				"Slack waiting on the user:",
+				"Slack that needs the user:",
 				...slack.map(
 					(m) =>
-						`- ${m.channel} ${m.reason} from ${m.author} (channel ${m.channelId}, thread ${m.threadTs}): ${clip(m.text, 160)}`,
+						`- ${m.channel} ${m.reason} from ${m.author} (channel ${m.channelId}, thread ${m.threadTs}): ${m.action}. They wrote: ${clip(m.text, 160)}`,
 				),
 			]
 		: [];

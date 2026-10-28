@@ -6,11 +6,12 @@ import type {
 	MasterState,
 	ReviewRequest,
 	Session,
+	SlackItem,
 	SlackState,
 	SlackSuggestion,
 	Suggestion,
 } from "@serenity/core";
-import { prLine, wrap } from "@serenity/core";
+import { prLine } from "@serenity/core";
 import { Box, Text } from "ink";
 import { type ReactNode, useEffect, useState } from "react";
 import {
@@ -19,11 +20,10 @@ import {
 	type MasterPlan,
 	NEED_INDENT,
 	needLines,
-	SLACK_TEXT_LINES,
 	SPEAKER_W,
 	suggestionLines,
 } from "./master-layout";
-import { age, askLine, cardText, glyph, nameColor } from "./theme";
+import { age, askLine, BRAND_COLOR, cardText, glyph, nameColor } from "./theme";
 
 const ink = (color: Color | undefined) =>
 	color && color !== "default" ? color : undefined;
@@ -65,6 +65,16 @@ export function Key({ children }: { children: ReactNode }) {
 	return (
 		<Text color="whiteBright" bold>
 			{children}
+		</Text>
+	);
+}
+
+/** The ◈ serenity wordmark in the header, coloured as on getserenity.dev. */
+export function Brand() {
+	return (
+		<Text bold>
+			<Text color={BRAND_COLOR}>◈</Text>
+			<Text color="whiteBright"> serenity</Text>
 		</Text>
 	);
 }
@@ -367,8 +377,8 @@ function Conversation({ messages }: { messages: MasterMessage[] }) {
 export const MASTER_INPUT = "input";
 /** Element id prefix of the master's review-request rows. */
 export const REVIEW_ROW = "rv:";
-/** Element id of the SLACK section's item; `[` `]` cycle it while selected. */
-export const SLACK_ROW = "slack";
+/** Element id prefix of a Slack item in NEEDS YOU (ADR 0030). */
+export const SLACK_NEED = "sl:";
 
 /** A row with text on the left and a fixed part on the right. */
 function Row({
@@ -449,78 +459,54 @@ function ReviewSection({
 }
 
 /**
- * One Slack thread or mention waiting on the user (ADR 0023): channel and
- * author, its age, and the message. `[` `]` step through the others.
+ * A Slack mention or DM in NEEDS YOU (ADR 0030): who wrote and where, its
+ * age, what the user has to do, and the ◆ suggestion (ADR 0024).
  */
-function SlackSection({
-	slack,
-	index,
+function SlackNeedItem({
+	item,
+	suggestion,
 	selected,
 	replyText,
-	width,
+	inner,
+	first,
 	now,
 }: {
-	slack: SlackState;
-	index: number;
+	item: SlackItem;
+	suggestion: SlackSuggestion | undefined;
 	selected: boolean;
 	/** The suggestion's text being edited (e), or null. */
 	replyText: string | null;
-	width: number;
+	inner: number;
+	first: boolean;
 	now: number;
 }) {
-	const item = slack.items[index];
-	const suggestion = item
-		? slack.suggestions.find((g) => g.itemId === item.id)
-		: undefined;
-	const count = slack.items.length;
-	const lines = item
-		? wrap(item.text, width - NEED_INDENT, SLACK_TEXT_LINES)
-		: [];
 	return (
-		<>
-			<SectionHeader
-				label={count > 1 ? `SLACK ${index + 1}/${count}` : "SLACK"}
-				width={width}
-			/>
-			{item ? (
-				<>
-					<Row
-						selected={selected}
-						right={
-							<Text color="gray">
-								{count > 1 && selected ? "[ ] " : ""}
-								{age(item.at, now)}
-							</Text>
-						}
-					>
-						<Text color={selected ? "whiteBright" : "white"} bold={selected}>
-							{item.channel}
-						</Text>
-						<Text color="gray">
-							{" "}
-							· {item.author}
-							{item.reason === "mention" ? " mentioned you" : " replied"}
-						</Text>
-					</Row>
-					{Array.from({ length: SLACK_TEXT_LINES }, (_, i) => (
-						// biome-ignore lint/suspicious/noArrayIndexKey: lines are positional
-						<Box key={i} paddingLeft={NEED_INDENT}>
-							<Text color="white">{lines[i] ?? " "}</Text>
-						</Box>
-					))}
-					{suggestion ? (
-						<SlackSuggestionLine
-							suggestion={suggestion}
-							replyText={selected ? replyText : null}
-						/>
-					) : null}
-				</>
-			) : (
-				<Text color="yellow" wrap="truncate">
-					{slack.error}
+		<Box flexDirection="column" marginTop={first ? 0 : 1}>
+			<Row
+				selected={selected}
+				right={<Text color="gray">{age(item.at, now)}</Text>}
+			>
+				<Text color="yellow">@ </Text>
+				<Text color={selected ? "whiteBright" : undefined} bold={selected}>
+					{item.author}
 				</Text>
-			)}
-		</>
+				<Text color="gray">
+					{item.reason === "dm" ? " · dm" : ` in ${item.channel}`}
+				</Text>
+			</Row>
+			{needLines(item.action, inner).map((line, i) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: lines are positional
+				<Box key={i} paddingLeft={NEED_INDENT}>
+					<Text color="white">{line}</Text>
+				</Box>
+			))}
+			{suggestion ? (
+				<SlackSuggestionLine
+					suggestion={suggestion}
+					replyText={selected ? replyText : null}
+				/>
+			) : null}
+		</Box>
 	);
 }
 
@@ -609,7 +595,6 @@ export function MasterPanel({
 	calmTopics,
 	plan,
 	slack,
-	slackIndex,
 	focused,
 	selected,
 	inputText,
@@ -625,7 +610,6 @@ export function MasterPanel({
 	calmTopics: number;
 	plan: MasterPlan;
 	slack: SlackState | null;
-	slackIndex: number;
 	focused: boolean;
 	selected: string | null;
 	inputText: string | null;
@@ -633,38 +617,74 @@ export function MasterPanel({
 }) {
 	const inner = width - 6;
 	const now = Date.now();
-	const count = needs.length + permissions.length;
+	const slackItems = slack?.items ?? [];
+	const count = needs.length + permissions.length + slackItems.length;
 	const items = [
 		...permissions.map((p) => ({ kind: "permission" as const, p })),
 		...needs.map((s) => ({ kind: "session" as const, s })),
+		...slackItems.map((m) => ({ kind: "slack" as const, m })),
 	];
 	const shown = items.slice(
 		plan.needs.start,
 		plan.needs.start + plan.needs.count,
 	);
 	const hiddenCount = plan.needs.hidden;
-	const overview = (
-		<>
-			{plan.slack && slack ? (
-				<SlackSection
-					slack={slack}
-					index={slackIndex}
-					selected={selected === SLACK_ROW}
-					replyText={replyText}
-					width={inner}
-					now={now}
-				/>
-			) : null}
-			{plan.reviews.length ? (
-				<ReviewSection
-					reviews={plan.reviews}
-					selected={selected}
-					width={inner}
-					now={now}
-				/>
-			) : null}
-		</>
-	);
+	const slackError = slack?.error ? (
+		<Text color="yellow" wrap="truncate">
+			{slack.error}
+		</Text>
+	) : null;
+	const needsYou =
+		count > 0 ? (
+			<>
+				<SectionHeader label={`NEEDS YOU ${count}`} width={inner} urgent />
+				{shown.map((item, i) =>
+					item.kind === "permission" ? (
+						<PermissionItem
+							key={item.p.id}
+							permission={item.p}
+							selected={selected === `perm:${item.p.id}`}
+							inner={inner}
+							first={i === 0}
+						/>
+					) : item.kind === "slack" ? (
+						<SlackNeedItem
+							key={item.m.id}
+							item={item.m}
+							suggestion={slack?.suggestions.find(
+								(g) => g.itemId === item.m.id,
+							)}
+							selected={selected === `${SLACK_NEED}${item.m.id}`}
+							replyText={replyText}
+							inner={inner}
+							first={i === 0}
+							now={now}
+						/>
+					) : (
+						<NeedItem
+							key={item.s.id}
+							session={item.s}
+							suggestion={suggestions.find((g) => g.sessionId === item.s.id)}
+							selected={selected === item.s.id}
+							replyText={replyText}
+							inner={inner}
+							first={i === 0}
+						/>
+					),
+				)}
+				{hiddenCount > 0 ? (
+					<Text color="gray">+{hiddenCount} more · ↑↓ scroll</Text>
+				) : null}
+			</>
+		) : null;
+	const reviews = plan.reviews.length ? (
+		<ReviewSection
+			reviews={plan.reviews}
+			selected={selected}
+			width={inner}
+			now={now}
+		/>
+	) : null;
 	return (
 		<TitledBox
 			title="◆ master"
@@ -681,7 +701,9 @@ export function MasterPanel({
 					<Text>
 						Press <Key>n</Key> to start your first session.
 					</Text>
-					{overview}
+					{slackError}
+					{needsYou}
+					{reviews}
 				</>
 			) : (
 				<>
@@ -702,42 +724,9 @@ export function MasterPanel({
 							</Text>
 						) : null}
 					</Text>
-					{count > 0 ? (
-						<>
-							<SectionHeader
-								label={`NEEDS YOU ${count}`}
-								width={inner}
-								urgent
-							/>
-							{shown.map((item, i) =>
-								item.kind === "permission" ? (
-									<PermissionItem
-										key={item.p.id}
-										permission={item.p}
-										selected={selected === `perm:${item.p.id}`}
-										inner={inner}
-										first={i === 0}
-									/>
-								) : (
-									<NeedItem
-										key={item.s.id}
-										session={item.s}
-										suggestion={suggestions.find(
-											(g) => g.sessionId === item.s.id,
-										)}
-										selected={selected === item.s.id}
-										replyText={replyText}
-										inner={inner}
-										first={i === 0}
-									/>
-								),
-							)}
-							{hiddenCount > 0 ? (
-								<Text color="gray">+{hiddenCount} more · ↑↓ scroll</Text>
-							) : null}
-						</>
-					) : null}
-					{overview}
+					{slackError}
+					{needsYou}
+					{reviews}
 					<SectionHeader label="CONVERSATION" width={inner} />
 					<Conversation messages={conversation.slice(-2)} />
 				</>

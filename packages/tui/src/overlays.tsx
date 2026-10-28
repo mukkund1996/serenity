@@ -162,7 +162,7 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 	[
 		"MAP",
 		[
-			["[ ] Ctrl+m", "topic or Slack · master"],
+			["[ ] Ctrl+m", "topic · master"],
 			["N I g", "new session · import · chat"],
 			["Tab Esc H", "next need · zoom out · archived"],
 			["y e n", "approve · edit · decline"],

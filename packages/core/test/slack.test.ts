@@ -6,6 +6,7 @@ import {
 	SLACK_LOGIN_HINT,
 	type SlackItem,
 	slackContext,
+	slackInboxPrompt,
 	slackSendPrompt,
 	slackSuggestionPrompt,
 	slackTsMs,
@@ -18,13 +19,14 @@ const item = (over: Record<string, unknown> = {}) => ({
 	author: "Ana",
 	text: "can you check\nthe deploy?",
 	reason: "mention",
+	action: "Check the deploy",
 	ts: "1730000000.000100",
 	threadTs: "1730000000.000100",
 	permalink: "https://x.slack.com/archives/C1/p1730000000000100",
 	...over,
 });
 
-test("items come back newest first, one per thread, at most five", () => {
+test("items come back newest first, one per thread, at most three", () => {
 	const raw = {
 		access: "ok",
 		problem: null,
@@ -38,10 +40,11 @@ test("items come back newest first, one per thread, at most five", () => {
 	};
 	const inbox = parseSlackInbox(raw);
 	expect(inbox?.error).toBeNull();
-	expect(inbox?.items).toHaveLength(5);
+	expect(inbox?.items).toHaveLength(3);
 	expect(inbox?.items[0]?.id).toBe("C1:1730000000.000100");
 	expect(inbox?.items[0]?.ts).toBe("1730000500.0");
 	expect(inbox?.items[0]?.text).toBe("can you check the deploy?");
+	expect(inbox?.items[0]?.action).toBe("Check the deploy");
 	// A message outside a thread is its own thread.
 	expect(inbox?.items[1]?.threadTs).toBe(inbox?.items[1]?.ts);
 });
@@ -53,10 +56,33 @@ test("unusable entries are skipped; an unusable answer is null", () => {
 		items: [item({ channelId: "" }), item({ reason: "dm", permalink: "" })],
 	});
 	expect(inbox?.items).toHaveLength(1);
-	expect(inbox?.items[0]?.reason).toBe("thread");
+	expect(inbox?.items[0]?.reason).toBe("dm");
 	expect(inbox?.items[0]?.permalink).toBeNull();
 	expect(parseSlackInbox("nope")).toBeNull();
 	expect(parseSlackInbox({ access: "ok" })).toBeNull();
+});
+
+test("only mentions and DMs with something to do get in", () => {
+	const inbox = parseSlackInbox({
+		access: "ok",
+		problem: null,
+		items: [
+			item({ channelId: "C1", reason: "thread" }),
+			item({ channelId: "C2", action: " " }),
+			item({ channelId: "C3", reason: "dm" }),
+			item({ channelId: "C4" }),
+		],
+	});
+	expect(inbox?.items.map((i) => i.channelId).sort()).toEqual(["C3", "C4"]);
+});
+
+test("the inbox prompt asks for mentions and DMs that need action, and few", () => {
+	const prompt = slackInboxPrompt(Date.UTC(2026, 9, 28));
+	expect(prompt).toContain("since 2026-10-21");
+	expect(prompt).toContain("direct messages");
+	expect(prompt).toContain("When unsure, drop it.");
+	expect(prompt).toContain("at most 3");
+	expect(prompt).not.toMatch(/threads the user replied/i);
 });
 
 test("no access says how to log in when it is an auth problem", () => {

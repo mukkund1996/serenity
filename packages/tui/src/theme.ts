@@ -1,5 +1,8 @@
 import type { Color, PrTone, Session, SessionStatus } from "@serenity/core";
 
+/** The ◈ icon's green, as on getserenity.dev; brand only, never a status. */
+export const BRAND_COLOR = "#7fc77f";
+
 /** The only three status glyphs (design handover, "Status language"). */
 export function glyph(
 	status: SessionStatus,
