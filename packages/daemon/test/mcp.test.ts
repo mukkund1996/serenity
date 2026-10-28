@@ -33,6 +33,7 @@ test("tools/list names serenity's three tools", async () => {
 		"open_session",
 		"session_status",
 		"watch_session",
+		"create_session",
 		"request_permission",
 	]);
 });

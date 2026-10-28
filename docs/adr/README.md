@@ -38,6 +38,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0030](0030-master-skill-auto-mode-confirmed-slack.md) | The master's skill, auto mode, and Slack messages sent once confirmed in the chat | Accepted |
 | [0031](0031-slack-joins-needs-you.md) | Slack joins NEEDS YOU: only mentions and DMs that need an action, at most three; no SLACK section, `[` `]` back to topics | Accepted |
 | [0032](0032-master-watches-sessions.md) | The master reads status on demand and watches sessions; hook status is checked against Claude's own | Accepted |
+| [0033](0033-master-starts-sessions-from-a-brief.md) | The master starts sessions from a brief with `create_session` | Accepted |
 
 ## System at a glance
 

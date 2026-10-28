@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
+	type CreateSessionParams,
 	createMemoryStorage,
 	type Session,
 	type Storage,
@@ -54,10 +55,12 @@ function change(id: string, patch: Partial<Session>): Session {
 
 let killed: string[];
 let opened: string[];
+let created: CreateSessionParams[];
 
 beforeEach(() => {
 	killed = [];
 	opened = [];
+	created = [];
 	storage = createMemoryStorage();
 	runner = new FakeRunner();
 	master = new MasterSupervisor(
@@ -77,6 +80,14 @@ beforeEach(() => {
 			},
 			open: async (session) => {
 				opened.push(session.name);
+			},
+			create: async (params) => {
+				created.push(params);
+				return put({
+					id: `new-${params.name}`,
+					name: params.name,
+					branch: params.name,
+				});
 			},
 			pluginDir: "/tmp/master-plugin",
 			mcpConfig: () => "{}",
@@ -373,6 +384,51 @@ describe("chat", () => {
 		});
 		expect(result.text).toBe("Opened api-auth beside the map.");
 		expect(opened).toEqual(["api-auth"]);
+	});
+
+	test("create_session starts a worktree session with the brief's prompt", async () => {
+		const result = await master.handleTool(REPO, "create_session", {
+			name: "api-auth",
+			prompt: "  Rotate refresh tokens.  ",
+		});
+		expect(result.isError).toBeFalsy();
+		expect(result.text).toContain("Started api-auth on branch api-auth");
+		expect(created).toEqual([
+			{
+				repo: REPO,
+				name: "api-auth",
+				cwd: REPO,
+				mode: "worktree",
+				prompt: "Rotate refresh tokens.",
+			},
+		]);
+	});
+
+	test("create_session puts the session under the given topic", async () => {
+		await master.handleTool(REPO, "create_session", {
+			name: "api-auth",
+			prompt: "Rotate refresh tokens.",
+			topic: "Auth",
+		});
+		expect(storage.sessions.get("new-api-auth")?.topic).toBe("auth");
+	});
+
+	test("create_session needs a name and a prompt, and keeps to the topic cap", async () => {
+		const noPrompt = await master.handleTool(REPO, "create_session", {
+			name: "api-auth",
+		});
+		expect(noPrompt).toMatchObject({ isError: true });
+		put({ id: "a", topic: "one" });
+		put({ id: "b", topic: "two" });
+		put({ id: "c", topic: "three" });
+		const pastCap = await master.handleTool(REPO, "create_session", {
+			name: "api-auth",
+			prompt: "Rotate refresh tokens.",
+			topic: "four",
+		});
+		expect(pastCap.isError).toBe(true);
+		expect(pastCap.text).toContain("Pick one of: one, two, three");
+		expect(created).toEqual([]);
 	});
 
 	test("a permission request waits for the user's answer", async () => {

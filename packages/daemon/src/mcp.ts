@@ -100,6 +100,31 @@ export const MCP_TOOLS = [
 		},
 	},
 	{
+		name: "create_session",
+		description:
+			"Start a new session: a Claude Code agent in its own worktree on a new branch off the default base, given prompt as its first message. It starts at once and shows on the map. Use when the user asks to start, spin up or hand off work; call it once per session the brief needs.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				name: {
+					type: "string",
+					description:
+						"Session name, also its branch and worktree: letters, digits, . _ - (max 40), e.g. api-auth",
+				},
+				prompt: {
+					type: "string",
+					description:
+						"The agent's first message. It sees nothing of this chat, so make it self-contained.",
+				},
+				topic: {
+					type: "string",
+					description: "Topic to put it under; optional",
+				},
+			},
+			required: ["name", "prompt"],
+		},
+	},
+	{
 		name: "request_permission",
 		description: "Asks the user in serenity whether a tool call may run.",
 		inputSchema: {

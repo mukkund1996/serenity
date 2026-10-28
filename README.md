@@ -41,7 +41,7 @@ serenity runs on your existing Claude Code login and subscription.
 |---|---|
 | **Mind map of sessions** | Three zoom levels: the **map** (master in the centre, topics around it), **topics** (every session as a card with its summary and PR), and **session** (the real Claude Code pane, untouched). |
 | **Live status** | Sessions report through Claude Code hooks: `◐` waiting, `●` working, `✓` finished. Only waiting sessions ask for attention. |
-| **The master** | Haiku writes one-line summaries and groups sessions into topics, Sonnet suggests replies, approvals and cleanups you accept with `y` / `e` / `n`, and an Opus chat (`g`) can see and steer everything. |
+| **The master** | Haiku writes one-line summaries and groups sessions into topics, Sonnet suggests replies, approvals and cleanups you accept with `y` / `e` / `n`, and an Opus chat (`g`) can see and steer everything, and start new sessions from a brief. |
 | **Pull requests** | Each card shows its PR and checks via `gh`. `o` opens it, ready PRs get a review request from CODEOWNERS, and a merged PR finishes the session. |
 | **Safe cleanup** | Removing a session checks for uncommitted changes, unpushed commits and PR state before it touches a worktree. |
 | **Worktrees** | New sessions get their own git worktree beside the repo, or reuse an existing branch. |
