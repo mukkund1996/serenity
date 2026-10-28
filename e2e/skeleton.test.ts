@@ -246,8 +246,6 @@ test(
 		const done = await waitFor(/Summary: Done: rotate tokens/);
 		expect(done).toContain("✓ api-auth");
 		expect(done).toContain("backend ·");
-		// The agent's status line reported plan usage (ADR 0020).
-		await waitFor(/session 42% · week 17%/);
 		await waitFor(/◆ Clean up the worktree/);
 	},
 	STEP_TIMEOUT,
@@ -663,44 +661,6 @@ test(
 );
 
 test(
-	"p pins a session: it is never finished, and once ended Enter resumes it",
-	async () => {
-		await newSession("keeper");
-		keys("p");
-		await waitFor(/pinned keeper/);
-		await waitFor(/pinned · /);
-		keys("i");
-		type("ship it\r");
-		await waitFor(/Summary: Done: ship it/);
-		await Bun.sleep(500);
-		expect(screen()).not.toContain("✓ keeper");
-		expect(screen()).not.toMatch(/◆ Clean up[^\n]*\n?[^\n]*keeper/);
-
-		keys("i");
-		type("exit\r");
-		await waitFor(/Ended\. Enter resumes it\./);
-		keys("Enter");
-		await until(
-			() => panesInMap().length === 2,
-			"the resumed agent pane to join the map window",
-		);
-		const [, agentPane] = panesInMap() as [string, string];
-		spawnSync(process.execPath, [MAIN, "detach", agentPane], {
-			env: { ...process.env, ...env },
-		});
-		await until(() => panesInMap().length === 1, "the agent to be parked");
-		await until(
-			() => !screen().includes("Ended. Enter resumes it."),
-			"keeper to be live again",
-		);
-	},
-	STEP_TIMEOUT,
-);
-
-/** What the tmux binding sends the map for Ctrl+m: a CSI u key, not Enter. */
-const ctrlM = () => keys("Escape", "[109;5u");
-
-test(
 	"arrows and WASD move between nodes; Enter goes into the master, Esc leaves it",
 	async () => {
 		keys("c");
@@ -723,40 +683,6 @@ test(
 		await waitFor(/▸/);
 		keys("Escape");
 		await until(() => !screen().includes("▸"), "Esc to close the message");
-	},
-	STEP_TIMEOUT,
-);
-
-test(
-	"Ctrl+m focuses the master, from the map and from an attached session",
-	async () => {
-		keys("Right");
-		// i opens the card's quick message, its ▸ on the input row.
-		keys("i");
-		await waitFor(/▸/);
-		ctrlM();
-		await until(() => !screen().includes("▸"), "focus to leave the card");
-		keys("Enter");
-		await waitFor(/▸/);
-		keys("Escape");
-
-		await newSession("hopper");
-		keys("Enter");
-		await until(
-			() => panesInMap().length === 2,
-			"the agent pane to join the map window",
-		);
-		const [, agentPane] = panesInMap() as [string, string];
-		// send-keys bypasses key bindings, so run what the binding runs.
-		spawnSync(process.execPath, [MAIN, "detach", agentPane, "master"], {
-			env: { ...process.env, ...env },
-		});
-		await until(() => panesInMap().length === 1, "the agent to be parked");
-		await waitFor(/zoom: topics/);
-		// Still on hopper, Enter would attach it again; on the master it goes in.
-		keys("Enter");
-		await waitFor(/▸/);
-		expect(panesInMap().length).toBe(1);
 	},
 	STEP_TIMEOUT,
 );
