@@ -324,13 +324,77 @@ test(
 	STEP_TIMEOUT,
 );
 
+/** Focuses the master and opens its message input with i, as on any other node. */
+async function openMasterInput(): Promise<void> {
+	keys("c");
+	await Bun.sleep(300);
+	keys("i");
+	await waitFor(/› █/);
+}
+
+/** Esc closes the input, and its @ list first; the next key is a map key again. */
+async function closeMasterInput(): Promise<void> {
+	keys("Escape");
+	await until(() => !screen().includes("› █"), "the master input to close");
+	await waitFor(/message master…/);
+}
+
 test(
-	"g messages the master; its reply shows in the conversation",
+	"i on the master messages it; the input stays open, cleared, after Enter; Esc closes it",
 	async () => {
-		keys("g");
+		await openMasterInput();
 		type("status?\r");
 		const chat = await waitFor(/Heard: status\?/);
 		expect(chat).toMatch(/you\s+status\?/);
+		// Still open, empty and focused for the next message.
+		expect(chat).toContain("› █");
+		type("and now?\r");
+		await waitFor(/Heard: and now\?/);
+		await closeMasterInput();
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"g no longer opens the master input",
+	async () => {
+		keys("c");
+		await Bun.sleep(300);
+		keys("g");
+		await Bun.sleep(500);
+		expect(screen()).not.toContain("› █");
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"@ lists live sessions as you type; Tab and Enter complete the name, Esc closes the list only",
+	async () => {
+		await openMasterInput();
+		type("@api");
+		await waitFor(/▸ @api-auth/);
+		// Esc closes the list and leaves the input open.
+		keys("Escape");
+		await until(() => !screen().includes("▸ @api-auth"), "the list to close");
+		expect(screen()).toContain("› @api█");
+		type("-");
+		await waitFor(/▸ @api-auth/);
+		keys("Tab");
+		await waitFor(/› @api-auth █/);
+		expect(screen()).not.toContain("▸ @api-auth");
+		type("how is it?");
+		await Bun.sleep(200);
+		// Enter with no list open sends.
+		keys("Enter");
+		const chat = await waitFor(/Heard: @api-auth how is it\?/);
+		expect(chat).toMatch(/you\s+@api-auth how is it\?/);
+		// Enter while the list is open completes; it does not send.
+		type("@api");
+		await waitFor(/▸ @api-auth/);
+		keys("Enter");
+		await waitFor(/› @api-auth █/);
+		expect(screen()).not.toMatch(/Heard: @api-auth\s*$/m);
+		await closeMasterInput();
 	},
 	STEP_TIMEOUT,
 );
@@ -338,9 +402,13 @@ test(
 test(
 	"the master's suggest tool reaches NEEDS YOU through serenity mcp; n declines it",
 	async () => {
-		keys("g");
+		await openMasterInput();
 		type("suggest a reply to api-auth\r");
 		await waitFor(/◆ Reply "ok"/);
+		await closeMasterInput();
+		// Tab goes into the master on its first NEEDS YOU item, the suggestion's session.
+		keys("Tab");
+		await waitFor(/▸ .*api-auth/);
 		keys("n");
 		await until(
 			() => !screen().includes('◆ Reply "ok"'),
@@ -353,9 +421,10 @@ test(
 test(
 	"the master's permission request waits at the top of NEEDS YOU until y",
 	async () => {
-		keys("g");
+		await openMasterInput();
 		type("ask permission\r");
 		const asking = await waitFor(/master wants to use Bash/);
+		await closeMasterInput();
 		expect(asking).toContain("npm test");
 		keys("Tab");
 		await waitFor(/▸ ◆ master wants to use Bash/);

@@ -35,7 +35,7 @@ Then, in the repo you work in, open a tmux window and run `serenity`. Press `I` 
 - Every build has its own id (`serenity version`, e.g. `0.4.0+3f2a9c1.1025-1650`). A client that finds a daemon of another build asks it to stop and starts its own, so you can't end up on stale code.
 - Hooks start the daemon if it is down, so a restart loses no events.
 - State lives in SQLite; the daemon rebuilds everything from it. Imported sessions are re-read from Claude's own files on start.
-- The master chat does not survive a restart (it starts again on your next `g` message); summaries and suggestions do.
+- The master chat does not survive a restart (it starts again on your next message); summaries and suggestions do.
 
 ## When something looks wrong
 

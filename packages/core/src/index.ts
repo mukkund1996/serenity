@@ -4,6 +4,7 @@ export * from "./config";
 export * from "./daemon-client";
 export * from "./domain";
 export * from "./master";
+export * from "./mentions";
 export * from "./observed";
 export * from "./paths";
 export * from "./pr";

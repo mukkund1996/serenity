@@ -4,6 +4,7 @@ import {
 	applySummary,
 	capTopic,
 	chatSnapshot,
+	MASTER_SYSTEM_PROMPT,
 	needsSuggestion,
 	nextTopic,
 	normalizeTopic,
@@ -322,4 +323,11 @@ test("a done session whose PR merges asks for a suggestion again", () => {
 		parseSuggestion({ kind: "cleanup", label: "Clean up", text: null }, merged)
 			?.kind,
 	).toBe("cleanup");
+});
+
+describe("the chat's prompts", () => {
+	test("tell the master an @-mentioned session is acted on directly", () => {
+		expect(MASTER_SYSTEM_PROMPT).toContain("@-mentions a session");
+		expect(MASTER_SYSTEM_PROMPT).toContain("no draft and no confirmation");
+	});
 });

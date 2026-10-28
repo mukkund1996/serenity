@@ -41,6 +41,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0033](0033-master-starts-sessions-from-a-brief.md) | The master starts sessions from a brief with `create_session` | Accepted |
 | [0034](0034-dismiss-slack-items.md) | `x` dismisses a Slack item from NEEDS YOU for good, by message; a newer message in its thread shows again | Accepted |
 | [0035](0035-master-sends-replies-the-user-asked-for.md) | The master sends replies the user asked for with `send_reply` | Accepted |
+| [0036](0036-master-input-i-and-session-mentions.md) | `i` opens the master chat input and it stays open; `@session` tells the master to act on that session at once | Accepted |
 
 ## System at a glance
 

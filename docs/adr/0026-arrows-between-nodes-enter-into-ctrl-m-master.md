@@ -1,6 +1,6 @@
 # 0026 · Arrow keys between nodes, Enter into a node, `Ctrl+m` to the master
 
-**Status:** Accepted · 2026-10-27 · Enter into a card superseded by 0028
+**Status:** Accepted · 2026-10-27 · Enter into a card superseded by 0028; `g` for the master chat replaced by `i` in 0036
 
 ## Context
 WASD moved between nodes and the arrow keys selected inside the focused node (0012, 0019). Arrow keys are what people reach for to move around, and having both key sets live at once meant any stray `↑` changed the selection inside a node you had only passed through. The way back to the master was `c` on the map, `Ctrl+g` and then `c` from a session.
@@ -15,4 +15,4 @@ WASD moved between nodes and the arrow keys selected inside the focused node (00
 ## Consequences
 - In a terminal without extended keys (Apple Terminal) `Ctrl+m` is Enter. `c` still focuses the master on the map, and `Ctrl+g` still leaves a session.
 - The binding lives in the tmux server, so it also covers the user's own panes. There it only passes `C-m` through. The map pane's mark is cleared when the map disconnects, so a shell left in that pane gets plain Enter again.
-- The footer reads `←↑↓→ move · Enter into · Ctrl+m master · z Z zoom · / search`. `c` and `g` move to the shortcuts panel. Its ON A NODE section grows by one row.
+- The footer reads `←↑↓→ move · Enter into · Ctrl+m master · z Z zoom · / search`. `c` and `g` move to the shortcuts panel (`g` became `i` on the master, 0036). Its ON A NODE section grows by one row.

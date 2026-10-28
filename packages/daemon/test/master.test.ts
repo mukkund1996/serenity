@@ -590,6 +590,98 @@ describe("chat", () => {
 			]);
 		});
 
+		describe("an @mention of the session (ADR 0036)", () => {
+			const text = "Ask me questions before you change anything.";
+
+			test("sends whatever text the master writes, at once", async () => {
+				put({ id: "a", name: "api-auth", status: "idle" });
+				say("you", "@api-auth ask me questions before changing things");
+				const result = await master.handleTool(REPO, "send_reply", {
+					session: "api-auth",
+					text,
+				});
+				expect(result).toEqual({ text: "Sent to api-auth." });
+				expect(replies).toEqual([{ name: "api-auth", text }]);
+				expect(storage.suggestions.listPending(REPO)).toEqual([]);
+			});
+
+			test("without the mention the same text waits in NEEDS YOU", async () => {
+				put({ id: "a", name: "api-auth", status: "idle" });
+				say("you", "ask api-auth to ask me questions before changing things");
+				const result = await master.handleTool(REPO, "send_reply", {
+					session: "api-auth",
+					text,
+				});
+				expect(result.text).toContain("waits in NEEDS YOU");
+				expect(replies).toEqual([]);
+				expect(storage.suggestions.listPending(REPO)).toHaveLength(1);
+			});
+
+			test("mentioning another session, or a prefix of the name, sends nothing", async () => {
+				put({ id: "a", name: "api-auth", status: "idle" });
+				put({ id: "b", name: "web-login", status: "idle" });
+				for (const said of ["@web-login how is it going", "@api tell it"]) {
+					say("you", said);
+					await master.handleTool(REPO, "send_reply", {
+						session: "api-auth",
+						text,
+					});
+				}
+				expect(replies).toEqual([]);
+			});
+
+			test("only the user's latest message counts", async () => {
+				put({ id: "a", name: "api-auth", status: "idle" });
+				say("you", "@api-auth look at this");
+				say("master", "Looking.");
+				await master.handleTool(REPO, "send_reply", {
+					session: "api-auth",
+					text,
+				});
+				expect(replies).toEqual([]);
+				say("you", "ok");
+				await master.handleTool(REPO, "send_reply", {
+					session: "api-auth",
+					text,
+				});
+				expect(replies).toEqual([]);
+			});
+
+			test("resolves a name shared with an archived session to the live one", async () => {
+				put({ id: "old", name: "api-auth", status: "archived", createdAt: 1 });
+				put({ id: "live", name: "api-auth", status: "working", createdAt: 2 });
+				say("you", "@api-auth add tests");
+				const result = await master.handleTool(REPO, "send_reply", {
+					session: "api-auth",
+					text: "Add tests for the token refresh.",
+				});
+				expect(result.isError).toBeUndefined();
+				expect(replies).toEqual([
+					{ name: "api-auth", text: "Add tests for the token refresh." },
+				]);
+			});
+
+			test("does not reach an archived or ended session, or one on a permission prompt", async () => {
+				put({ id: "r", name: "old-one", status: "archived" });
+				put({ id: "d", name: "dead-one", status: "dead" });
+				put({
+					id: "p",
+					name: "asking",
+					status: "waiting",
+					waitingOn: "permission",
+				});
+				for (const session of ["old-one", "dead-one", "asking"]) {
+					say("you", `@${session} do it`);
+					const result = await master.handleTool(REPO, "send_reply", {
+						session,
+						text,
+					});
+					expect(result.isError).toBe(true);
+				}
+				expect(replies).toEqual([]);
+			});
+		});
+
 		test("a serenity message never confirms: the user's message must be the latest", async () => {
 			put({ id: "a", name: "api-auth", status: "idle" });
 			say("you", "tell api-auth yes");
