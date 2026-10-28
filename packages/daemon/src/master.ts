@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	applySummary,
+	type CreateSessionParams,
 	capTopic,
 	chatMessage,
 	chatSnapshot,
@@ -53,6 +54,8 @@ export interface MasterHost {
 	kill(session: Session): Promise<void>;
 	/** Attaches a session beside the user's map, as Enter on its card does. */
 	open(session: Session): Promise<void>;
+	/** Starts a new session, as N on the map does. */
+	create(params: CreateSessionParams): Promise<Session>;
 	/** `--plugin-dir` for the chat: the plugin with the master's skill (writeMasterPlugin). */
 	pluginDir: string;
 	/** `--mcp-config` JSON for a repo's chat; its server is `serenity mcp <repo>`. */
@@ -429,6 +432,7 @@ export class MasterSupervisor {
 			return this.requestPermission(repo, args);
 		if (name === "session_status" && !args.session)
 			return { text: this.snapshot(repo) };
+		if (name === "create_session") return this.createSession(repo, args);
 		const session = this.host.storage.sessions
 			.listByRepo(repo)
 			.find((s) => s.name === args.session);
@@ -543,6 +547,49 @@ export class MasterSupervisor {
 				: `It is ${session.status} now, not working; serenity messages you when its next turn ends.`;
 		return {
 			text: `Watching ${session.name}. ${now}${slack ? " The confirmed Slack message goes out only once it finishes." : ""} End your turn now; don't wait or poll.`,
+		};
+	}
+
+	/**
+	 * The chat's create_session: a new worktree session started with the
+	 * brief's prompt. Like N on the map, it runs at once; the user's request
+	 * is the approval.
+	 */
+	private async createSession(
+		repo: string,
+		args: Record<string, unknown>,
+	): Promise<MasterToolResult> {
+		const name = typeof args.name === "string" ? args.name.trim() : "";
+		const prompt = typeof args.prompt === "string" ? args.prompt.trim() : "";
+		if (!name) return { text: "Give the session a name.", isError: true };
+		if (!prompt)
+			return { text: "Give the session its first prompt.", isError: true };
+		let topic: string | null = null;
+		if (args.topic !== undefined && args.topic !== "") {
+			topic = normalizeTopic(args.topic);
+			if (topic === PINNED)
+				return {
+					text: "Only the user pins sessions, with p.",
+					isError: true,
+				};
+			const topics = this.topics(repo);
+			if (!capTopic(topic, topics, this.host.maxTopics))
+				return {
+					text: `There are already ${this.host.maxTopics} topics, the most allowed. Pick one of: ${topics.join(", ")}.`,
+					isError: true,
+				};
+		}
+		const session = await this.host.create({
+			repo,
+			name,
+			cwd: repo,
+			mode: "worktree",
+			prompt,
+		});
+		if (topic) this.host.update(session, { topic, topicCandidate: null });
+		this.host.broadcast(repo);
+		return {
+			text: `Started ${session.name} on branch ${session.branch}${topic ? ` under ${topic}` : ""}. It shows in your snapshot from now on.`,
 		};
 	}
 

@@ -1,6 +1,6 @@
 ---
 name: serenity
-description: How and when the serenity master uses its mcp__serenity__ tools (suggest, set_topic, open_session, archive_session, session_status, watch_session) and, when Slack is on, sends Slack messages after the user confirms the exact text. Use for any request that acts on a session or on Slack.
+description: How and when the serenity master uses its mcp__serenity__ tools (suggest, set_topic, open_session, archive_session, session_status, watch_session, create_session) and, when Slack is on, sends Slack messages after the user confirms the exact text. Use for any request that acts on a session or on Slack.
 ---
 
 # Acting as serenity's master
@@ -22,6 +22,7 @@ Session names in tool calls are the exact names from the snapshot.
 | a reviewer asked on a session's open PR | `suggest` kind `review`, with the reviewer's GitHub login as `text`. |
 | a session moved to another topic | `set_topic`. Only on the user's request. |
 | to see, open or go to a session | `open_session`. |
+| new work started from a brief ("spin up a session to…", "split this into sessions") | `create_session`, once per session. See below. |
 | a session killed, stopped or archived | `archive_session`. Only on the user's explicit request; it acts at once. |
 
 ### `suggest` runs nothing
@@ -36,7 +37,18 @@ A suggestion appears in NEEDS YOU and runs only when the user presses `y`. So:
 
 ### Acting at once
 
-`set_topic`, `open_session` and `archive_session` run immediately because the user's own request is the approval. Never call them to tidy up on your own. Pinned sessions are the user's: only they pin and unpin (`p`) or clean them up (`x`).
+`set_topic`, `open_session`, `archive_session` and `create_session` run immediately because the user's own request is the approval. Never call them to tidy up on your own. Pinned sessions are the user's: only they pin and unpin (`p`) or clean them up (`x`).
+
+### Starting sessions from a brief
+
+`create_session` starts a Claude Code agent in its own worktree, on a new branch off the default base, with your prompt as its first message. It runs at once and the session joins your snapshot, so you can follow and steer it like any other.
+
+- Create only when the user asks for new work to start. If the brief leaves the split unclear (one session or several, which parts go together), say how you'd split it in one line and wait for their go.
+- One session per independent piece of work that can land as its own PR. Don't create two that edit the same files.
+- The name is short and kebab-case and says what it does: `api-auth`, `fix-login-redirect`. It also names the branch and worktree, so it must not clash with a live session in the snapshot.
+- The prompt is all the new agent knows; it sees nothing of this chat. Write it self-contained: the goal, what's in and out of scope, the files or PRs you found that matter, and how to tell it's done. Don't paste the user's whole message if only part of it applies.
+- Pass `topic` when an existing topic fits; otherwise leave it out and the summarizer picks one.
+- Afterwards, name the sessions you started in one sentence.
 
 ### Watching a session
 

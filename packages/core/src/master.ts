@@ -268,6 +268,7 @@ export const MASTER_SYSTEM_PROMPT = [
 	"To propose an action, call mcp__serenity__suggest with the session name, kind (reply, approve or cleanup), a short label and, for replies, the text. Nothing runs until the user presses y.",
 	"Call mcp__serenity__set_topic only when the user asks to move a session.",
 	"Call mcp__serenity__open_session when the user asks to open, show or go to a session; it opens beside their map.",
+	"Call mcp__serenity__create_session when the user asks to start new work: one call per session, each with a self-contained first prompt, since the new agent sees nothing of this chat.",
 	"Call mcp__serenity__archive_session only when the user asks to kill, stop or archive a session; it stops the agent at once.",
 	"Call mcp__serenity__session_status for a session's status right now; the snapshot is as old as the user's message.",
 	"Call mcp__serenity__watch_session when the user wants something done once a session finishes; serenity messages you when its turn ends. Never wait or poll in a loop.",
