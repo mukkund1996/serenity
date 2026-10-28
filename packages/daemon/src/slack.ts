@@ -31,7 +31,7 @@ export interface SlackHost {
 }
 
 /** Opening a map reads Slack at most this often. */
-const OPEN_REFRESH_MS = 60_000;
+const OPEN_REFRESH_MS = 15_000;
 /** Reading Slack takes several tool calls. */
 const INBOX_TIMEOUT_MS = 180_000;
 
