@@ -39,7 +39,8 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0031](0031-slack-joins-needs-you.md) | Slack joins NEEDS YOU: only mentions and DMs that need an action, at most three; no SLACK section, `[` `]` back to topics | Accepted |
 | [0032](0032-master-watches-sessions.md) | The master reads status on demand and watches sessions; hook status is checked against Claude's own | Accepted |
 | [0033](0033-master-starts-sessions-from-a-brief.md) | The master starts sessions from a brief with `create_session` | Accepted |
-| [0034](0034-master-sends-replies-the-user-asked-for.md) | The master sends replies the user asked for with `send_reply` | Accepted |
+| [0034](0034-dismiss-slack-items.md) | `x` dismisses a Slack item from NEEDS YOU for good, by message; a newer message in its thread shows again | Accepted |
+| [0035](0035-master-sends-replies-the-user-asked-for.md) | The master sends replies the user asked for with `send_reply` | Accepted |
 
 ## System at a glance
 

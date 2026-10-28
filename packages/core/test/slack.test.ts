@@ -9,6 +9,7 @@ import {
 	type SlackItem,
 	slackContext,
 	slackInboxPrompt,
+	slackMessageKey,
 	slackSendPrompt,
 	slackSuggestionPrompt,
 	slackTsMs,
@@ -85,6 +86,30 @@ test("the inbox prompt asks for mentions and DMs that need action, and few", () 
 	expect(prompt).toContain("When unsure, drop it.");
 	expect(prompt).toContain("at most 3");
 	expect(prompt).not.toMatch(/threads the user replied/i);
+	expect(prompt).not.toContain("dismissed");
+});
+
+test("the inbox prompt skips dismissed messages from the last week", () => {
+	const now = Date.UTC(2026, 9, 28);
+	const recent = String(now / 1000 - 3600);
+	const old = String(now / 1000 - 8 * 24 * 3600);
+	const prompt = slackInboxPrompt(now, [
+		{ channelId: "C1", ts: recent, at: now },
+		{ channelId: "C2", ts: old, at: now },
+	]);
+	expect(prompt).toContain("dismissed");
+	expect(prompt).toContain(`C1 ${recent}`);
+	expect(prompt).not.toContain("C2");
+	expect(prompt).toContain(
+		"a newer message in the same thread or DM still counts",
+	);
+});
+
+test("a message's key is its channel and ts", () => {
+	expect(slackMessageKey({ channelId: "C1", ts: "1.5" })).toBe("C1@1.5");
+	expect(slackMessageKey({ channelId: "C1", ts: "1.5" })).not.toBe(
+		slackMessageKey({ channelId: "C1", ts: "1.6" }),
+	);
 });
 
 test("no access says how to log in when it is an auth problem", () => {

@@ -21,6 +21,18 @@ test("data survives reopening", () => {
 	second.close();
 });
 
+test("slack dismissals survive reopening", () => {
+	const path = join(dir, "dismiss.db");
+	const first = createSqliteStorage(path);
+	first.slackDismissals.add({ channelId: "C1", ts: "1730000000.1", at: 5 });
+	first.close();
+	const second = createSqliteStorage(path);
+	expect(second.slackDismissals.list()).toEqual([
+		{ channelId: "C1", ts: "1730000000.1", at: 5 },
+	]);
+	second.close();
+});
+
 test("older sessions read back with the new fields, category as topic", async () => {
 	const { Database } = await import("bun:sqlite");
 	const path = join(dir, "old.db");

@@ -1,4 +1,4 @@
-# 0034 · The master sends replies the user asked for with `send_reply`
+# 0035 · The master sends replies the user asked for with `send_reply`
 
 **Status:** Accepted · 2026-10-28
 

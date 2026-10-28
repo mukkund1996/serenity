@@ -165,7 +165,7 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 			["[ ] Ctrl+m", "topic · master"],
 			["N I g", "new session · import · chat"],
 			["Tab Esc H", "next need · zoom out · archived"],
-			["y e n", "approve · edit · decline"],
+			["y e n x", "approve · edit · decline · dismiss"],
 		],
 	],
 ];
@@ -179,7 +179,7 @@ export function ShortcutsPanel() {
 			fill="black"
 			borderStyle="single"
 			borderColor="white"
-			width={46}
+			width={51}
 			right={
 				<Text color="white">
 					{" "}

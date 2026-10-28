@@ -556,7 +556,7 @@ export class MasterSupervisor {
 	}
 
 	/**
-	 * The chat's send_reply (ADR 0034): a reply the user asked for in the chat
+	 * The chat's send_reply (ADR 0035): a reply the user asked for in the chat
 	 * is typed into the session at once; any other text waits for `y` in
 	 * NEEDS YOU, as suggest kind reply does.
 	 */

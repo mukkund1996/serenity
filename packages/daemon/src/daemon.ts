@@ -247,6 +247,7 @@ export class Daemon {
 			model: models.summarizer,
 			cwd: join(opts.home, "workers"),
 			mcpConfig: slackMcpConfig,
+			dismissals: opts.storage.slackDismissals,
 			watching: () => this.openRepos().some((r) => this.slackRepos.has(r)),
 			broadcast: () => {
 				for (const repo of this.openRepos())
@@ -578,6 +579,13 @@ export class Daemon {
 
 		"slack.decline": ({ repo, itemId }) => {
 			this.advisor.decline(repo, itemId);
+			return null;
+		},
+
+		"slack.dismiss": ({ channelId, ts }) => {
+			if (!channelId?.trim() || !ts?.trim())
+				throw new RpcError(RpcErrorCode.InvalidParams, "no Slack message");
+			this.slack.dismiss(channelId, ts);
 			return null;
 		},
 
