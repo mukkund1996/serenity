@@ -39,6 +39,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0031](0031-slack-joins-needs-you.md) | Slack joins NEEDS YOU: only mentions and DMs that need an action, at most three; no SLACK section, `[` `]` back to topics | Accepted |
 | [0032](0032-master-watches-sessions.md) | The master reads status on demand and watches sessions; hook status is checked against Claude's own | Accepted |
 | [0033](0033-master-starts-sessions-from-a-brief.md) | The master starts sessions from a brief with `create_session` | Accepted |
+| [0034](0034-master-sends-replies-the-user-asked-for.md) | The master sends replies the user asked for with `send_reply` | Accepted |
 
 ## System at a glance
 
@@ -53,7 +54,7 @@ All `claude` processes run on the user's own Claude login (0007).
              ┌──────────────── serenityd (one per machine, state keyed by repo) ───────────────┐
              │ session registry · status reducer · tmux driver · git/worktree driver · gh driver │
              │ storage (interface) ── SQLite                                                    │
-             │ MCP server for the chat (suggest / topic / archive / open / status / watch)     │
+             │ MCP server for the chat (suggest / reply / topic / archive / open / watch …)    │
              │ master supervisor                                                                │
              │   ├─ Opus: long-lived `claude -p` stream-json  (chat; uses the MCP tools)       │
              │   ├─ Haiku: one-shot per event → JSON (summary, ask, finished, topic)        │

@@ -30,6 +30,23 @@ export const MCP_TOOLS = [
 		},
 	},
 	{
+		name: "send_reply",
+		description:
+			"Send text to a session's agent now, as if the user typed it. Only for a reply the user asked for in the chat: their latest message contains the exact text, or your last reply showed it and they confirmed. Anything else is not sent: it waits in NEEDS YOU for y, as suggest kind reply. The session must be live and not on a permission prompt; while it is working, its agent reads the text when its turn ends.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				session: { type: "string", description: "Session name" },
+				text: {
+					type: "string",
+					description:
+						"The exact text the user asked for or confirmed, character for character",
+				},
+			},
+			required: ["session", "text"],
+		},
+	},
+	{
 		name: "set_topic",
 		description:
 			"Move a session to another topic. Use only when the user asks.",

@@ -7,6 +7,7 @@ import {
 	capTopic,
 	chatMessage,
 	chatSnapshot,
+	confirmedReply,
 	confirmedSlackSend,
 	MASTER_SLACK_PROMPT,
 	MASTER_SYSTEM_PROMPT,
@@ -54,6 +55,8 @@ export interface MasterHost {
 	kill(session: Session): Promise<void>;
 	/** Attaches a session beside the user's map, as Enter on its card does. */
 	open(session: Session): Promise<void>;
+	/** Types text into a live session's agent; throws if its pane has ended. */
+	reply(session: Session, text: string): Promise<void>;
 	/** Starts a new session, as N on the map does. */
 	create(params: CreateSessionParams): Promise<Session>;
 	/** `--plugin-dir` for the chat: the plugin with the master's skill (writeMasterPlugin). */
@@ -485,6 +488,8 @@ export class MasterSupervisor {
 			return { text: `Opened ${session.name} beside the map.` };
 		}
 
+		if (name === "send_reply") return this.sendReply(repo, session, args);
+
 		if (name === "suggest") {
 			const kind = args.kind as SuggestionKind;
 			const label =
@@ -547,6 +552,53 @@ export class MasterSupervisor {
 				: `It is ${session.status} now, not working; serenity messages you when its next turn ends.`;
 		return {
 			text: `Watching ${session.name}. ${now}${slack ? " The confirmed Slack message goes out only once it finishes." : ""} End your turn now; don't wait or poll.`,
+		};
+	}
+
+	/**
+	 * The chat's send_reply (ADR 0034): a reply the user asked for in the chat
+	 * is typed into the session at once; any other text waits for `y` in
+	 * NEEDS YOU, as suggest kind reply does.
+	 */
+	private async sendReply(
+		repo: string,
+		session: Session,
+		args: Record<string, unknown>,
+	): Promise<MasterToolResult> {
+		const text = typeof args.text === "string" ? args.text.trim() : "";
+		const full = `Reply "${text}"`;
+		const label = full.length > 60 ? `${full.slice(0, 59)}…` : full;
+		const problem = chatSuggestionProblem(
+			session,
+			"reply",
+			label,
+			text || null,
+		);
+		if (problem) return { text: problem, isError: true };
+		if (
+			!confirmedReply(this.host.storage.conversation.listRecent(repo, 2), text)
+		) {
+			this.propose(session, "reply", label, text, "chat");
+			return {
+				text: `The user did not ask for this exact text, so it waits in NEEDS YOU as "${label}" and runs only if they press y. To send it now, show the exact text and ask; once they confirm, call send_reply again with it.`,
+			};
+		}
+		try {
+			await this.host.reply(session, text);
+		} catch (error) {
+			return {
+				text: error instanceof Error ? error.message : String(error),
+				isError: true,
+			};
+		}
+		// It answers the session, so a reply waiting for y no longer applies.
+		this.supersede(session.id);
+		this.host.log(`master sent a confirmed reply to ${session.name}`);
+		return {
+			text:
+				session.status === "working"
+					? `Sent to ${session.name}. It is working; its agent reads it when this turn ends.`
+					: `Sent to ${session.name}.`,
 		};
 	}
 

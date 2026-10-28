@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	askable,
+	confirmedReply,
 	confirmedSlackSend,
 	parseSlackInbox,
 	parseSlackSuggestion,
@@ -247,5 +248,53 @@ describe("confirmedSlackSend", () => {
 				"merged in #42, deploys today",
 			),
 		).toBe(false);
+	});
+});
+
+describe("confirmedReply", () => {
+	const msg = (from: "you" | "master", text: string, id: number) => ({
+		id,
+		repo: "/r",
+		from,
+		text,
+		at: id,
+	});
+
+	test("sends text the user's latest message contains as whole words", () => {
+		const asked = [msg("you", "tell api-auth 'use 15m'", 1)];
+		expect(confirmedReply(asked, "use 15m")).toBe(true);
+		expect(confirmedReply([msg("you", "tell it yes", 1)], "yes")).toBe(true);
+		expect(confirmedReply(asked, "use 15")).toBe(false);
+		expect(confirmedReply(asked, "use 15m now")).toBe(false);
+		expect(confirmedReply([msg("you", "a.b", 1)], "a*b")).toBe(false);
+	});
+
+	test("sends text the master showed and the user then confirmed", () => {
+		const shown = msg(
+			"master",
+			"To dismiss-slack-item:\n\n> Ask me questions before you change anything.\n\nSend it?",
+			1,
+		);
+		const text = "Ask me questions before you change anything.";
+		expect(confirmedReply([shown, msg("you", "just send it", 2)], text)).toBe(
+			true,
+		);
+		expect(confirmedReply([shown], text)).toBe(false);
+		expect(
+			confirmedReply([shown, msg("you", "yes", 2)], "Ask me questions."),
+		).toBe(false);
+	});
+
+	test("never sends empty text or text the user neither wrote nor saw", () => {
+		expect(confirmedReply([msg("you", "tell it to add tests", 1)], "")).toBe(
+			false,
+		);
+		expect(
+			confirmedReply(
+				[msg("you", "tell it to add tests", 1)],
+				"Please add unit tests.",
+			),
+		).toBe(false);
+		expect(confirmedReply([], "yes")).toBe(false);
 	});
 });

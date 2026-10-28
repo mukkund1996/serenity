@@ -419,3 +419,23 @@ export function confirmedSlackSend(
 		plain(draft.text).includes(plain(message))
 	);
 }
+
+/**
+ * Whether the chat's reply to a session was asked for in the chat (ADR 0034):
+ * the user's latest message contains this exact text as whole words, or it
+ * answers a master reply that showed it (the Slack check). Only then is it
+ * typed into the session without waiting for `y` in NEEDS YOU.
+ */
+export function confirmedReply(
+	conversation: MasterMessage[],
+	text: unknown,
+): boolean {
+	if (typeof text !== "string" || !plain(text)) return false;
+	const last = conversation.at(-1);
+	if (last?.from !== "you") return false;
+	const quoted = plain(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	return (
+		new RegExp(`(?<!\\w)${quoted}(?!\\w)`).test(plain(last.text)) ||
+		confirmedSlackSend(conversation, text)
+	);
+}

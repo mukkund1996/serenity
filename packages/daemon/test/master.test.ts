@@ -56,8 +56,10 @@ function change(id: string, patch: Partial<Session>): Session {
 let killed: string[];
 let opened: string[];
 let created: CreateSessionParams[];
+let replies: Array<{ name: string; text: string }>;
 
 beforeEach(() => {
+	replies = [];
 	killed = [];
 	opened = [];
 	created = [];
@@ -80,6 +82,11 @@ beforeEach(() => {
 			},
 			open: async (session) => {
 				opened.push(session.name);
+			},
+			reply: async (session, text) => {
+				if (session.tmuxPane === "%gone")
+					throw new Error(`${session.name} has ended`);
+				replies.push({ name: session.name, text });
 			},
 			create: async (params) => {
 				created.push(params);
@@ -429,6 +436,121 @@ describe("chat", () => {
 		expect(pastCap.isError).toBe(true);
 		expect(pastCap.text).toContain("Pick one of: one, two, three");
 		expect(created).toEqual([]);
+	});
+
+	describe("send_reply", () => {
+		const say = (from: "you" | "master", text: string) =>
+			storage.conversation.append({ repo: REPO, from, text, at: ++now });
+
+		test("sends at once the text the user's message asked for", async () => {
+			put({ id: "a", name: "api-auth", status: "waiting", ask: "15m?" });
+			say("you", "tell api-auth 'yes, set it to 15m'");
+			const result = await master.handleTool(REPO, "send_reply", {
+				session: "api-auth",
+				text: "yes, set it to 15m",
+			});
+			expect(result).toEqual({ text: "Sent to api-auth." });
+			expect(replies).toEqual([
+				{ name: "api-auth", text: "yes, set it to 15m" },
+			]);
+		});
+
+		test("sends text the master showed once the user confirms, replacing its queued reply", async () => {
+			put({ id: "a", name: "dismiss-slack-item", status: "idle" });
+			const text = "Ask me questions before you change anything.";
+			say("you", "tell dismiss-slack-item to ask questions");
+			const queued = await master.handleTool(REPO, "send_reply", {
+				session: "dismiss-slack-item",
+				text,
+			});
+			expect(queued.isError).toBeUndefined();
+			expect(queued.text).toContain("waits in NEEDS YOU");
+			expect(replies).toEqual([]);
+			expect(storage.suggestions.listPending(REPO)).toMatchObject([
+				{ kind: "reply", source: "chat", text },
+			]);
+
+			say("master", `Queued for your y:\n\n> ${text}`);
+			say("you", "just send it");
+			const sent = await master.handleTool(REPO, "send_reply", {
+				session: "dismiss-slack-item",
+				text,
+			});
+			expect(sent.text).toBe("Sent to dismiss-slack-item.");
+			expect(replies).toEqual([{ name: "dismiss-slack-item", text }]);
+			expect(storage.suggestions.listPending(REPO)).toEqual([]);
+		});
+
+		test("text the user did not ask for falls back to NEEDS YOU", async () => {
+			put({ id: "a", name: "api-auth", status: "waiting" });
+			say("master", "> yes, set it to 15m\n\nSend it?");
+			say("you", "yes");
+			const result = await master.handleTool(REPO, "send_reply", {
+				session: "api-auth",
+				text: "yes, set it to 30m",
+			});
+			expect(result.isError).toBeUndefined();
+			expect(result.text).toContain("runs only if they press y");
+			expect(replies).toEqual([]);
+			expect(storage.suggestions.listPending(REPO)).toMatchObject([
+				{ label: 'Reply "yes, set it to 30m"', text: "yes, set it to 30m" },
+			]);
+		});
+
+		test("a serenity message never confirms: the user's message must be the latest", async () => {
+			put({ id: "a", name: "api-auth", status: "idle" });
+			say("you", "tell api-auth yes");
+			say("master", "Sent.");
+			await master.handleTool(REPO, "send_reply", {
+				session: "api-auth",
+				text: "yes",
+			});
+			expect(replies).toEqual([]);
+			expect(storage.suggestions.listPending(REPO)).toHaveLength(1);
+		});
+
+		test("a working session gets it, read when its turn ends", async () => {
+			put({ id: "a", name: "api-auth", status: "working" });
+			say("you", "tell api-auth add tests too");
+			const result = await master.handleTool(REPO, "send_reply", {
+				session: "api-auth",
+				text: "add tests too",
+			});
+			expect(result.text).toContain("reads it when this turn ends");
+			expect(replies).toHaveLength(1);
+		});
+
+		test("refuses ended, archived and permission-prompt sessions, and a gone pane", async () => {
+			put({ id: "d", name: "dead-one", status: "dead" });
+			put({ id: "r", name: "old-one", status: "archived" });
+			put({
+				id: "p",
+				name: "asking",
+				status: "waiting",
+				waitingOn: "permission",
+			});
+			put({ id: "g", name: "gone", status: "idle", tmuxPane: "%gone" });
+			for (const session of ["dead-one", "old-one", "asking", "gone"]) {
+				say("you", `tell ${session} yes`);
+				const result = await master.handleTool(REPO, "send_reply", {
+					session,
+					text: "yes",
+				});
+				expect(result.isError).toBe(true);
+			}
+			expect(replies).toEqual([]);
+			expect(storage.suggestions.listPending(REPO)).toEqual([]);
+			const asking = await master.handleTool(REPO, "send_reply", {
+				session: "asking",
+				text: "yes",
+			});
+			expect(asking.text).toContain("permission prompt");
+			const empty = await master.handleTool(REPO, "send_reply", {
+				session: "gone",
+				text: " ",
+			});
+			expect(empty.text).toContain("needs the text");
+		});
 	});
 
 	test("a permission request waits for the user's answer", async () => {
