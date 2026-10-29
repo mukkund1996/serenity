@@ -6,8 +6,19 @@ import {
 	type Storage,
 } from "@serenity/core";
 import { makeSession } from "@serenity/core/testing";
-import type { ChatEvent, ClaudeRunner, JsonRunOptions } from "../src/claude";
-import { MasterSupervisor } from "../src/master";
+import type {
+	ChatEvent,
+	ChatOptions,
+	ClaudeRunner,
+	JsonRunOptions,
+} from "../src/claude";
+import {
+	CHAT_HANG_MS,
+	CHAT_RESTART_BACKOFF_MS,
+	type MasterHost,
+	MasterSupervisor,
+	TOOL_TIMEOUT_MS,
+} from "../src/master";
 
 /** Answers JSON calls from a queue and records what the chat was sent. */
 class FakeRunner implements ClaudeRunner {
@@ -15,6 +26,11 @@ class FakeRunner implements ClaudeRunner {
 	calls: JsonRunOptions[] = [];
 	sent: string[] = [];
 	chatStarts = 0;
+	/** --resume of each chat started. */
+	resumes: Array<string | null> = [];
+	stops = 0;
+	/** Makes the chat's stdin throw, as a process that died does. */
+	brokenPipe = false;
 	emit: (event: ChatEvent) => void = () => {};
 
 	async runJson(opts: JsonRunOptions): Promise<unknown> {
@@ -23,16 +39,26 @@ class FakeRunner implements ClaudeRunner {
 		return this.answers.shift();
 	}
 
-	startChat(_opts: unknown, onEvent: (event: ChatEvent) => void) {
+	startChat(opts: ChatOptions, onEvent: (event: ChatEvent) => void) {
 		this.chatStarts++;
+		this.resumes.push(opts.resume);
 		this.emit = onEvent;
-		return { send: (text: string) => this.sent.push(text), stop: () => {} };
+		return {
+			send: (text: string) => {
+				if (this.brokenPipe) throw new Error("EPIPE");
+				this.sent.push(text);
+			},
+			stop: () => {
+				this.stops++;
+			},
+		};
 	}
 }
 
 const REPO = "/repos/demo";
 let storage: Storage;
 let runner: FakeRunner;
+let host: MasterHost;
 let master: MasterSupervisor;
 let now = 1000;
 
@@ -65,47 +91,45 @@ beforeEach(() => {
 	created = [];
 	storage = createMemoryStorage();
 	runner = new FakeRunner();
-	master = new MasterSupervisor(
-		{
-			storage,
-			now: () => ++now,
-			log: () => {},
-			broadcast: () => {},
-			update: (session, patch) => {
-				const next = { ...session, ...patch, updatedAt: ++now };
-				storage.sessions.put(next);
-				return next;
-			},
-			kill: async (session) => {
-				killed.push(session.name);
-				storage.sessions.put({ ...session, status: "archived" });
-			},
-			open: async (session) => {
-				opened.push(session.name);
-			},
-			reply: async (session, text) => {
-				if (session.tmuxPane === "%gone")
-					throw new Error(`${session.name} has ended`);
-				replies.push({ name: session.name, text });
-			},
-			create: async (params) => {
-				created.push(params);
-				return put({
-					id: `new-${params.name}`,
-					name: params.name,
-					branch: params.name,
-				});
-			},
-			pluginDir: "/tmp/master-plugin",
-			mcpConfig: () => "{}",
-			slack: () => null,
-			workerCwd: "/tmp",
-			models: { chat: "opus", summarizer: "haiku", suggester: "sonnet" },
-			maxTopics: 3,
-			debounceMs: 0,
+	host = {
+		storage,
+		now: () => ++now,
+		log: () => {},
+		broadcast: () => {},
+		update: (session, patch) => {
+			const next = { ...session, ...patch, updatedAt: ++now };
+			storage.sessions.put(next);
+			return next;
 		},
-		runner,
-	);
+		kill: async (session) => {
+			killed.push(session.name);
+			storage.sessions.put({ ...session, status: "archived" });
+		},
+		open: async (session) => {
+			opened.push(session.name);
+		},
+		reply: async (session, text) => {
+			if (session.tmuxPane === "%gone")
+				throw new Error(`${session.name} has ended`);
+			replies.push({ name: session.name, text });
+		},
+		create: async (params) => {
+			created.push(params);
+			return put({
+				id: `new-${params.name}`,
+				name: params.name,
+				branch: params.name,
+			});
+		},
+		pluginDir: "/tmp/master-plugin",
+		mcpConfig: () => "{}",
+		slack: () => null,
+		workerCwd: "/tmp",
+		models: { chat: "opus", summarizer: "haiku", suggester: "sonnet" },
+		maxTopics: 3,
+		debounceMs: 0,
+	};
+	master = new MasterSupervisor(host, runner);
 });
 
 describe("summaries", () => {
@@ -1040,5 +1064,221 @@ describe("status and watches", () => {
 		});
 		change(s.id, { status: "idle" });
 		expect(runner.sent).toEqual([]);
+	});
+});
+
+describe("robustness (ADR 0046)", () => {
+	afterEach(() => jest.useRealTimers());
+
+	const result = (text = "ok") =>
+		runner.emit({ type: "result", isError: false, text });
+	const exit = (code = 1) =>
+		runner.emit({ type: "exit", code, stderr: "boom" });
+	/** A supervisor on the same storage, as after a daemon restart. */
+	const restartDaemon = () => {
+		master.stop();
+		master = new MasterSupervisor(host, runner);
+	};
+
+	test("a message sent while the chat thinks waits for its turn to end", () => {
+		master.message(REPO, "first");
+		master.message(REPO, "second");
+		expect(runner.sent).toHaveLength(1);
+		result("one");
+		expect(runner.sent).toHaveLength(2);
+		expect(runner.sent[1]).toContain("User: second");
+		result("two");
+		expect(master.state(REPO).status).toBe("idle");
+		expect(storage.conversation.listRecent(REPO, 5).map((m) => m.text)).toEqual(
+			["first", "second", "one", "two"],
+		);
+	});
+
+	test("a chat that dies mid-turn is resumed and sent the message again", () => {
+		jest.useFakeTimers();
+		master.message(REPO, "hello");
+		runner.emit({ type: "session", sessionId: "chat-1" });
+		exit();
+		expect(master.state(REPO)).toEqual({
+			status: "thinking",
+			error: "master stopped (exit 1) boom; restarting (1/3)",
+		});
+		expect(runner.chatStarts).toBe(1);
+		jest.advanceTimersByTime(CHAT_RESTART_BACKOFF_MS[0] as number);
+		expect(runner.chatStarts).toBe(2);
+		expect(runner.resumes).toEqual([null, "chat-1"]);
+		expect(runner.sent[1]).toContain("your process restarted");
+		expect(runner.sent[1]).toContain("User: hello");
+		result("hi");
+		expect(master.state(REPO)).toEqual({ status: "idle", error: null });
+		// The next message has no restart note.
+		master.message(REPO, "again");
+		expect(runner.sent[2]).not.toContain("your process restarted");
+	});
+
+	test("after the last restart fails it gives up on that message; the next one goes out", () => {
+		jest.useFakeTimers();
+		master.message(REPO, "doomed");
+		for (const wait of CHAT_RESTART_BACKOFF_MS) {
+			exit();
+			jest.advanceTimersByTime(wait);
+		}
+		expect(runner.chatStarts).toBe(4);
+		exit();
+		expect(master.state(REPO)).toEqual({
+			status: "idle",
+			error:
+				"master stopped (exit 1) boom; gave up after 3 restarts, your message was not answered",
+		});
+		jest.advanceTimersByTime(60_000);
+		expect(runner.chatStarts).toBe(4);
+		master.message(REPO, "fresh");
+		expect(runner.chatStarts).toBe(5);
+		expect(runner.sent.at(-1)).toContain("User: fresh");
+		expect(runner.sent.at(-1)).not.toContain("your process restarted");
+	});
+
+	test("a chat that cannot resume its session starts fresh next time", () => {
+		jest.useFakeTimers();
+		storage.master.put({
+			repo: REPO,
+			claudeSessionId: "gone",
+			watches: [],
+			released: [],
+			outbox: [],
+		});
+		restartDaemon();
+		master.message(REPO, "hello");
+		exit();
+		jest.advanceTimersByTime(CHAT_RESTART_BACKOFF_MS[0] as number);
+		expect(runner.resumes).toEqual(["gone", null]);
+		expect(storage.master.get(REPO)?.claudeSessionId).toBeNull();
+	});
+
+	test("a turn with no output for the hang limit is killed and restarted", () => {
+		jest.useFakeTimers();
+		master.message(REPO, "hello");
+		jest.advanceTimersByTime(CHAT_HANG_MS - 1_000);
+		runner.emit({ type: "activity" });
+		jest.advanceTimersByTime(CHAT_HANG_MS - 1_000);
+		expect(runner.stops).toBe(0);
+		jest.advanceTimersByTime(1_000);
+		expect(runner.stops).toBe(1);
+		expect(master.state(REPO).error).toBe(
+			"master hung (no output for 5m); restarting (1/3)",
+		);
+		// The killed process's exit is not counted again.
+		exit();
+		jest.advanceTimersByTime(CHAT_RESTART_BACKOFF_MS[0] as number);
+		expect(runner.chatStarts).toBe(2);
+		expect(runner.sent[1]).toContain("User: hello");
+	});
+
+	test("a turn waiting on the user's permission answer is not hung", async () => {
+		jest.useFakeTimers();
+		master.message(REPO, "post it");
+		const asked = master.handleTool(REPO, "request_permission", {
+			tool_name: "Bash",
+			input: { command: "make" },
+		});
+		jest.advanceTimersByTime(CHAT_HANG_MS * 1.5);
+		expect(runner.stops).toBe(0);
+		master.answerPermission(master.permissions(REPO)[0]?.id as string, true);
+		await asked;
+		jest.advanceTimersByTime(CHAT_HANG_MS);
+		expect(runner.stops).toBe(1);
+	});
+
+	test("a chat whose stdin is gone counts as a crash, not a lost message", () => {
+		jest.useFakeTimers();
+		runner.brokenPipe = true;
+		master.message(REPO, "hello");
+		expect(master.state(REPO).error).toBe(
+			"master stopped (EPIPE); restarting (1/3)",
+		);
+		runner.brokenPipe = false;
+		jest.advanceTimersByTime(CHAT_RESTART_BACKOFF_MS[0] as number);
+		expect(runner.sent).toHaveLength(1);
+		expect(runner.sent[0]).toContain("User: hello");
+	});
+
+	test("a chat that exits denies its pending permission requests", async () => {
+		master.message(REPO, "post it");
+		const asked = master.handleTool(REPO, "request_permission", {
+			tool_name: "Bash",
+			input: { command: "make" },
+		});
+		expect(master.permissions(REPO)).toHaveLength(1);
+		exit();
+		expect(master.permissions(REPO)).toEqual([]);
+		expect(JSON.parse((await asked).text).behavior).toBe("deny");
+	});
+
+	test("watches, released Slack messages and the chat session outlive the daemon", async () => {
+		const s = put({ name: "api", status: "working" });
+		storage.conversation.append({
+			repo: REPO,
+			from: "master",
+			text: "To #eng:\n\n> api is done\n\nSend it when api finishes?",
+			at: 1,
+		});
+		storage.conversation.append({
+			repo: REPO,
+			from: "you",
+			text: "yes",
+			at: 2,
+		});
+		await master.handleTool(REPO, "watch_session", {
+			session: "api",
+			note: "send it",
+			slack_text: "api is done",
+		});
+		master.message(REPO, "hi");
+		runner.emit({ type: "session", sessionId: "chat-1" });
+		result();
+		restartDaemon();
+		change(s.id, { status: "idle", lastAssistantMessage: "Done." });
+		expect(runner.resumes).toEqual([null, "chat-1"]);
+		expect(runner.sent.at(-1)).toContain("serenity: api is now idle");
+		restartDaemon();
+		const sent = await master.handleTool(REPO, "request_permission", {
+			tool_name: "mcp__slack__slack_send_message",
+			input: { message: "api is done" },
+		});
+		expect(JSON.parse(sent.text).behavior).toBe("allow");
+	});
+
+	test("messages not yet answered are delivered when the daemon starts again", () => {
+		master.message(REPO, "first");
+		master.message(REPO, "second");
+		restartDaemon();
+		expect(runner.chatStarts).toBe(1);
+		master.start();
+		expect(runner.chatStarts).toBe(2);
+		expect(runner.sent.at(-1)).toContain("User: first");
+		result();
+		expect(runner.sent.at(-1)).toContain("User: second");
+		result();
+		expect(storage.master.get(REPO)?.outbox).toEqual([]);
+	});
+
+	test("a tool that hangs answers with an error after the tool timeout", async () => {
+		jest.useFakeTimers();
+		put({ name: "api", status: "idle" });
+		host.open = () => new Promise(() => {});
+		const out = master.handleTool(REPO, "open_session", { session: "api" });
+		jest.advanceTimersByTime(TOOL_TIMEOUT_MS);
+		expect(await out).toMatchObject({ isError: true });
+		expect((await out).text).toContain("Check session_status");
+	});
+
+	test("a tool that throws answers with an error instead", async () => {
+		put({ name: "api", status: "idle" });
+		host.open = async () => {
+			throw new Error("tmux is gone");
+		};
+		expect(
+			await master.handleTool(REPO, "open_session", { session: "api" }),
+		).toEqual({ text: "open_session failed: tmux is gone", isError: true });
 	});
 });

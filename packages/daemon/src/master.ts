@@ -12,7 +12,9 @@ import {
 	findSessionByName,
 	MASTER_SLACK_PROMPT,
 	MASTER_SYSTEM_PROMPT,
+	type MasterOutboxItem,
 	type MasterPermission,
+	type MasterRecord,
 	type MasterState,
 	type MasterToolResult,
 	mentionsSession,
@@ -79,21 +81,30 @@ export interface MasterHost {
 /** How long the master's permission request waits for the user before it is denied. */
 const PERMISSION_TIMEOUT_MS = 10 * 60_000;
 
+/** A chat turn with no output for this long is hung: its process is killed and restarted (ADR 0046). */
+export const CHAT_HANG_MS = 5 * 60_000;
+/** Waits before each restart of a chat that died mid-turn; after the last, it gives up. */
+export const CHAT_RESTART_BACKOFF_MS = [1_000, 5_000, 30_000];
+/** How long one of serenity's tools may run before the chat is told it timed out. */
+export const TOOL_TIMEOUT_MS = 2 * 60_000;
+
 interface Chat {
 	process: ChatProcess;
-	claudeSessionId: string | null;
+	/** Started with --resume; one that exits before it says its session failed to resume. */
+	resumed: boolean;
+	/** The process named its Claude session (init). */
+	started: boolean;
+	/** A turn is running: the outbox's first message was sent and has no result yet. */
 	thinking: boolean;
 	reply: string[];
-	/** serenity's own messages (a watch fired) held until the current turn ends. */
-	queued: string[];
+	/** Kills a turn that goes quiet for CHAT_HANG_MS. */
+	watchdog: ReturnType<typeof setTimeout> | null;
 }
 
-/** A session the chat asked to hear about when its turn ends (watch_session). */
-interface Watch {
-	repo: string;
-	note: string;
-	/** A Slack message the user confirmed, to go out once the session finishes. */
-	slack: string | null;
+/** A repo's chat that died mid-turn: how often it was restarted, and the pending restart. */
+interface Restart {
+	attempts: number;
+	timer: ReturnType<typeof setTimeout> | null;
 }
 
 /** A master send a session has not answered yet (ADR 0039). */
@@ -126,13 +137,12 @@ export class MasterSupervisor {
 	private readonly running = new Map<string, number>();
 	private readonly errors = new Map<string, string>();
 	private readonly chats = new Map<string, Chat>();
-	/** Claude session ids of chats that ended, to resume them. */
-	private readonly chatSessions = new Map<string, string>();
+	/** repo → what outlives the daemon: chat session, watches, released Slack, outbox (ADR 0046). */
+	private readonly records = new Map<string, MasterRecord>();
+	private readonly restarts = new Map<string, Restart>();
+	/** repo → serenity tool calls running now; a chat waiting on one is not hung. */
+	private readonly toolCalls = new Map<string, number>();
 	private readonly pending = new Map<string, PendingPermission>();
-	/** session id → its watch. */
-	private readonly watches = new Map<string, Watch>();
-	/** repo → confirmed Slack messages released by a finished watch, each sent once. */
-	private readonly released = new Map<string, string[]>();
 	/** session id → a master send it has not answered. */
 	private readonly awaiting = new Map<string, Awaiting>();
 	/** repo → recent pings, oldest first. */
@@ -141,11 +151,27 @@ export class MasterSupervisor {
 	constructor(
 		private readonly host: MasterHost,
 		private readonly runner: ClaudeRunner,
-	) {}
+	) {
+		for (const record of host.storage.master.listAll())
+			this.records.set(record.repo, record);
+	}
+
+	/** Delivers what the outbox held when the daemon last stopped. */
+	start(): void {
+		for (const record of this.records.values())
+			if (record.outbox.length) {
+				this.host.log(
+					`master for ${record.repo} has ${record.outbox.length} message(s) to deliver`,
+				);
+				this.pump(record.repo);
+			}
+	}
 
 	state(repo: string): MasterState {
 		const busy =
-			(this.running.get(repo) ?? 0) > 0 || !!this.chats.get(repo)?.thinking;
+			(this.running.get(repo) ?? 0) > 0 ||
+			!!this.chats.get(repo)?.thinking ||
+			!!this.restarts.get(repo)?.timer;
 		return {
 			status: busy ? "thinking" : "idle",
 			error: this.errors.get(repo) ?? null,
@@ -214,18 +240,36 @@ export class MasterSupervisor {
 
 	/** Tells the chat a watched session's turn ended (ADR 0032). */
 	private fireWatch(session: Session): void {
-		const watch = this.watches.get(session.id);
-		if (!watch) return;
+		const record = this.records.get(session.repo);
+		const watch = record?.watches.find((w) => w.sessionId === session.id);
+		if (!record || !watch) return;
 		const finished = session.status === "idle" || session.status === "done";
 		// Waiting on the user is not finished: it stays watched.
-		if (session.status !== "waiting") this.watches.delete(session.id);
-		if (watch.slack && finished)
-			this.released.set(watch.repo, [
-				...(this.released.get(watch.repo) ?? []),
-				watch.slack,
-			]);
+		if (session.status !== "waiting")
+			record.watches = record.watches.filter((w) => w !== watch);
+		if (watch.slack && finished) record.released.push(watch.slack);
+		this.save(session.repo);
 		this.host.log(`watch on ${session.name} fired (${session.status})`);
-		this.tell(watch.repo, watchMessage(session, watch.note, !!watch.slack));
+		this.tell(session.repo, watchMessage(session, watch.note, !!watch.slack));
+	}
+
+	private record(repo: string): MasterRecord {
+		let record = this.records.get(repo);
+		if (!record) {
+			record = {
+				repo,
+				claudeSessionId: null,
+				watches: [],
+				released: [],
+				outbox: [],
+			};
+			this.records.set(repo, record);
+		}
+		return record;
+	}
+
+	private save(repo: string): void {
+		this.host.storage.master.put(this.record(repo));
 	}
 
 	// ------------------------------------------------------------ one-shot jobs
@@ -391,14 +435,12 @@ export class MasterSupervisor {
 			text,
 			at: this.host.now(),
 		});
-		this.send(repo, chatMessage(this.snapshot(repo), text));
+		this.enqueue(repo, { from: "you", text });
 	}
 
 	/** serenity's own message to the chat; never stored as the user's, so it confirms nothing. */
 	private tell(repo: string, text: string): void {
-		const chat = this.chats.get(repo);
-		if (chat?.thinking) chat.queued.push(text);
-		else this.send(repo, `${this.snapshot(repo)}\n\n${text}`);
+		this.enqueue(repo, { from: "serenity", text });
 	}
 
 	private snapshot(repo: string): string {
@@ -409,21 +451,84 @@ export class MasterSupervisor {
 		);
 	}
 
-	private send(repo: string, text: string): void {
-		const chat = this.chats.get(repo) ?? this.startChat(repo);
+	/**
+	 * Every message to the chat goes through the repo's outbox (ADR 0046): it
+	 * waits while a turn runs or the chat restarts, and survives the daemon.
+	 */
+	private enqueue(repo: string, item: MasterOutboxItem): void {
+		this.record(repo).outbox.push(item);
+		this.save(repo);
+		this.host.broadcast(repo);
+		this.pump(repo);
+	}
+
+	/** Sends the outbox's first message, unless a turn runs or a restart is pending. */
+	private pump(repo: string): void {
+		if (this.restarts.get(repo)?.timer) return;
+		if (this.chats.get(repo)?.thinking) return;
+		const item = this.records.get(repo)?.outbox[0];
+		if (!item) return;
+		let chat = this.chats.get(repo);
+		try {
+			chat ??= this.startChat(repo);
+		} catch (error) {
+			// e.g. the repo is gone; the message stays for the next try.
+			const message = error instanceof Error ? error.message : String(error);
+			this.errors.set(repo, `master could not start: ${message}`);
+			this.host.log(`master chat for ${repo} could not start: ${message}`);
+			this.host.broadcast(repo);
+			return;
+		}
+		const snapshot = this.snapshot(repo);
+		const body =
+			item.from === "you"
+				? chatMessage(snapshot, item.text)
+				: `${snapshot}\n\n${item.text}`;
+		const retry = this.restarts.get(repo)?.attempts
+			? "serenity: your process restarted while answering the message below, so it is sent again. Tools you called for it may already have run: check session_status before calling one again.\n\n"
+			: "";
 		chat.thinking = true;
 		chat.reply = [];
-		chat.process.send(text);
+		this.arm(repo, chat);
 		this.host.broadcast(repo);
+		try {
+			chat.process.send(`${retry}${body}`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			chat.process.stop();
+			this.ended(repo, chat, `master stopped (${message})`);
+		}
+	}
+
+	/** (Re)starts the chat's hang timer; waiting on the user or on a serenity tool is not hanging. */
+	private arm(repo: string, chat: Chat): void {
+		if (chat.watchdog) clearTimeout(chat.watchdog);
+		chat.watchdog = setTimeout(() => {
+			chat.watchdog = null;
+			if (this.chats.get(repo) !== chat || !chat.thinking) return;
+			if (this.permissions(repo).length || this.toolCalls.get(repo)) {
+				this.arm(repo, chat);
+				return;
+			}
+			this.host.log(`master chat for ${repo} hung; restarting it`);
+			chat.process.stop();
+			this.ended(
+				repo,
+				chat,
+				`master hung (no output for ${CHAT_HANG_MS / 60_000}m)`,
+			);
+		}, CHAT_HANG_MS);
 	}
 
 	private startChat(repo: string): Chat {
+		const record = this.record(repo);
 		const chat: Chat = {
 			process: undefined as unknown as ChatProcess,
-			claudeSessionId: this.chatSessions.get(repo) ?? null,
+			resumed: !!record.claudeSessionId,
+			started: false,
 			thinking: false,
 			reply: [],
-			queued: [],
+			watchdog: null,
 		};
 		const slack = !!this.host.slack(repo);
 		chat.process = this.runner.startChat(
@@ -437,56 +542,128 @@ export class MasterSupervisor {
 				systemPrompt: slack
 					? `${MASTER_SYSTEM_PROMPT}\n${MASTER_SLACK_PROMPT}`
 					: MASTER_SYSTEM_PROMPT,
-				resume: chat.claudeSessionId,
+				resume: record.claudeSessionId,
 			},
 			(event) => {
+				// A chat that was replaced (hung, or failed to take a message) is ignored.
+				if (this.chats.get(repo) !== chat) return;
+				if (chat.thinking && event.type !== "exit") this.arm(repo, chat);
 				if (event.type === "session") {
-					chat.claudeSessionId = event.sessionId;
-					this.chatSessions.set(repo, event.sessionId);
+					chat.started = true;
+					if (record.claudeSessionId !== event.sessionId) {
+						record.claudeSessionId = event.sessionId;
+						this.save(repo);
+					}
 				} else if (event.type === "text") {
 					chat.reply.push(event.text);
 				} else if (event.type === "result") {
-					const text = chat.reply.join("\n\n") || event.text;
-					if (text)
-						this.host.storage.conversation.append({
-							repo,
-							from: "master",
-							text,
-							at: this.host.now(),
-						});
-					chat.thinking = false;
-					chat.reply = [];
-					if (event.isError)
-						this.errors.set(repo, `master: ${event.text.slice(0, 120)}`);
-					else this.errors.delete(repo);
-					this.host.broadcast(repo);
-					const next = chat.queued.shift();
-					if (next) this.tell(repo, next);
+					this.turnDone(repo, chat, event.isError, event.text);
 				} else if (event.type === "exit") {
-					if (this.chats.get(repo) !== chat) return;
-					this.chats.delete(repo);
-					if (chat.thinking)
-						this.errors.set(
-							repo,
-							`master stopped (exit ${event.code}) ${event.stderr}`.trim(),
-						);
-					chat.thinking = false;
-					this.host.log(`master chat for ${repo} exited (${event.code})`);
-					this.host.broadcast(repo);
-					// A fresh chat (resumed) still hears what was held.
-					for (const text of chat.queued.splice(0)) this.tell(repo, text);
+					this.ended(
+						repo,
+						chat,
+						`master stopped (exit ${event.code}) ${event.stderr}`.trim(),
+					);
 				}
 			},
 		);
 		this.chats.set(repo, chat);
 		this.host.log(
-			`master chat started for ${repo}${chat.claudeSessionId ? " (resumed)" : ""}`,
+			`master chat started for ${repo}${chat.resumed ? " (resumed)" : ""}`,
 		);
 		return chat;
 	}
 
+	private turnDone(
+		repo: string,
+		chat: Chat,
+		isError: boolean,
+		resultText: string,
+	): void {
+		if (chat.watchdog) clearTimeout(chat.watchdog);
+		chat.watchdog = null;
+		const text = chat.reply.join("\n\n") || resultText;
+		if (text)
+			this.host.storage.conversation.append({
+				repo,
+				from: "master",
+				text,
+				at: this.host.now(),
+			});
+		chat.reply = [];
+		if (chat.thinking) {
+			chat.thinking = false;
+			this.record(repo).outbox.shift();
+			this.save(repo);
+		}
+		this.restarts.delete(repo);
+		if (isError) this.errors.set(repo, `master: ${resultText.slice(0, 120)}`);
+		else this.errors.delete(repo);
+		this.host.broadcast(repo);
+		this.pump(repo);
+	}
+
+	/**
+	 * The chat's process is gone (exited, hung or unwritable). A turn it was
+	 * running is sent again to a restarted chat, up to one try per
+	 * CHAT_RESTART_BACKOFF_MS; then that message is dropped and the rest wait
+	 * for the next one (ADR 0046).
+	 */
+	private ended(repo: string, chat: Chat, why: string): void {
+		if (this.chats.get(repo) !== chat) return;
+		this.chats.delete(repo);
+		if (chat.watchdog) clearTimeout(chat.watchdog);
+		chat.watchdog = null;
+		this.host.log(`master chat for ${repo} ended: ${why}`);
+		// Its MCP server went with it, so nothing can answer these.
+		for (const entry of [...this.pending.values()])
+			if (entry.permission.repo === repo) entry.resolve(false);
+		const record = this.record(repo);
+		if (chat.resumed && !chat.started && record.claudeSessionId) {
+			this.host.log(
+				`master chat for ${repo} could not resume ${record.claudeSessionId}; the next starts fresh`,
+			);
+			record.claudeSessionId = null;
+			this.save(repo);
+		}
+		if (!chat.thinking) {
+			this.host.broadcast(repo);
+			return;
+		}
+		chat.thinking = false;
+		const attempts = (this.restarts.get(repo)?.attempts ?? 0) + 1;
+		const wait = CHAT_RESTART_BACKOFF_MS[attempts - 1];
+		if (wait === undefined) {
+			const lost = record.outbox.shift();
+			this.save(repo);
+			this.restarts.delete(repo);
+			this.errors.set(
+				repo,
+				`${why}; gave up after ${attempts - 1} restarts${lost?.from === "you" ? ", your message was not answered" : ""}`,
+			);
+			this.host.broadcast(repo);
+			return;
+		}
+		this.errors.set(
+			repo,
+			`${why}; restarting (${attempts}/${CHAT_RESTART_BACKOFF_MS.length})`,
+		);
+		const restart: Restart = { attempts, timer: null };
+		restart.timer = setTimeout(() => {
+			restart.timer = null;
+			this.pump(repo);
+		}, wait);
+		this.restarts.set(repo, restart);
+		this.host.broadcast(repo);
+	}
+
 	// ---------------------------------------------------- tools from the chat
 
+	/**
+	 * One of serenity's tools, called by the chat through `serenity mcp`. It
+	 * never throws, and anything but a permission request answers within
+	 * TOOL_TIMEOUT_MS, so a stuck tmux or git call cannot stall the turn.
+	 */
 	async handleTool(
 		repo: string,
 		name: string,
@@ -494,6 +671,35 @@ export class MasterSupervisor {
 	): Promise<MasterToolResult> {
 		if (name === "request_permission")
 			return this.requestPermission(repo, args);
+		this.toolCalls.set(repo, (this.toolCalls.get(repo) ?? 0) + 1);
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const timeout = new Promise<MasterToolResult>((resolve) => {
+			timer = setTimeout(
+				() =>
+					resolve({
+						text: `${name} did not finish within ${TOOL_TIMEOUT_MS / 60_000} minutes; serenity stopped waiting, but it may still complete. Check session_status before calling it again.`,
+						isError: true,
+					}),
+				TOOL_TIMEOUT_MS,
+			);
+		});
+		try {
+			return await Promise.race([this.runTool(repo, name, args), timeout]);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			this.host.log(`master tool ${name} failed: ${message}`);
+			return { text: `${name} failed: ${message}`, isError: true };
+		} finally {
+			clearTimeout(timer);
+			this.toolCalls.set(repo, (this.toolCalls.get(repo) ?? 1) - 1);
+		}
+	}
+
+	private async runTool(
+		repo: string,
+		name: string,
+		args: Record<string, unknown>,
+	): Promise<MasterToolResult> {
 		if (name === "session_status" && !args.session)
 			return { text: this.snapshot(repo) };
 		if (name === "create_session") return this.createSession(repo, args);
@@ -575,8 +781,11 @@ export class MasterSupervisor {
 		session: Session,
 		args: Record<string, unknown>,
 	): MasterToolResult {
+		const record = this.record(repo);
 		if (args.cancel === true) {
-			const had = this.watches.delete(session.id);
+			const had = record.watches.some((w) => w.sessionId === session.id);
+			record.watches = record.watches.filter((w) => w.sessionId !== session.id);
+			this.save(repo);
 			return {
 				text: had
 					? `Stopped watching ${session.name}.`
@@ -607,7 +816,11 @@ export class MasterSupervisor {
 				text: "slack_text must be the exact message your last reply showed and the user just confirmed. Show the draft and ask first.",
 				isError: true,
 			};
-		this.watches.set(session.id, { repo, note, slack });
+		record.watches = [
+			...record.watches.filter((w) => w.sessionId !== session.id),
+			{ sessionId: session.id, note, slack },
+		];
+		this.save(repo);
 		const now =
 			session.status === "working"
 				? "It is working now; serenity messages you when its turn ends."
@@ -777,10 +990,11 @@ export class MasterSupervisor {
 
 	/** Uses up a released Slack message with this text; false if there is none. */
 	private takeReleased(repo: string, message: unknown): boolean {
-		const released = this.released.get(repo) ?? [];
+		const released = this.records.get(repo)?.released ?? [];
 		const i = released.findIndex((text) => sameSlackText(text, message));
 		if (i === -1) return false;
 		released.splice(i, 1);
+		this.save(repo);
 		return true;
 	}
 
@@ -797,9 +1011,17 @@ export class MasterSupervisor {
 		for (const wait of this.awaiting.values())
 			if (wait.timer) clearTimeout(wait.timer);
 		this.awaiting.clear();
-		for (const entry of this.pending.values()) entry.resolve(false);
-		for (const chat of this.chats.values()) chat.process.stop();
+		for (const restart of this.restarts.values())
+			if (restart.timer) clearTimeout(restart.timer);
+		this.restarts.clear();
+		for (const entry of [...this.pending.values()]) entry.resolve(false);
+		// Detached first, so their exits are not taken for crashes; the outbox stays for start().
+		const chats = [...this.chats.values()];
 		this.chats.clear();
+		for (const chat of chats) {
+			if (chat.watchdog) clearTimeout(chat.watchdog);
+			chat.process.stop();
+		}
 	}
 }
 

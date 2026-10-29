@@ -18,6 +18,6 @@ The adopted-session observer (0016) also swept only every 30 s when its file wat
 - **Hook status is reconciled with Claude's session file** (`<config>/sessions/<pid>.json`, matched by Claude session id or pane). When Claude's `status` changed after the last hook arrived and has held for 1 s, it wins: busy → working (from idle, done or waiting); idle → idle (from working without subagents, or waiting). The observer sweeps every 5 s, and on every change to that folder.
 
 ## Consequences
-- Watches and released Slack messages live in memory; a daemon restart drops them, and the master has to watch again.
+- Watches and released Slack messages live in memory; a daemon restart drops them, and the master has to watch again. (Amended by 0046: they persist in SQLite.)
 - The reconciliation depends on an undocumented Claude Code file, like 0016; without `statusUpdatedAt` it does nothing and hooks alone decide.
 - "Finished" for a watch is the end of a turn (idle), not the Haiku worker's done, which comes seconds later.

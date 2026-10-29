@@ -4,6 +4,7 @@ import type {
 	HookKind,
 	HookPayload,
 	MasterMessage,
+	MasterRecord,
 	Session,
 	SlackDismissal,
 	Storage,
@@ -61,6 +62,10 @@ const MIGRATIONS = [
 	`CREATE TABLE recovery (
 		key TEXT PRIMARY KEY,
 		value TEXT NOT NULL
+	);`,
+	`CREATE TABLE master (
+		repo TEXT PRIMARY KEY,
+		data TEXT NOT NULL
 	);`,
 ];
 
@@ -229,6 +234,15 @@ export function createSqliteStorage(path: string): Storage {
 	const deleteRecovery = db.query<unknown, [string]>(
 		"DELETE FROM recovery WHERE key = ?",
 	);
+	const getMaster = db.query<{ data: string }, [string]>(
+		"SELECT data FROM master WHERE repo = ?",
+	);
+	const putMaster = db.query<unknown, [string, string]>(
+		"INSERT OR REPLACE INTO master (repo, data) VALUES (?, ?)",
+	);
+	const listMasters = db.query<{ data: string }, []>(
+		"SELECT data FROM master ORDER BY repo",
+	);
 
 	const parse = (row: { data: string } | null): Session | null =>
 		row ? readSession(row.data) : null;
@@ -343,6 +357,17 @@ export function createSqliteStorage(path: string): Storage {
 				if (value === null) deleteRecovery.run(key);
 				else putRecovery.run(key, JSON.stringify(value));
 			},
+		},
+		master: {
+			get: (repo) => {
+				const row = getMaster.get(repo);
+				return row ? (JSON.parse(row.data) as MasterRecord) : null;
+			},
+			put: (record) => {
+				putMaster.run(record.repo, JSON.stringify(record));
+			},
+			listAll: () =>
+				listMasters.all().map((row) => JSON.parse(row.data) as MasterRecord),
 		},
 		transaction: (fn) => {
 			if (depth > 0) return fn();

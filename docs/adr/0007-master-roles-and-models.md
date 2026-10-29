@@ -23,7 +23,7 @@ A **master supervisor** inside serenityd runs three roles, all through the user'
 - Every master process runs with `--strict-mcp-config --setting-sources ""`, so the user's own hooks, plugins and MCP servers stay out; authentication still comes from their login. `--bare` is not used: it skips the subscription login.
 - Workers are queued and debounced per session, so a burst of hooks yields one call.
 - Model IDs are aliases in config (`opus`, `sonnet`, `haiku`) so users can override them in `~/.config/serenity/config.json` (`models.chat`, `models.summarizer`, `models.suggester`).
-- If the chat process exits, the next message restarts it with `--resume` (within the same daemon run).
+- If the chat process exits, the next message restarts it with `--resume` (within the same daemon run). (Amended by 0046: a turn cut off by a crash or hang is restarted and re-sent; the session id persists across daemon runs.)
 
 ## Consequences
 - Cost scales with event volume and comes out of the user's own Claude plan; the debounce window and a per-repo concurrency limit are config values.

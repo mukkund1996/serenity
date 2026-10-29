@@ -186,6 +186,32 @@ export interface MasterMessage {
 	at: number;
 }
 
+/** A session the master's chat asked to hear about when its turn ends (ADR 0032). */
+export interface MasterWatch {
+	sessionId: string;
+	note: string;
+	/** A Slack message the user confirmed, to go out once the session finishes. */
+	slack: string | null;
+}
+
+/** A message waiting to reach the master's chat: the user's, or serenity's own. */
+export interface MasterOutboxItem {
+	from: "you" | "serenity";
+	text: string;
+}
+
+/** What the master keeps per repo across a daemon restart (ADR 0046). */
+export interface MasterRecord {
+	repo: string;
+	/** The chat's Claude session, continued with --resume; null for a fresh one. */
+	claudeSessionId: string | null;
+	watches: MasterWatch[];
+	/** Confirmed Slack messages released by a finished watch, each sent once. */
+	released: string[];
+	/** Messages not yet answered, oldest first; the first is in flight while the chat thinks. */
+	outbox: MasterOutboxItem[];
+}
+
 /** The master asking to use a tool outside its read-only set; shown at the top of NEEDS YOU. */
 export interface MasterPermission {
 	id: string;
