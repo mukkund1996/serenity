@@ -3,6 +3,15 @@ import type { Color, PrTone, Session, SessionStatus } from "@serenity/core";
 /** The ◈ icon's green, as on getserenity.dev; brand only, never a status. */
 export const BRAND_COLOR = "#7fc77f";
 
+/**
+ * The master's queue (ADR 0040): replies it wants to send, waiting for y.
+ * Coral, apart from NEEDS YOU's yellow and the master's magenta.
+ */
+export const QUEUE_COLOR: Color = "#ff875f";
+
+/** Marks a ◆ draft in NEEDS YOU that goes to Slack, not to a session (ADR 0040). */
+export const SLACK_COLOR: Color = "#36c5f0";
+
 /** The only three status glyphs (design handover, "Status language"). */
 export function glyph(
 	status: SessionStatus,

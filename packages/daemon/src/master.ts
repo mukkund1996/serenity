@@ -650,7 +650,7 @@ export class MasterSupervisor {
 		) {
 			this.propose(session, "reply", label, text, "chat");
 			return {
-				text: `The user did not ask for this exact text or @mention ${session.name}, so it waits in NEEDS YOU as "${label}" and runs only if they press y. To send it now, show the exact text and ask; once they confirm, call send_reply again with it.`,
+				text: `The user did not ask for this exact text or @mention ${session.name}, so it waits in the master's queue as "${label}" and runs only if they press y. To send it now, show the exact text and ask; once they confirm, call send_reply again with it.`,
 			};
 		}
 		try {

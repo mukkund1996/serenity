@@ -1,6 +1,6 @@
 # 0035 · The master sends replies the user asked for with `send_reply`
 
-**Status:** Accepted · 2026-10-28 · an `@session` mention also sends at once, 0036
+**Status:** Accepted · 2026-10-28 · an `@session` mention also sends at once, 0036 · the fallback waits in the master's queue, 0040
 
 ## Context
 The chat could only answer a session through `suggest` kind `reply` (0008), which waits in NEEDS YOU for `y`. So "tell dismiss-slack-item to ask questions", then "just send it", still ended at a `y` press: the user approved the same message twice. `set_topic`, `open_session`, `archive_session` and `create_session` already act at once because the user's request is the approval (0033), and a Slack message the user confirmed in the chat goes out without another prompt (0030).

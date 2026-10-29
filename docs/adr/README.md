@@ -45,6 +45,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0037](0037-mentions-relay-to-the-session.md) | An `@session` message is relayed to the session, questions answered by it; the master never looks into it | Accepted |
 | [0038](0038-shift-enter-new-line-in-master-input.md) | Shift+Enter starts a new line in the master input (Alt+Enter, Ctrl+J as fallbacks); Enter sends | Accepted |
 | [0039](0039-pulse-on-master-session-messages.md) | A card pulses magenta when the master messages it, the master when the session answers; `RepoState.pings` | Accepted |
+| [0040](0040-master-queue.md) | The master's queue: replies its chat wants to send wait under NEEDS YOU, one line each, Enter shows one in full; Slack drafts stay in NEEDS YOU, marked `slack` | Accepted |
 
 ## System at a glance
 

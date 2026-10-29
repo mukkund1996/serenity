@@ -5,8 +5,10 @@ import {
 	completeMention,
 	groupTopics,
 	type ImportCandidate,
+	isQueued,
 	type MasterState,
 	MENTION_LIST_MAX,
+	masterQueue,
 	matchMentions,
 	mentionDraft,
 	needsYou,
@@ -47,7 +49,12 @@ import {
 } from "./components";
 import { drawMap, type MasterItem, rowElements } from "./map";
 import { inputRows, listWindow, PROMPT_W, stepSelection } from "./master-input";
-import { needLines, planMaster, suggestionLines } from "./master-layout";
+import {
+	needLines,
+	planMaster,
+	queueRows,
+	suggestionLines,
+} from "./master-layout";
 import { openUrl } from "./open-url";
 import {
 	ArchivedList,
@@ -61,6 +68,7 @@ import {
 	ShortcutsPanel,
 } from "./overlays";
 import { PULSE_PHASE_MS, pulseEnd, pulsing } from "./pulse";
+import { QUEUE_ROW, QueueSection } from "./queue";
 import { isNewlineKey, splitAtNewline } from "./text-input";
 import { askLine } from "./theme";
 import {
@@ -202,6 +210,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const [zoom, setZoom] = useState<Zoom>("topics");
 	const [search, setSearch, searchRef] = useLiveState<Search | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
+	/** The queued reply Enter shows in full, if any (ADR 0040). */
+	const [expanded, setExpanded] = useState<string | null>(null);
 
 	const allSessions = state?.sessions ?? [];
 	/** Archived sessions are off the map; `H` lists them. */
@@ -233,8 +243,18 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		[sessions, suggestions],
 	);
 
+	/** Replies the master's chat wants to send, waiting for y in its queue (ADR 0040). */
+	const queue = useMemo(
+		() => masterQueue(sessions, suggestions),
+		[sessions, suggestions],
+	);
+	const queueId = (g: Suggestion) => `${QUEUE_ROW}${g.id}`;
+	/** A card's suggestion, queued replies among them. */
 	const suggestionFor = (id: string | undefined): Suggestion | undefined =>
 		suggestions.find((g) => g.sessionId === id);
+	/** A NEEDS YOU item's suggestion; its queued reply sits in the queue instead. */
+	const needSuggestionFor = (id: string | undefined): Suggestion | undefined =>
+		suggestions.find((g) => g.sessionId === id && !isQueued(g));
 	const onMaster = node === MASTER;
 	const bodyHeight = rows - 2;
 	const masterWidth = Math.max(38, Math.min(72, columns - 50));
@@ -275,7 +295,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				rows:
 					1 +
 					needLines(askLine(s), masterInner).length +
-					suggestionLines(suggestionFor(s.id)?.label ?? "", masterInner)
+					suggestionLines(needSuggestionFor(s.id)?.label ?? "", masterInner)
 						.length +
 					(onMaster && element === s.id && replyText !== null ? 1 : 0),
 			})),
@@ -288,6 +308,18 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					(slackSuggestionFor(m.id) ? 1 : 0),
 			})),
 		],
+		queue: queue.map(({ suggestion }) => ({
+			id: queueId(suggestion),
+			rows: queueRows(
+				suggestion.text ?? "",
+				masterInner,
+				onMaster && element === queueId(suggestion) && replyText !== null
+					? "editing"
+					: expanded === suggestion.id
+						? "expanded"
+						: "collapsed",
+			),
+		})),
 		selected: onMaster && inside ? element : null,
 		conversation: state?.conversation ?? [],
 		slackError: !!slack?.error,
@@ -319,6 +351,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				...permissions.map((p) => `${PERM}${p.id}`),
 				...needs.map((s) => s.id),
 				...slackItems.map((m) => `${SLACK_NEED}${m.id}`),
+				...queue.map(({ suggestion }) => queueId(suggestion)),
 				// The map's master box has no PR rows to select.
 				...(zoom === "topics"
 					? plan.reviews.map((r) => `${REVIEW_ROW}${r.number}`)
@@ -343,7 +376,12 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const focused = onMaster
 		? (sessions.find((s) => s.id === selected) ?? null)
 		: card;
-	const focusedSuggestion = suggestionFor(focused?.id);
+	const focusedSuggestion = onMaster
+		? needSuggestionFor(focused?.id)
+		: suggestionFor(focused?.id);
+	/** The selected reply in the master's queue: y e n act on it, Enter shows it in full. */
+	const queued =
+		(onMaster && queue.find((q) => queueId(q.suggestion) === selected)) || null;
 	/** The selected Slack item in NEEDS YOU: y e n act on its suggestion, Enter or o opens it, x dismisses it. */
 	const slackItem =
 		(onMaster && slackItems.find((m) => `${SLACK_NEED}${m.id}` === selected)) ||
@@ -370,24 +408,31 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	/** The selected NEEDS YOU item, as the map's master box shows it. */
 	const masterItem: MasterItem | null = !onMaster
 		? null
-		: focusedPermission
-			? { kind: "permission", permission: focusedPermission }
-			: slackItem
-				? {
-						kind: "slack",
-						item: slackItem,
-						suggestion: slackSuggestion,
-						replyText,
-						now: Date.now(),
-					}
-				: focused
+		: queued
+			? {
+					kind: "queued",
+					session: queued.session,
+					text: queued.suggestion.text ?? "",
+					replyText,
+				}
+			: focusedPermission
+				? { kind: "permission", permission: focusedPermission }
+				: slackItem
 					? {
-							kind: "session",
-							session: focused,
-							suggestion: focusedSuggestion?.label ?? null,
+							kind: "slack",
+							item: slackItem,
+							suggestion: slackSuggestion,
 							replyText,
+							now: Date.now(),
 						}
-					: null;
+					: focused
+						? {
+								kind: "session",
+								session: focused,
+								suggestion: focusedSuggestion?.label ?? null,
+								replyText,
+							}
+						: null;
 	const layout = (() => {
 		const focusElement = (onMaster ? "card" : selected) as CardElement;
 		if (zoom === "map") {
@@ -404,6 +449,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					thinking: master.status === "thinking",
 					error: master.error,
 					needCount: needs.length + permissions.length + slackItems.length,
+					queueCount: queue.length,
 					slackError: slack?.error ?? null,
 					calmTopics: calm,
 					empty: sessions.length === 0,
@@ -520,12 +566,13 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const fail = (e: unknown) =>
 		setNotice(e instanceof Error ? e.message : String(e));
 
-	/** Tab order: the master's permission requests, then NEEDS YOU, Slack last. Focuses the master. */
+	/** Tab order: the master's permission requests, then NEEDS YOU, Slack, the queue last. Focuses the master. */
 	const cycleNeeds = (back: boolean) => {
 		const order = [
 			...permissions.map((p) => `${PERM}${p.id}`),
 			...needs.map((s) => s.id),
 			...slackItems.map((m) => `${SLACK_NEED}${m.id}`),
+			...queue.map(({ suggestion }) => queueId(suggestion)),
 		];
 		if (!order.length) return;
 		const at = onMaster ? order.indexOf(selected ?? "") : -1;
@@ -610,13 +657,17 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			if (text.trim()) acceptSlack(editing.slice(SLACK_EDIT.length), text);
 			return;
 		}
-		if (!target || !text.trim()) return;
+		if (!text.trim()) return;
+		// A queued reply being edited (e) has no session selected; its suggestion says where it goes.
+		const sent = editing
+			? call("suggestion.accept", { id: editing, text })
+			: target
+				? call("session.reply", { id: target.id, text })
+				: null;
+		if (!sent) return;
 		setSentReplies((list) =>
 			[text, ...list.filter((r) => r !== text)].slice(0, REPLY_HISTORY),
 		);
-		const sent = editing
-			? call("suggestion.accept", { id: editing, text })
-			: call("session.reply", { id: target.id, text });
 		sent.catch(fail);
 	};
 
@@ -898,6 +949,23 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				return;
 			}
 
+			// y sends a queued reply, e edits it, n or x drops it, Enter shows it in full (ADR 0040).
+			if (queued) {
+				const { suggestion } = queued;
+				if (key.return)
+					return setExpanded(expanded === suggestion.id ? null : suggestion.id);
+				if (input === "y") return void accept(suggestion, queued.session);
+				if (input === "n" || input === "x")
+					return void call("suggestion.decline", { id: suggestion.id }).catch(
+						fail,
+					);
+				if (input === "e") {
+					setReplyEdit(suggestion.id);
+					setReplyText(suggestion.text ?? "");
+					return;
+				}
+			}
+
 			if (focusedPermission) {
 				if (input === "y" || input === "n")
 					call("master.permission", {
@@ -1120,7 +1188,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							width={masterWidth}
 							sessions={sessions}
 							needs={needs}
-							suggestions={suggestions}
+							suggestions={suggestions.filter((g) => !isQueued(g))}
 							permissions={permissions}
 							conversation={conversation}
 							master={master}
@@ -1132,6 +1200,16 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							inputText={masterText}
 							mentions={mentionList}
 							replyText={onMaster ? replyText : null}
+							queue={
+								<QueueSection
+									queue={queue}
+									window={plan.queue}
+									selected={onMaster ? selected : null}
+									expanded={expanded}
+									replyText={onMaster ? replyText : null}
+									inner={masterInner}
+								/>
+							}
 							pulse={pulse.master}
 						/>
 					</Box>

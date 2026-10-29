@@ -445,20 +445,18 @@ test(
 );
 
 test(
-	"the master's suggest tool reaches NEEDS YOU through serenity mcp; n declines it",
+	"the master's suggested reply reaches its queue through serenity mcp; n declines it",
 	async () => {
 		await openMasterInput();
 		type("suggest a reply to api-auth\r");
-		await waitFor(/◆ Reply "ok"/);
+		await waitFor(/QUEUE 1/);
+		await waitFor(/→ api-auth/);
 		await closeMasterInput();
-		// Tab goes into the master on its first NEEDS YOU item, the suggestion's session.
+		// Tab goes into the master on its first item; nothing else needs the user, so the queued reply.
 		keys("Tab");
-		await waitFor(/▸ .*api-auth/);
+		await waitFor(/▸ → api-auth/);
 		keys("n");
-		await until(
-			() => !screen().includes('◆ Reply "ok"'),
-			"the suggestion to go",
-		);
+		await until(() => !screen().includes("QUEUE 1"), "the queued reply to go");
 	},
 	STEP_TIMEOUT,
 );

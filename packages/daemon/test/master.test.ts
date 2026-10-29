@@ -557,7 +557,7 @@ describe("chat", () => {
 				text,
 			});
 			expect(queued.isError).toBeUndefined();
-			expect(queued.text).toContain("waits in NEEDS YOU");
+			expect(queued.text).toContain("waits in the master's queue");
 			expect(replies).toEqual([]);
 			expect(storage.suggestions.listPending(REPO)).toMatchObject([
 				{ kind: "reply", source: "chat", text },
@@ -574,7 +574,7 @@ describe("chat", () => {
 			expect(storage.suggestions.listPending(REPO)).toEqual([]);
 		});
 
-		test("text the user did not ask for falls back to NEEDS YOU", async () => {
+		test("text the user did not ask for falls back to the queue", async () => {
 			put({ id: "a", name: "api-auth", status: "waiting" });
 			say("master", "> yes, set it to 15m\n\nSend it?");
 			say("you", "yes");
@@ -681,14 +681,14 @@ describe("chat", () => {
 				expect(storage.suggestions.listPending(REPO)).toEqual([]);
 			});
 
-			test("without the mention the same text waits in NEEDS YOU", async () => {
+			test("without the mention the same text waits in the queue", async () => {
 				put({ id: "a", name: "api-auth", status: "idle" });
 				say("you", "ask api-auth to ask me questions before changing things");
 				const result = await master.handleTool(REPO, "send_reply", {
 					session: "api-auth",
 					text,
 				});
-				expect(result.text).toContain("waits in NEEDS YOU");
+				expect(result.text).toContain("waits in the master's queue");
 				expect(replies).toEqual([]);
 				expect(storage.suggestions.listPending(REPO)).toHaveLength(1);
 			});

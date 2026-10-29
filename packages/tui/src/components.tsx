@@ -24,7 +24,15 @@ import {
 	SPEAKER_W,
 	suggestionLines,
 } from "./master-layout";
-import { age, askLine, BRAND_COLOR, cardText, glyph, nameColor } from "./theme";
+import {
+	age,
+	askLine,
+	BRAND_COLOR,
+	cardText,
+	glyph,
+	nameColor,
+	SLACK_COLOR,
+} from "./theme";
 
 const ink = (color: Color | undefined) =>
 	color && color !== "default" ? color : undefined;
@@ -134,22 +142,26 @@ export function TitledBox({
 }
 
 /** A section's heading on a filled chip, so it stands apart from its rows. */
-function SectionHeader({
+export function SectionHeader({
 	label,
 	width,
 	urgent = false,
+	color,
 }: {
 	label: string;
 	width: number;
 	/** NEEDS YOU: yellow, like the header's count. */
 	urgent?: boolean;
+	/** The chip's own colour, as the queue's (ADR 0040). */
+	color?: Color;
 }) {
 	const chip = ` ${label} `;
+	const fill = color ?? (urgent ? "yellow" : "gray");
 	return (
 		<Box marginTop={1}>
 			<Text
-				backgroundColor={urgent ? "yellow" : "gray"}
-				color={urgent ? "black" : "whiteBright"}
+				backgroundColor={ink(fill)}
+				color={fill === "gray" ? "whiteBright" : "black"}
 				bold
 			>
 				{chip}
@@ -242,7 +254,7 @@ function MasterInput({
 }
 
 /** The y / e / n chips after a suggestion; y is the primary key. */
-function Chips({ keys }: { keys: string }) {
+export function Chips({ keys }: { keys: string }) {
 	const [primary, ...rest] = [...keys];
 	return (
 		<Text>
@@ -259,7 +271,7 @@ function Chips({ keys }: { keys: string }) {
 	);
 }
 
-function Selector({ on }: { on: boolean }) {
+export function Selector({ on }: { on: boolean }) {
 	return <Text color="whiteBright">{on ? "▸ " : "  "}</Text>;
 }
 
@@ -560,6 +572,7 @@ function SlackSuggestionLine({
 		<Box paddingLeft={NEED_INDENT} justifyContent="space-between">
 			<Text wrap="truncate" color={pending ? undefined : "gray"}>
 				<Text color="magenta">◆ </Text>
+				<Text color={SLACK_COLOR}>slack </Text>
 				{suggestion.status === "sending"
 					? "Sending to Slack…"
 					: suggestion.label}
@@ -629,6 +642,7 @@ export function MasterPanel({
 	inputText,
 	mentions,
 	replyText,
+	queue = null,
 	pulse = false,
 }: {
 	width: number;
@@ -646,6 +660,8 @@ export function MasterPanel({
 	inputText: string | null;
 	mentions: { names: string[]; selected: number } | null;
 	replyText: string | null;
+	/** The master's queue section (ADR 0040), drawn under NEEDS YOU. */
+	queue?: ReactNode;
 	/** Lit by a session's answer (ADR 0039). */
 	pulse?: boolean;
 }) {
@@ -739,6 +755,7 @@ export function MasterPanel({
 					</Text>
 					{slackError}
 					{needsYou}
+					{queue}
 					{reviews}
 				</>
 			) : (
@@ -762,6 +779,7 @@ export function MasterPanel({
 					</Text>
 					{slackError}
 					{needsYou}
+					{queue}
 					{reviews}
 					<SectionHeader label="CONVERSATION" width={inner} />
 					<Conversation messages={conversation.slice(-2)} />
