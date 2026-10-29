@@ -113,6 +113,11 @@ export interface Methods {
 	"slack.dismiss": { params: { channelId: string; ts: string }; result: null };
 	/** Claude's status line `rate_limits`, forwarded by `serenity statusline` (ADR 0020). */
 	"usage.report": { params: { rateLimits: unknown }; result: null };
+	/**
+	 * Whether the map's user is typing: a text field has focus and holds text.
+	 * Topic moves wait until they stop (ADR 0047).
+	 */
+	"map.typing": { params: { repo: string; typing: boolean }; result: null };
 	"master.message": { params: { repo: string; text: string }; result: null };
 	"master.permission": { params: { id: string; allow: boolean }; result: null };
 	"master.tool": {

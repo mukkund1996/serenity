@@ -24,6 +24,7 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
 		waitingOn: null,
 		waitingSince: null,
 		topicCandidate: null,
+		topicHeld: null,
 		lastPrompt: null,
 		lastAssistantMessage: null,
 		subagents: [],

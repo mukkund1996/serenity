@@ -204,6 +204,7 @@ export class ClaudeObserver {
 				waitingOn: null,
 				waitingSince: null,
 				topicCandidate: null,
+				topicHeld: null,
 				lastPrompt: null,
 				lastAssistantMessage: null,
 				subagents: [],

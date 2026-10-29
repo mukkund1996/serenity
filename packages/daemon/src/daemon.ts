@@ -136,6 +136,8 @@ export class Daemon {
 	private readonly subscriptions = new Map<RpcPeer, Set<string>>();
 	/** Each map's tmux pane, given when it subscribes; the master attaches there. */
 	private readonly mapPanes = new Map<RpcPeer, string>();
+	/** The repo each map whose user is typing shows (ADR 0047). */
+	private readonly typing = new Map<RpcPeer, string>();
 	/**
 	 * repo → the attached session and the map pane it was joined into. For an
 	 * adopted session, `clientTty` is the tmux client that was switched to it.
@@ -409,6 +411,8 @@ export class Daemon {
 			this.subscriptions.delete(peer);
 			const pane = this.mapPanes.get(peer);
 			this.mapPanes.delete(peer);
+			// A map that closes mid-word no longer holds topic moves.
+			this.setTyping(peer, null);
 			// The pane may outlive the map, as a shell; Ctrl+m is Enter there again.
 			if (pane)
 				void this.tmux.unsetPaneOption(pane, "@serenity_map").catch(() => {});
@@ -473,6 +477,16 @@ export class Daemon {
 		if (!session)
 			throw new RpcError(RpcErrorCode.InvalidParams, `no session ${id}`);
 		return session;
+	}
+
+	/** Records whether a map's user types; a repo is typing while any of its maps is. */
+	private setTyping(peer: RpcPeer, repo: string | null): void {
+		const before = this.typing.get(peer);
+		if (repo) this.typing.set(peer, repo);
+		else this.typing.delete(peer);
+		const typing = new Set(this.typing.values());
+		for (const r of new Set([before, repo]))
+			if (r) this.master.setTyping(r, typing.has(r));
 	}
 
 	private update(session: Session, patch: Partial<Session>): Session {
@@ -739,6 +753,11 @@ export class Daemon {
 			this.usage = usage;
 			this.opts.storage.recovery.set("usage", usage);
 			if (changed) for (const repo of this.openRepos()) this.broadcast(repo);
+			return null;
+		},
+
+		"map.typing": ({ repo, typing }, peer) => {
+			this.setTyping(peer, typing ? repo : null);
 			return null;
 		},
 
@@ -1290,6 +1309,7 @@ export class Daemon {
 			waitingOn: null,
 			waitingSince: null,
 			topicCandidate: null,
+			topicHeld: null,
 			lastPrompt: null,
 			lastAssistantMessage: null,
 			subagents: [],

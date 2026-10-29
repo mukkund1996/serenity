@@ -147,6 +147,8 @@ export class MasterSupervisor {
 	private readonly awaiting = new Map<string, Awaiting>();
 	/** repo → recent pings, oldest first. */
 	private readonly pingLog = new Map<string, Ping[]>();
+	/** Repos where the user is typing in a map's text field (ADR 0047). */
+	private readonly typing = new Set<string>();
 
 	constructor(
 		private readonly host: MasterHost,
@@ -236,6 +238,42 @@ export class MasterSupervisor {
 			this.schedule("suggest", after.id, () => this.suggest(after.id));
 		if (before && turnEnded(before, after)) this.fireWatch(after);
 		this.trackAnswer(before, after);
+		// After the caller's own update has landed, so it is not overwritten.
+		if (after.topicHeld && after.status !== "working")
+			queueMicrotask(() => this.releaseTopics(after.repo));
+	}
+
+	/**
+	 * Whether the user is typing in one of the repo's maps (ADR 0047). Topic
+	 * moves wait while they do; stopping lets the held ones through.
+	 */
+	setTyping(repo: string, typing: boolean): void {
+		if (typing) return void this.typing.add(repo);
+		if (this.typing.delete(repo)) this.releaseTopics(repo);
+	}
+
+	/**
+	 * Makes the held topic moves of sessions that no longer work, unless the
+	 * user is typing. The cap is checked again: the topics may have filled up
+	 * while it was held.
+	 */
+	private releaseTopics(repo: string): void {
+		if (this.typing.has(repo)) return;
+		let moved = false;
+		for (const session of this.host.storage.sessions.listByRepo(repo)) {
+			if (!session.topicHeld || session.status === "working") continue;
+			const topic = capTopic(
+				session.topicHeld,
+				this.topics(repo, session.id),
+				this.host.maxTopics,
+			);
+			this.host.update(session, {
+				topic: topic ?? session.topic,
+				topicHeld: null,
+			});
+			moved = true;
+		}
+		if (moved) this.host.broadcast(repo);
 	}
 
 	/** Tells the chat a watched session's turn ended (ADR 0032). */
@@ -346,7 +384,10 @@ export class MasterSupervisor {
 			result.topic = capTopic(result.topic, this.topics(session.repo), max);
 			const fresh = this.host.storage.sessions.get(sessionId);
 			if (!fresh || fresh.status === "archived") return;
-			const updated = this.host.update(fresh, applySummary(fresh, result));
+			const updated = this.host.update(
+				fresh,
+				applySummary(fresh, result, this.typing.has(fresh.repo)),
+			);
 			this.onSessionChanged(fresh, updated);
 		});
 	}
@@ -723,14 +764,21 @@ export class MasterSupervisor {
 				};
 			// Topics left once the session moves: a topic's last session may leave it.
 			const topics = this.topics(repo, session.id);
-			if (!capTopic(topic, topics, this.host.maxTopics))
+			// A near-duplicate of an existing topic's name joins that topic.
+			const fit = capTopic(topic, topics, this.host.maxTopics);
+			if (!fit)
 				return {
 					text: `There are already ${this.host.maxTopics} topics, the most allowed. Pick one of: ${topics.join(", ")}.`,
 					isError: true,
 				};
-			this.host.update(session, { topic, topicCandidate: null });
+			// The user's own request: moves at once, even while it works or they type.
+			this.host.update(session, {
+				topic: fit,
+				topicCandidate: null,
+				topicHeld: null,
+			});
 			this.host.broadcast(repo);
-			return { text: `Moved ${session.name} to ${topic}.` };
+			return { text: `Moved ${session.name} to ${fit}.` };
 		}
 
 		if (name === "archive_session") {
@@ -916,7 +964,8 @@ export class MasterSupervisor {
 					isError: true,
 				};
 			const topics = this.topics(repo);
-			if (!capTopic(topic, topics, this.host.maxTopics))
+			topic = capTopic(topic, topics, this.host.maxTopics);
+			if (!topic)
 				return {
 					text: `There are already ${this.host.maxTopics} topics, the most allowed. Pick one of: ${topics.join(", ")}.`,
 					isError: true,
@@ -929,7 +978,12 @@ export class MasterSupervisor {
 			mode: "worktree",
 			prompt,
 		});
-		if (topic) this.host.update(session, { topic, topicCandidate: null });
+		if (topic)
+			this.host.update(session, {
+				topic,
+				topicCandidate: null,
+				topicHeld: null,
+			});
 		this.host.broadcast(repo);
 		return {
 			text: `Started ${session.name} on branch ${session.branch}${topic ? ` under ${topic}` : ""}. It shows in your snapshot from now on.`,
