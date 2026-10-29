@@ -9,6 +9,7 @@ export * from "./mentions";
 export * from "./observed";
 export * from "./paths";
 export * from "./pr";
+export * from "./respawn";
 export * from "./retry";
 export * from "./rpc";
 export * from "./self";

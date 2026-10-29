@@ -78,6 +78,11 @@ export interface Session {
 	 * done or offered a cleanup, and resumed on attach once it has ended.
 	 */
 	pinned: boolean;
+	/**
+	 * Why claude last exited without serenity ending it (ADR 0044): that it
+	 * was restarted, or, on an ended session, why it was not.
+	 */
+	exitNote: string | null;
 	createdAt: number;
 	updatedAt: number;
 }

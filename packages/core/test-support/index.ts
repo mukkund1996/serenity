@@ -31,6 +31,7 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
 		claudeSessionId: null,
 		watched: false,
 		pinned: false,
+		exitNote: null,
 		createdAt: 1,
 		updatedAt: 1,
 		...overrides,

@@ -72,6 +72,7 @@ const SESSION_DEFAULTS: Pick<
 	| "tracking"
 	| "claudePid"
 	| "pinned"
+	| "exitNote"
 	| "subagents"
 > = {
 	waitingOn: null,
@@ -83,6 +84,7 @@ const SESSION_DEFAULTS: Pick<
 	tracking: "hooks",
 	claudePid: null,
 	pinned: false,
+	exitNote: null,
 	subagents: [],
 };
 

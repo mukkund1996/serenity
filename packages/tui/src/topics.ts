@@ -10,7 +10,7 @@ import {
 	wrap,
 } from "@serenity/core";
 import { drawField, type Field } from "./text-input";
-import { cardText, frameColor, glyph, nameColor } from "./theme";
+import { cardText, endedText, frameColor, glyph, nameColor } from "./theme";
 
 /**
  * Draws one side of the topics zoom (design screen 2): every topic as a
@@ -221,7 +221,7 @@ function cardBody(s: Session, width: number): Line[] {
 			you,
 			[
 				{
-					text: s.pinned ? "Ended. Enter resumes it." : "Session ended.",
+					text: endedText(s),
 					style: DIM,
 				},
 			],
