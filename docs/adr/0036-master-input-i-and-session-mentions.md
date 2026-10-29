@@ -1,6 +1,6 @@
 # 0036 · `i` opens the master input, which stays open; `@session` acts on a session at once
 
-**Status:** Accepted · 2026-10-28
+**Status:** Accepted · 2026-10-28 · Amended by [0037](0037-mentions-relay-to-the-session.md): the master relays to a mentioned session and never looks into it itself
 
 ## Context
 `g` opened the master chat from anywhere, while `i` already meant "message" on a session card, so the same job had two keys. The input also closed after every send, so a back-and-forth with the master took a key press per message, and one line was too little for a brief. And `send_reply` (0035) went out at once only when the user's message contained the text: for "tell api-auth to add tests" the master's own wording took a draft, a "Send it?" and a yes. When the user names the session in the message, that round trip says nothing the user has not already said.

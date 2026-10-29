@@ -116,7 +116,7 @@ Status never relies on colour alone except idle and archived, which are delibera
 **Master and global**
 | Key | Action |
 |-----|--------|
-| `i` · `M` | message master (on the master; `@` tags a session, ADR 0036) · expand master (v1.1) |
+| `i` · `M` | message master (on the master; `@` tags a session to relay to, ADR 0036, 0037) · expand master (v1.1) |
 | `y` `e` `n` | approve · edit / inspect · decline a suggestion |
 | `H` | archived sessions, nested under their topic |
 | `?` | shortcuts panel (`Ctrl+g ?` inside a session) |
