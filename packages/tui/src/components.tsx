@@ -17,6 +17,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { inputRows, PROMPT_W } from "./master-input";
 import {
 	CONVERSATION_EMPTY,
+	type ConversationWindow,
 	clipLines,
 	type MasterPlan,
 	NEED_INDENT,
@@ -385,18 +386,31 @@ function PermissionItem({
 	);
 }
 
-function Conversation({ messages }: { messages: MasterMessage[] }) {
-	if (!messages.length) {
-		const [before, after] = CONVERSATION_EMPTY.split(" g ");
+/** The conversation's window (ADR 0041): "↑ N more" above it, "↓ N newer" below once scrolled back. */
+function Conversation({
+	messages,
+	window,
+}: {
+	messages: MasterMessage[];
+	window: ConversationWindow;
+}) {
+	const shown = messages.slice(window.start, window.end);
+	if (!shown.length) {
+		const [before, after] = CONVERSATION_EMPTY.split(" i ");
 		return (
 			<Text color="gray">
-				{before} <Key>g</Key> {after}
+				{before} <Key>i</Key> {after}
 			</Text>
 		);
 	}
 	return (
 		<>
-			{messages.map((m, i) => (
+			{window.older ? (
+				<Text color="gray" wrap="truncate">
+					↑ {window.older} more · <Key>PgUp</Key>
+				</Text>
+			) : null}
+			{shown.map((m, i) => (
 				<Box key={m.id} marginTop={i ? 1 : 0}>
 					<Box width={SPEAKER_W} flexShrink={0}>
 						{m.from === "you" ? (
@@ -410,6 +424,11 @@ function Conversation({ messages }: { messages: MasterMessage[] }) {
 					</Text>
 				</Box>
 			))}
+			{window.newer ? (
+				<Text color="gray" wrap="truncate">
+					↓ {window.newer} newer · <Key>PgDn</Key>
+				</Text>
+			) : null}
 		</>
 	);
 }
@@ -782,7 +801,7 @@ export function MasterPanel({
 					{queue}
 					{reviews}
 					<SectionHeader label="CONVERSATION" width={inner} />
-					<Conversation messages={conversation.slice(-2)} />
+					<Conversation messages={conversation} window={plan.conversation} />
 				</>
 			)}
 			<MasterInput

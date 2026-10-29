@@ -109,8 +109,8 @@ const DEFAULT_WORKER_DEBOUNCE_MS = 1500;
 const DEFAULT_REVIEW_POLL_MS = 5 * 60_000;
 /** Neither do Slack messages. Each read is a model call, but a read already in flight is never doubled, so a slow one only skips ticks. */
 const DEFAULT_SLACK_POLL_MS = 60_000;
-/** Messages of the master conversation sent to clients. */
-const CONVERSATION_SHOWN = 4;
+/** Messages of the master conversation sent to clients: the four shown and what PgUp scrolls back to (ADR 0041). */
+const CONVERSATION_SHOWN = 50;
 
 type Handlers = {
 	[M in Method]: (
