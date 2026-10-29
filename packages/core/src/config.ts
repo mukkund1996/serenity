@@ -18,7 +18,7 @@ export interface Config {
 		/** The MCP server entry for Slack, as `--mcp-config` takes it. */
 		mcp: Record<string, unknown>;
 	};
-	/** Crash reports filed as GitHub issues (ADR 0043); off until the user turns them on. */
+	/** Crash reports filed as GitHub issues (ADR 0044); off until the user turns them on. */
 	crashReports: {
 		enabled: boolean;
 		/** `owner/name` the issues go to. */

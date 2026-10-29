@@ -15,8 +15,12 @@ import { PrWatcher } from "../src/prs";
 
 class FakeGh extends Gh {
 	lookup: PrLookup = { pr: null, error: null };
+	/** Answered first, one per call, before `lookup`. */
+	queue: PrLookup[] = [];
+	calls = 0;
 	override async prForBranch(): Promise<PrLookup> {
-		return this.lookup;
+		this.calls++;
+		return this.queue.shift() ?? this.lookup;
 	}
 	override async currentUser(): Promise<string | null> {
 		return "me";
@@ -75,6 +79,7 @@ beforeEach(() => {
 		propose: (_s, kind, label, text) => proposed.push({ kind, label, text }),
 		log: () => {},
 		debounceMs: 0,
+		retryBackoff: { baseMs: 2, maxMs: 4 },
 	});
 });
 
@@ -188,5 +193,43 @@ describe("PrWatcher", () => {
 		await watcher.refresh("s2");
 		expect(storage.sessions.get("s1")?.pr).toBeNull();
 		expect(storage.sessions.get("s2")?.pr).toBeNull();
+	});
+
+	test("a gh blip keeps the PR on the card and reads it again soon", async () => {
+		put({ id: "s1" });
+		gh.lookup = { pr: pr(), error: null };
+		await watcher.refresh("s1");
+		gh.queue = [
+			{ pr: null, error: "HTTP 502: Bad Gateway" },
+			{ pr: null, error: "gh timed out" },
+		];
+		gh.lookup = { pr: pr({ checks: "failing" }), error: null };
+		await watcher.refresh("s1");
+		expect(storage.sessions.get("s1")).toMatchObject({
+			pr: { number: 42, checks: "passing" },
+			prError: "HTTP 502: Bad Gateway",
+		});
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(gh.calls).toBe(4);
+		expect(storage.sessions.get("s1")).toMatchObject({
+			pr: { checks: "failing" },
+			prError: null,
+		});
+	});
+
+	test("reading again after a blip stops after a few tries", async () => {
+		put({ id: "s1" });
+		gh.lookup = { pr: null, error: "HTTP 503: Service Unavailable" };
+		await watcher.refresh("s1");
+		await new Promise((resolve) => setTimeout(resolve, 150));
+		expect(gh.calls).toBe(6);
+	});
+
+	test("a lasting error is not read again", async () => {
+		put({ id: "s1" });
+		gh.lookup = { pr: null, error: "gh not logged in" };
+		await watcher.refresh("s1");
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		expect(gh.calls).toBe(1);
 	});
 });

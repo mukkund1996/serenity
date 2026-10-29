@@ -1,3 +1,4 @@
+import type { DependencyIssue } from "./health";
 import type { GithubState, PrInfo } from "./pr";
 import type { SlackState } from "./slack";
 
@@ -256,4 +257,6 @@ export interface RepoState {
 	slack: SlackState | null;
 	/** Messages between the master and sessions in the last few seconds, oldest first. */
 	pings: Ping[];
+	/** gh, git, tmux or Slack failing call after call (ADR 0043); empty when all answer. */
+	health: DependencyIssue[];
 }

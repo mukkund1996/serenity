@@ -8,6 +8,7 @@ import {
 	BUILD_ID,
 	type CleanupPlan,
 	type CreateSessionParams,
+	DependencyHealth,
 	hookSettingsPath,
 	isHookKind,
 	loadConfig,
@@ -36,7 +37,7 @@ import {
 import { ClaudeObserver } from "./adopt";
 import { type ClaudeRunner, CliClaudeRunner } from "./claude";
 import { type CleanupFacts, cleanupPlan, plannedRemovals } from "./cleanup";
-import { run } from "./exec";
+import { onDependency, run } from "./exec";
 import { Gh } from "./gh";
 import {
 	addWorktree,
@@ -132,7 +133,7 @@ export class Daemon {
 	/**
 	 * repo → the attached session and the map pane it was joined into. For an
 	 * adopted session, `clientTty` is the tmux client that was switched to it.
-	 * Stored on every change, so a restart can detach it (ADR 0043).
+	 * Stored on every change, so a restart can detach it (ADR 0044).
 	 */
 	private readonly attached = new Map<string, Attachment>();
 	private readonly tmux: Tmux;
@@ -156,6 +157,9 @@ export class Daemon {
 	private readonly hookAt = new Map<string, number>();
 	/** Plan usage is per account, so the latest report covers every repo. */
 	private usage: Usage | null = null;
+	/** gh, git, tmux and Slack are per machine, so their health shows on every map (ADR 0043). */
+	private readonly health: DependencyHealth;
+	private readonly unhearDependencies: () => void;
 	private stopped: (() => void) | null = null;
 	readonly done: Promise<void>;
 
@@ -172,6 +176,15 @@ export class Daemon {
 			opts.log ??
 			((line) => console.log(`${new Date().toISOString()} ${line}`));
 		const config = loadConfig();
+		this.health = new DependencyHealth(() => {
+			for (const repo of this.openRepos()) this.broadcast(repo);
+		}, this.now);
+		this.unhearDependencies = onDependency((dependency, problem) => {
+			const before = this.health.issues().length;
+			this.health.report(dependency, problem);
+			if (problem && this.health.issues().length > before)
+				this.log(`${dependency} keeps failing: ${problem}`);
+		});
 		this.slackRepos = new Set(opts.slackRepos ?? config.slack.repos);
 		this.slackMcp = config.slack.mcp;
 		const runner = opts.runner ?? new CliClaudeRunner(this.claudeCommand);
@@ -301,7 +314,7 @@ export class Daemon {
 
 	/**
 	 * Matches what storage says to what is still there after a crash or
-	 * restart (ADR 0043): sessions whose pane closed meanwhile have ended,
+	 * restart (ADR 0044): sessions whose pane closed meanwhile have ended,
 	 * vanished worktrees are forgotten, attachments are kept only while both
 	 * panes live, and timers lost with the old process start again.
 	 */
@@ -361,6 +374,7 @@ export class Daemon {
 	}
 
 	async stop(): Promise<void> {
+		this.unhearDependencies();
 		for (const timer of this.timers) clearTimeout(timer);
 		this.master.stop();
 		this.prs.stop();
@@ -420,6 +434,9 @@ export class Daemon {
 				? { ...this.slack.state(), suggestions: this.advisor.list(repo) }
 				: null,
 			pings: this.master.pings(repo),
+			health: this.health
+				.issues()
+				.filter((i) => i.dependency !== "slack" || this.slackRepos.has(repo)),
 		};
 	}
 
@@ -866,7 +883,10 @@ export class Daemon {
 		if (removals.removeWorktree && session.worktree) {
 			if (existsSync(session.worktree))
 				await removeWorktree(session.repo, session.worktree);
-			else await run(["git", "-C", session.repo, "worktree", "prune"]);
+			else
+				await run(["git", "-C", session.repo, "worktree", "prune"], {
+					retry: true,
+				});
 		}
 		if (removals.deleteBranch && session.branch)
 			await deleteBranch(session.repo, session.branch, removals.forceDelete);

@@ -61,7 +61,7 @@ const describe = (exit: WorkerExit) =>
 		: `exited with code ${exit.code}`;
 
 /**
- * Runs the daemon worker and restarts it when it crashes (ADR 0043): after a
+ * Runs the daemon worker and restarts it when it crashes (ADR 0044): after a
  * backoff that doubles per crash, until `crashLimit` crashes fall within the
  * window. A clean exit (code 0: `serenity stop`, a new build taking over)
  * ends supervision.
@@ -189,7 +189,7 @@ function ghTracker(home: string, repo: string): IssueTracker {
 }
 
 /**
- * `serenity daemon`: supervises `serenity daemon --worker` (ADR 0043). One
+ * `serenity daemon`: supervises `serenity daemon --worker` (ADR 0044). One
  * supervisor per home: a second one leaves while the first is alive, even
  * between restarts; whoever asks a daemon to go waits for its lock to clear.
  */

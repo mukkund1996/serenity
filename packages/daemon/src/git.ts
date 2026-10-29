@@ -3,7 +3,9 @@ import { basename, dirname, join } from "node:path";
 import { run } from "./exec";
 
 export function currentBranch(dir: string): Promise<string> {
-	return run(["git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD"]);
+	return run(["git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD"], {
+		retry: true,
+	});
 }
 
 /**
@@ -12,14 +14,17 @@ export function currentBranch(dir: string): Promise<string> {
  */
 export async function commonDir(dir: string): Promise<string | null> {
 	try {
-		const path = await run([
-			"git",
-			"-C",
-			dir,
-			"rev-parse",
-			"--path-format=absolute",
-			"--git-common-dir",
-		]);
+		const path = await run(
+			[
+				"git",
+				"-C",
+				dir,
+				"rev-parse",
+				"--path-format=absolute",
+				"--git-common-dir",
+			],
+			{ retry: true },
+		);
 		return realpathSync(path);
 	} catch {
 		return null;
@@ -31,15 +36,18 @@ export async function branchExists(
 	branch: string,
 ): Promise<boolean> {
 	try {
-		await run([
-			"git",
-			"-C",
-			repo,
-			"rev-parse",
-			"--verify",
-			"--quiet",
-			`refs/heads/${branch}`,
-		]);
+		await run(
+			[
+				"git",
+				"-C",
+				repo,
+				"rev-parse",
+				"--verify",
+				"--quiet",
+				`refs/heads/${branch}`,
+			],
+			{ retry: true },
+		);
 		return true;
 	} catch {
 		return false;
@@ -49,14 +57,17 @@ export async function branchExists(
 /** The branch new worktrees start from: origin's HEAD if known, else the repo's current branch. */
 export async function defaultBase(repo: string): Promise<string> {
 	try {
-		return await run([
-			"git",
-			"-C",
-			repo,
-			"symbolic-ref",
-			"--short",
-			"refs/remotes/origin/HEAD",
-		]);
+		return await run(
+			[
+				"git",
+				"-C",
+				repo,
+				"symbolic-ref",
+				"--short",
+				"refs/remotes/origin/HEAD",
+			],
+			{ retry: true },
+		);
 	} catch {
 		return currentBranch(repo);
 	}
@@ -78,7 +89,9 @@ export function siblingWorktreePath(
 
 /** Number of changed or untracked files in a worktree. */
 export async function dirtyCount(dir: string): Promise<number> {
-	const out = await run(["git", "-C", dir, "status", "--porcelain"]);
+	const out = await run(["git", "-C", dir, "status", "--porcelain"], {
+		retry: true,
+	});
 	return out ? out.split("\n").length : 0;
 }
 
@@ -89,7 +102,10 @@ export async function commitsNotIn(
 	branch: string,
 ): Promise<number> {
 	return Number(
-		await run(["git", "-C", repo, "rev-list", "--count", `${base}..${branch}`]),
+		await run(
+			["git", "-C", repo, "rev-list", "--count", `${base}..${branch}`],
+			{ retry: true },
+		),
 	);
 }
 
@@ -117,7 +133,9 @@ export async function branchSha(
 	branch: string,
 ): Promise<string | null> {
 	try {
-		return await run(["git", "-C", repo, "rev-parse", `refs/heads/${branch}`]);
+		return await run(["git", "-C", repo, "rev-parse", `refs/heads/${branch}`], {
+			retry: true,
+		});
 	} catch {
 		return null;
 	}

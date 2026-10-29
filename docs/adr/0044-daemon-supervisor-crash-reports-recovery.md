@@ -1,4 +1,4 @@
-# 0043 · A supervisor restarts the daemon, crashes become deduped GitHub issues, and state survives a restart
+# 0044 · A supervisor restarts the daemon, crashes become deduped GitHub issues, and state survives a restart
 
 **Status:** Accepted · 2026-10-29 · Amends [0005](0005-daemon-and-json-rpc.md) (how the daemon starts, crash safety)
 

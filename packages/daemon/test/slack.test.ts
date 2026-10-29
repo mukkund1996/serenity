@@ -6,6 +6,7 @@ import {
 	type SlackDismissalStore,
 } from "@serenity/core";
 import type { ClaudeRunner, JsonRunOptions } from "../src/claude";
+import { onDependency } from "../src/exec";
 import { SlackWatcher } from "../src/slack";
 
 class FakeRunner implements ClaudeRunner {
@@ -54,7 +55,9 @@ beforeEach(() => {
 	watcher = makeWatcher();
 });
 
-function makeWatcher(): SlackWatcher {
+function makeWatcher(
+	extra: Partial<ConstructorParameters<typeof SlackWatcher>[0]> = {},
+): SlackWatcher {
 	return new SlackWatcher({
 		runner,
 		model: "haiku",
@@ -67,6 +70,7 @@ function makeWatcher(): SlackWatcher {
 		log: () => {},
 		now: () => now,
 		pollMs: 20,
+		...extra,
 	});
 }
 
@@ -187,4 +191,46 @@ test("dismissing something not shown only records it", () => {
 	expect(broadcasts).toBe(0);
 	expect(inboxes).toEqual([]);
 	expect(dismissals.list()).toEqual([{ channelId: "C9", ts: "1.0", at: now }]);
+});
+
+test("a failed read is tried again soon, without waiting for the poll", async () => {
+	watcher.stop();
+	watcher = makeWatcher({
+		pollMs: 60_000,
+		retryBackoff: { baseMs: 5, maxMs: 10 },
+	});
+	const heard: Array<string | null> = [];
+	const unhear = onDependency((d, p) => d === "slack" && heard.push(p));
+	runner.answer = new Error("MCP server slack failed to start");
+	await watcher.refresh();
+	expect(watcher.state().error).toContain("failed to start");
+	runner.answer = { access: "ok", problem: null, items: [message("1")] };
+	await new Promise((resolve) => setTimeout(resolve, 40));
+	unhear();
+	expect(runner.calls).toHaveLength(2);
+	expect(watcher.state()).toMatchObject({ error: null, items: [{ ts: "1" }] });
+	expect(heard).toEqual(["Slack: MCP server slack failed to start", null]);
+});
+
+test("no retry once no map is open", async () => {
+	watcher.stop();
+	watcher = makeWatcher({ retryBackoff: { baseMs: 5, maxMs: 10 } });
+	open = false;
+	runner.answer = new Error("boom");
+	await watcher.refresh();
+	await new Promise((resolve) => setTimeout(resolve, 40));
+	expect(runner.calls).toHaveLength(1);
+});
+
+test("no login is not retried early: it waits for the poll", async () => {
+	watcher.stop();
+	watcher = makeWatcher({
+		pollMs: 60_000,
+		retryBackoff: { baseMs: 5, maxMs: 10 },
+	});
+	runner.answer = { access: "no_access", problem: "401 auth", items: [] };
+	await watcher.refresh();
+	await new Promise((resolve) => setTimeout(resolve, 40));
+	expect(runner.calls).toHaveLength(1);
+	expect(watcher.state().error).toBe(SLACK_LOGIN_HINT);
 });
