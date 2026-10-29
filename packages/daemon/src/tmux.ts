@@ -2,6 +2,8 @@ import { run } from "./exec";
 
 /** Ctrl+m as a CSI u key, after its Escape: `ESC [ 109 ; 5 u`. */
 const CTRL_M_CSI_U = "[109;5u";
+/** Shift+Enter as a CSI u key, after its Escape; Ink reads it as Enter with shift. */
+const SHIFT_ENTER_CSI_U = "[13;2u";
 
 /**
  * Thin tmux driver (ADR 0004). `socketName` selects a private tmux server
@@ -225,8 +227,11 @@ export class Tmux {
 	 * Ctrl+g in an agent pane detaches it back to the map; Ctrl+m does too and
 	 * then focuses the master. In the map pane Ctrl+m reaches the map as a CSI u
 	 * key, which it tells apart from Enter. Anywhere else both pass through.
+	 * Shift+Enter reaches the map pane as a CSI u key too, a new line in the
+	 * master input (ADR 0038); other panes get it unchanged.
 	 * Agent panes carry the @serenity_session option, the map pane @serenity_map.
-	 * Ctrl+m differs from Enter only when the terminal sends extended keys.
+	 * Ctrl+m and Shift+Enter differ from Enter only when the terminal sends
+	 * extended keys.
 	 */
 	async bindSessionKeys(detachCommand: string): Promise<void> {
 		await this.cmd([
@@ -248,6 +253,16 @@ export class Tmux {
 			"#{@serenity_session}",
 			`run-shell -b "${detachCommand} #{pane_id} master"`,
 			`if-shell -F "#{@serenity_map}" "send-keys Escape '${CTRL_M_CSI_U}'" "send-keys C-m"`,
+		]);
+		await this.cmd([
+			"bind-key",
+			"-n",
+			"S-Enter",
+			"if-shell",
+			"-F",
+			"#{@serenity_map}",
+			`send-keys Escape '${SHIFT_ENTER_CSI_U}'`,
+			"send-keys S-Enter",
 		]);
 	}
 

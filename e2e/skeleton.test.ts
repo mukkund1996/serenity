@@ -356,6 +356,51 @@ test(
 );
 
 test(
+	"Shift+Enter, Alt+Enter and Ctrl+J start a new line in the master input; Enter sends every line",
+	async () => {
+		/** The input's rows, from its first ("› ") row down. */
+		const inputLines = (first: string) => {
+			const lines = screen().split("\n");
+			const at = lines.findIndex((l) => l.includes(`› ${first}`));
+			return lines.slice(at, at + 4);
+		};
+		await openMasterInput();
+		expect(tmux("list-keys", "-T", "root", "S-Enter")).toContain("13;2u");
+		type("first");
+		await waitFor(/› first█/);
+		// send-keys bypasses key bindings, so send what the binding sends the map.
+		keys("Escape", "[13;2u");
+		await until(
+			() => inputLines("first")[1]?.includes("█") ?? false,
+			"the cursor on a new line",
+		);
+		type("second");
+		keys("M-Enter");
+		await Bun.sleep(100);
+		type("third");
+		keys("C-j");
+		await Bun.sleep(100);
+		type("fourth");
+		await until(
+			() => inputLines("first")[3]?.includes("fourth█") ?? false,
+			"four lines in the input",
+		);
+		const [, second, third] = inputLines("first");
+		expect(second).toMatch(/[│┃] {2}second\s/);
+		expect(third).toMatch(/[│┃] {2}third\s/);
+		keys("Enter");
+		const chat = await waitFor(/Heard: first/);
+		expect(chat).toMatch(
+			/you\s+first\s[^\n]*\n[^\n]*\ssecond\s[^\n]*\n[^\n]*\sthird\s[^\n]*\n[^\n]*\sfourth\s/,
+		);
+		// Sent whole, and the input is open and empty again.
+		expect(chat).toContain("› █");
+		await closeMasterInput();
+	},
+	STEP_TIMEOUT,
+);
+
+test(
 	"g no longer opens the master input",
 	async () => {
 		keys("c");

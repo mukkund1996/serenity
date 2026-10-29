@@ -122,7 +122,7 @@ serenity is keyboard-only. The footer shows the moves; `?` opens the full list.
 |-----|--------|
 | `←` `↑` `↓` `→` / `WASD` | Move between nodes |
 | `Enter` | Attach to a session, or go into the master |
-| `i` | Send the focused session a quick message; on the master, open its chat input (`@` tags a session, `Esc` closes it) |
+| `i` | Send the focused session a quick message; on the master, open its chat input (`@` tags a session, `Shift+Enter` or `Ctrl+J` starts a new line, `Esc` closes it) |
 | `Ctrl+g` | Back to the map from inside a session |
 | `z` / `Z` / `Esc` | Zoom out to the map / zoom in / one level up |
 | `Ctrl+m` | Focus the master from anywhere (Enter in Apple Terminal) |
