@@ -6,45 +6,78 @@
 
 /** Lines the input grows to; a longer message shows its last lines. */
 export const INPUT_MAX_ROWS = 4;
-/** The cursor, drawn after the text. */
-export const CURSOR = "█";
 /** Columns taken by the "› " prompt, and by a continuation line's indent. */
 export const PROMPT_W = 2;
 
+/** One row of the input; `cursor` is the column the cursor is on, if it is on this row. */
+export interface InputRow {
+	text: string;
+	cursor: number | null;
+}
+
 /**
- * `text` and its cursor word-wrapped to `width` columns, up to `max` rows.
- * Each line of a multi-line message starts a row. A longer message keeps its
- * end in view, the first row starting with `…`. Rows after the first are
- * indented under the first row's text by the caller.
+ * `text` word-wrapped to `width` columns, up to `max` rows, with the cursor
+ * at character `cursor` (the end when left out). Each line of a multi-line
+ * message starts a row. The cursor takes a cell of its own after the text,
+ * and at the end of the line it is on. A longer message keeps the cursor's
+ * row in view, the end while the cursor is there; the first row starts with
+ * `…` when rows above it are hidden. Rows after the first are indented under
+ * the first row's text by the caller.
  */
 export function inputRows(
 	text: string,
 	width: number,
+	cursor?: number,
 	max = INPUT_MAX_ROWS,
-): string[] {
+): InputRow[] {
 	const w = Math.max(2, width);
-	const rows = `${text}${CURSOR}`.split("\n").flatMap((line) => {
+	const lines = text.split("\n");
+	const total = [...text].length;
+	const at = Math.max(0, Math.min(cursor ?? total, total));
+	const rows: InputRow[] = [];
+	let offset = 0;
+	lines.forEach((line, n) => {
 		const chars = [...line];
-		const wrapped: string[] = [];
+		const here = at >= offset && at <= offset + chars.length;
+		// The cursor's cell after the line, which wraps like a character.
+		const cells =
+			chars.length +
+			(n === lines.length - 1 || (here && at === offset + chars.length)
+				? 1
+				: 0);
+		const isSpace = (i: number) => i < chars.length && chars[i] === " ";
 		let start = 0;
-		while (chars.length - start > w) {
+		const push = (end: number) => {
+			const col =
+				here && at - offset >= start && at - offset < end
+					? at - offset - start
+					: null;
+			rows.push({ text: chars.slice(start, end).join(""), cursor: col });
+			start = end;
+		};
+		while (cells - start > w) {
 			// Break after the last space that fits; a word longer than a row is split.
 			let end = start + w;
 			for (let i = start + w; i > start; i--) {
-				if (chars[i - 1] === " ") {
+				if (isSpace(i - 1)) {
 					end = i;
 					break;
 				}
 			}
-			wrapped.push(chars.slice(start, end).join(""));
-			start = end;
+			push(end);
 		}
-		wrapped.push(chars.slice(start).join(""));
-		return wrapped;
+		push(cells);
+		offset += chars.length + 1;
 	});
 	if (rows.length <= max) return rows;
-	const kept = rows.slice(-max);
-	kept[0] = `…${[...(kept[0] as string)].slice(1).join("")}`;
+	const cursorRow = rows.findIndex((r) => r.cursor !== null);
+	const first = Math.max(0, Math.min(rows.length - max, cursorRow - max + 1));
+	const kept = rows.slice(first, first + max);
+	if (first > 0) {
+		const top = kept[0] as InputRow;
+		// Never the cursor's row: that one is at the bottom when rows scroll.
+		kept[0] = { ...top, text: `…${[...top.text].slice(1).join("")}` };
+	}
 	return kept;
 }
 

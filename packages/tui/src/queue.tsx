@@ -1,7 +1,8 @@
 import type { Session, Suggestion } from "@serenity/core";
 import { Box, Text } from "ink";
-import { Chips, SectionHeader, Selector } from "./components";
+import { Chips, FieldLine, SectionHeader, Selector } from "./components";
 import { NEED_INDENT, queueLines } from "./master-layout";
+import type { Field } from "./text-input";
 import { QUEUE_COLOR } from "./theme";
 
 /** Element id prefix of a queued reply in the master (ADR 0040). */
@@ -22,7 +23,7 @@ export function QueueSection({
 	window,
 	selected,
 	expanded,
-	replyText,
+	reply,
 	inner,
 }: {
 	queue: QueuedReply[];
@@ -31,7 +32,7 @@ export function QueueSection({
 	/** The suggestion shown in full, or null. */
 	expanded: string | null;
 	/** The selected reply's text being edited (e), or null. */
-	replyText: string | null;
+	reply: Field | null;
 	inner: number;
 }) {
 	if (!queue.length) return null;
@@ -63,15 +64,9 @@ export function QueueSection({
 								<Chips keys="yen" />
 							</Box>
 						</Box>
-						{on && replyText !== null ? (
+						{on && reply !== null ? (
 							<Box paddingLeft={NEED_INDENT}>
-								<Text
-									color="whiteBright"
-									backgroundColor="black"
-									wrap="truncate-start"
-								>
-									› {replyText}█
-								</Text>
+								<FieldLine field={reply} width={inner - NEED_INDENT} />
 							</Box>
 						) : expanded === suggestion.id ? (
 							queueLines(text, inner).map((line, i) => (

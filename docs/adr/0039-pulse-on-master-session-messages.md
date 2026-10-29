@@ -1,6 +1,6 @@
 # 0039 · A card pulses when the master messages it, the master when the session answers
 
-**Status:** Accepted · 2026-10-29
+**Status:** Accepted · 2026-10-29 · Amended by [0042](0042-master-shows-three-eased-pulse-text-fields-edit.md): one swell in and out over 1.4 s, colour only, instead of three blinks
 
 ## Context
 `send_reply` (0035, 0036) types into a session at once, so the master now talks to sessions without a `y`. Nothing on the map showed it: the user saw the chat say "Sent to api-auth." and, later, the card's text change. Which session the master just messaged, and when it answered, was easy to miss. 0012 allowed one animation, the master's spinner, and asked that it stay cheap.

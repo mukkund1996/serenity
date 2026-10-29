@@ -1,6 +1,6 @@
 # 0041 · The master shows four messages; `PgUp` `PgDn` scroll the conversation
 
-**Status:** Accepted · 2026-10-29 · Amends [0012](0012-ux-decisions.md) (Conversation, Shortcuts panel)
+**Status:** Accepted · 2026-10-29 · Amends [0012](0012-ux-decisions.md) (Conversation, Shortcuts panel) · Amended by [0042](0042-master-shows-three-eased-pulse-text-fields-edit.md): three messages, the hints grey
 
 ## Context
 The topics zoom's master panel showed only the latest exchange (0012): the user's message and the master's reply. A back-and-forth with the master, now that its input stays open (0036), loses the message before last at once, and a relayed answer (0037) can push the question that asked for it off the panel. The full history behind `M` is still v1.1.

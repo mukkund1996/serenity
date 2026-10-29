@@ -67,9 +67,16 @@ import {
 	RenameDialog,
 	ShortcutsPanel,
 } from "./overlays";
-import { PULSE_PHASE_MS, pulseEnd, pulsing } from "./pulse";
+import { PULSE_FRAME_MS, pulseEnd, pulsing } from "./pulse";
 import { QUEUE_ROW, QueueSection } from "./queue";
-import { isNewlineKey, splitAtNewline } from "./text-input";
+import {
+	editField,
+	type Field,
+	fieldAt,
+	insertText,
+	isNewlineKey,
+	splitAtNewline,
+} from "./text-input";
 import { askLine } from "./theme";
 import {
 	type CardElement,
@@ -148,9 +155,19 @@ function editText(
 	return { value: value + text, submit };
 }
 
+/** A field's text before and after its cursor. */
+function splitField(field: Field): [string, string] {
+	const chars = [...field.text];
+	return [
+		chars.slice(0, field.cursor).join(""),
+		chars.slice(field.cursor).join(""),
+	];
+}
+
 /**
- * The clock the pulse reads (ADR 0039): it ticks once a blink while a ping's
- * pulse runs and stops when it ends, so an idle map never re-renders.
+ * The clock the pulse reads (ADR 0039, 0042): it ticks a frame at a time
+ * while a ping's pulse runs and stops when it ends, so an idle map never
+ * re-renders.
  */
 function usePulseClock(pings: Ping[]): number {
 	const [now, setNow] = useState(() => Date.now());
@@ -162,7 +179,7 @@ function usePulseClock(pings: Ping[]): number {
 			const t = Date.now();
 			setNow(t);
 			if (t >= end) clearInterval(timer);
-		}, PULSE_PHASE_MS);
+		}, PULSE_FRAME_MS);
 		return () => clearInterval(timer);
 	}, [end]);
 	return now;
@@ -195,12 +212,21 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const [inside, setInside, insideRef] = useLiveState(false);
 	/** The element selected inside the master, or a card's reply row; null means its first. */
 	const [element, setElement] = useState<string | null>(null);
-	const [replyText, setReplyText, replyRef] = useLiveState<string | null>(null);
+	/** The reply being typed to a session, and its cursor (ADR 0042). */
+	const [reply, setReply, replyRef] = useLiveState<Field | null>(null);
+	const replyText = reply?.text ?? null;
+	/** Opens, fills or closes the reply input, the cursor after the text. */
+	const setReplyText = (text: string | null) =>
+		setReply(text === null ? null : fieldAt(text));
 	/** The suggestion whose reply is being edited (e), if any. */
 	const [, setReplyEdit, replyEditRef] = useLiveState<string | null>(null);
-	const [masterText, setMasterText, masterRef] = useLiveState<string | null>(
+	/** The master input's text and cursor; null while it is closed. */
+	const [masterField, setMasterField, masterRef] = useLiveState<Field | null>(
 		null,
 	);
+	const masterText = masterField?.text ?? null;
+	const setMasterText = (text: string | null) =>
+		setMasterField(text === null ? null : fieldAt(text));
 	/** The selected row of the @ list over the master input. */
 	const [mentionAt, setMentionAt, mentionRef] = useLiveState(0);
 	/** The input text whose @ list Esc closed; the list returns once the text changes. */
@@ -261,13 +287,13 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const bodyHeight = rows - 2;
 	const masterWidth = Math.max(38, Math.min(72, columns - 50));
 	const masterInner = masterWidth - 6;
-	/** Names the @ list offers for the master input's text; none once Esc closed it. */
-	const mentionOptions = (text: string | null): string[] => {
-		if (text === null || text === mentionOffRef.current) return [];
-		const draft = mentionDraft(text);
+	/** Names the @ list offers for the text before the input's cursor; none once Esc closed it. */
+	const mentionOptions = (field: Field | null): string[] => {
+		if (field === null || field.text === mentionOffRef.current) return [];
+		const draft = mentionDraft(splitField(field)[0]);
 		return draft ? matchMentions(sessions, draft.query) : [];
 	};
-	const mentionNames = mentionOptions(masterText);
+	const mentionNames = mentionOptions(masterField);
 	const mentionList = mentionNames.length
 		? listWindow(
 				mentionNames,
@@ -332,8 +358,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		inputExtra:
 			(masterText === null
 				? 0
-				: inputRows(masterText, masterInner - 2 - PROMPT_W).length - 1) +
-			(mentionList?.names.length ?? 0),
+				: inputRows(masterText, masterInner - 2 - PROMPT_W, masterField?.cursor)
+						.length - 1) + (mentionList?.names.length ?? 0),
 	});
 	/** The URL of a row selected in the master: the Slack item or a review request. */
 	const linkOf = (id: string | null): string | null => {
@@ -417,7 +443,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					kind: "queued",
 					session: queued.session,
 					text: queued.suggestion.text ?? "",
-					replyText,
+					reply,
 				}
 			: focusedPermission
 				? { kind: "permission", permission: focusedPermission }
@@ -426,7 +452,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							kind: "slack",
 							item: slackItem,
 							suggestion: slackSuggestion,
-							replyText,
+							reply,
 							now: Date.now(),
 						}
 					: focused
@@ -434,7 +460,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 								kind: "session",
 								session: focused,
 								suggestion: focusedSuggestion?.label ?? null,
-								replyText,
+								reply,
 							}
 						: null;
 	const layout = (() => {
@@ -447,7 +473,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				focusId: card?.id ?? null,
 				focusElement,
 				focusSuggestion: cardSuggestion?.label ?? null,
-				replyText: onMaster ? null : replyText,
+				reply: onMaster ? null : reply,
 				master: {
 					focused: onMaster,
 					thinking: master.status === "thinking",
@@ -459,7 +485,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					empty: sessions.length === 0,
 					item: masterItem,
 					inputSelected: onMaster && selected === MASTER_INPUT,
-					inputText: masterText,
+					input: masterField,
 					mentions: mentionList,
 					lastMessage: conversation[conversation.length - 1] ?? null,
 					pulse: pulse.master,
@@ -488,7 +514,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				focusId: card?.id ?? null,
 				focusElement,
 				focusSuggestion: cardSuggestion?.label ?? null,
-				replyText: onMaster ? null : replyText,
+				reply: onMaster ? null : reply,
 				side: at,
 				pulse: pulse.sessions,
 			});
@@ -810,8 +836,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					});
 				if (key.return) return sendReply(list[overlay.selected] ?? "");
 				setOverlay(null);
-				const edit = editText(replyRef.current ?? "", input, key);
-				if (edit) setReplyText(edit.value);
+				const edit = editField(replyRef.current ?? fieldAt(""), input, key);
+				if (edit) setReply(edit.field);
 				return;
 			}
 
@@ -832,11 +858,11 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 						setOverlay({ kind: "replies", selected: 0 });
 					return;
 				}
-				if (key.return) return sendReply(reply);
-				const edit = editText(reply, input, key);
+				if (key.return) return sendReply(reply.text);
+				const edit = editField(reply, input, key);
 				if (!edit) return;
-				if (edit.submit) return sendReply(edit.value);
-				setReplyText(edit.value);
+				if (edit.submit) return sendReply(edit.field.text);
+				setReply(edit.field);
 				return;
 			}
 
@@ -853,12 +879,13 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				const options = mentionOptions(toMaster);
 				// Esc closes the @ list first; with no list it closes the input.
 				if (key.escape) {
-					if (options.length) return setMentionOff(toMaster);
+					if (options.length) return setMentionOff(toMaster.text);
 					setMentionOff(null);
 					return setMasterText(null);
 				}
 				// Shift+Enter, Alt+Enter and Ctrl+J start a new line; Enter sends.
-				if (isNewlineKey(input, key)) return setMasterText(`${toMaster}\n`);
+				if (isNewlineKey(input, key))
+					return setMasterField(insertText(toMaster, "\n"));
 				if (options.length) {
 					const at = Math.min(mentionRef.current, options.length - 1);
 					if (key.upArrow || key.downArrow)
@@ -867,17 +894,24 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 						);
 					// Tab, and Enter while the list is open, complete the name.
 					if (key.tab || key.return) {
-						setMasterText(completeMention(toMaster, options[at] as string));
+						const [before, after] = splitField(toMaster);
+						const done = completeMention(before, options[at] as string);
+						// The name's trailing space stands in for one already after the cursor.
+						const rest = after.startsWith(" ") ? after.slice(1) : after;
+						setMasterField({
+							text: done + rest,
+							cursor: [...done].length,
+						});
 						setMentionAt(0);
 						return;
 					}
 				}
 				if (key.tab) return;
-				if (key.return) return send(toMaster);
-				const edit = editText(toMaster, input, key);
+				if (key.return) return send(toMaster.text);
+				const edit = editField(toMaster, input, key);
 				if (!edit) return;
-				if (edit.submit) return send(edit.value);
-				setMasterText(edit.value);
+				if (edit.submit) return send(edit.field.text);
+				setMasterField(edit.field);
 				setMentionAt(0);
 				return;
 			}
@@ -1228,16 +1262,16 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							slack={slack}
 							focused={onMaster}
 							selected={onMaster ? selected : null}
-							inputText={masterText}
+							input={masterField}
 							mentions={mentionList}
-							replyText={onMaster ? replyText : null}
+							reply={onMaster ? reply : null}
 							queue={
 								<QueueSection
 									queue={queue}
 									window={plan.queue}
 									selected={onMaster ? selected : null}
 									expanded={expanded}
-									replyText={onMaster ? replyText : null}
+									reply={onMaster ? reply : null}
 									inner={masterInner}
 								/>
 							}

@@ -9,12 +9,54 @@ import {
 import { Box, Text, useInput } from "ink";
 import { useState } from "react";
 import { Key, TitledBox } from "./components";
-import { splitAtNewline } from "./text-input";
+import {
+	CURSOR,
+	editField,
+	type Field,
+	fieldAt,
+	fieldWindow,
+} from "./text-input";
 import { cardText, glyph } from "./theme";
 
 const DIALOG_W = 64;
 const FIELDS = ["name", "prompt", "cwd", "branch", "mode"] as const;
-type Field = (typeof FIELDS)[number];
+type FieldName = (typeof FIELDS)[number];
+type TextFieldName = Exclude<FieldName, "mode">;
+/** A dialog's text field: its width, less the frame, padding and the label's 13 columns. */
+const FIELD_W = DIALOG_W - 2 - 4 - 13;
+
+/** A dialog's text field, the cursor's cell inverted while it has focus (ADR 0042). */
+function DialogField({
+	field,
+	focused,
+	placeholder = "",
+}: {
+	field: Field;
+	focused: boolean;
+	placeholder?: string;
+}) {
+	if (!field.text)
+		return (
+			<Text wrap="truncate">
+				<Text color={focused ? "black" : "gray"}>{placeholder}</Text>
+				{focused ? <Text color="whiteBright">{CURSOR}</Text> : null}
+			</Text>
+		);
+	if (!focused)
+		return (
+			<Text color="whiteBright" wrap="truncate-start">
+				{field.text}
+			</Text>
+		);
+	const { before, at, after } = fieldWindow(field, FIELD_W);
+	return (
+		<Text color="whiteBright" wrap="truncate">
+			{before}
+			{at === null ? CURSOR : <Text inverse>{at}</Text>}
+			{after}
+		</Text>
+	);
+}
 
 /**
  * New session dialog (design 4d): name, an optional first prompt, working
@@ -29,14 +71,14 @@ export function NewSessionDialog({
 	onSubmit: (params: CreateSessionParams) => Promise<void>;
 	onClose: () => void;
 }) {
-	const [values, setValues] = useState({
-		name: "",
-		prompt: "",
-		cwd: repo,
-		branch: "",
+	const [values, setValues] = useState<Record<TextFieldName, Field>>({
+		name: fieldAt(""),
+		prompt: fieldAt(""),
+		cwd: fieldAt(repo),
+		branch: fieldAt(""),
 	});
 	const [mode, setMode] = useState<SessionMode>("worktree");
-	const [field, setField] = useState<Field>("name");
+	const [field, setField] = useState<FieldName>("name");
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
@@ -46,21 +88,21 @@ export function NewSessionDialog({
 			if (key.tab) {
 				const step = key.shift ? FIELDS.length - 1 : 1;
 				setField(
-					FIELDS[(FIELDS.indexOf(field) + step) % FIELDS.length] as Field,
+					FIELDS[(FIELDS.indexOf(field) + step) % FIELDS.length] as FieldName,
 				);
 				return;
 			}
 			const submit = (v: typeof values) => {
-				if (!v.name.trim()) return setError("Give the session a name.");
+				if (!v.name.text.trim()) return setError("Give the session a name.");
 				setBusy(true);
 				setError(null);
 				onSubmit({
 					repo,
-					name: v.name.trim().replace(/\s+/g, "-"),
-					cwd: v.cwd,
+					name: v.name.text.trim().replace(/\s+/g, "-"),
+					cwd: v.cwd.text,
 					mode,
-					branch: v.branch || undefined,
-					prompt: v.prompt.trim() || undefined,
+					branch: v.branch.text || undefined,
+					prompt: v.prompt.text.trim() || undefined,
 				}).catch((e: Error) => {
 					setBusy(false);
 					setError(e.message);
@@ -72,35 +114,28 @@ export function NewSessionDialog({
 					setMode(mode === "worktree" ? "branch" : "worktree");
 				return;
 			}
-			if (key.backspace || key.delete) {
-				setValues({ ...values, [field]: values[field].slice(0, -1) });
-				return;
-			}
-			if (input && !key.ctrl && !key.meta) {
-				const { text, submit: enter } = splitAtNewline(input);
-				const next = { ...values, [field]: values[field] + text };
+			const edit = editField(values[field], input, key);
+			if (edit) {
+				const next = { ...values, [field]: edit.field };
 				setValues(next);
-				if (enter) return submit(next);
+				if (edit.submit) return submit(next);
 			}
 			setError(null);
 		},
 		{ isActive: !busy },
 	);
 
-	const row = (label: string, f: Exclude<Field, "mode">, placeholder = "") => (
+	const row = (label: string, f: TextFieldName, placeholder = "") => (
 		<Box marginTop={1}>
 			<Box width={13} flexShrink={0}>
 				<Text color="white">{label}</Text>
 			</Box>
 			<Box backgroundColor={field === f ? "gray" : undefined} flexGrow={1}>
-				<Text wrap="truncate-start">
-					{values[f] ? (
-						<Text color="whiteBright">{values[f]}</Text>
-					) : (
-						<Text color={field === f ? "black" : "gray"}>{placeholder}</Text>
-					)}
-					{field === f ? <Text color="whiteBright">█</Text> : null}
-				</Text>
+				<DialogField
+					field={values[f]}
+					focused={field === f}
+					placeholder={placeholder}
+				/>
 			</Box>
 		</Box>
 	);
@@ -225,7 +260,8 @@ export function ShortcutsPanel() {
 }
 
 /**
- * Rename a session (r). Starts from the current name; Ctrl+u clears it.
+ * Rename a session (r). Starts from the current name, edited like any text
+ * field (ADR 0042): Ctrl+u clears what is before the cursor.
  * Topics have no rename: the master manages them (ADR 0012).
  */
 export function RenameDialog({
@@ -237,7 +273,7 @@ export function RenameDialog({
 	onSubmit: (name: string) => Promise<void>;
 	onClose: () => void;
 }) {
-	const [name, setName] = useState(session.name);
+	const [name, setName] = useState(() => fieldAt(session.name));
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 
@@ -255,14 +291,12 @@ export function RenameDialog({
 					setError(e.message);
 				});
 			};
-			if (key.return) return submit(name);
+			if (key.return) return submit(name.text);
 			setError(null);
-			if (key.ctrl && input === "u") return setName("");
-			if (key.backspace || key.delete) return setName(name.slice(0, -1));
-			if (!input || key.ctrl || key.meta) return;
-			const { text, submit: enter } = splitAtNewline(input);
-			setName(name + text);
-			if (enter) submit(name + text);
+			const edit = editField(name, input, key);
+			if (!edit) return;
+			setName(edit.field);
+			if (edit.submit) submit(edit.field.text);
 		},
 		{ isActive: !busy },
 	);
@@ -282,10 +316,7 @@ export function RenameDialog({
 					<Text color="white">Name</Text>
 				</Box>
 				<Box backgroundColor="gray" flexGrow={1}>
-					<Text wrap="truncate-start">
-						<Text color="whiteBright">{name}</Text>
-						<Text color="whiteBright">█</Text>
-					</Text>
+					<DialogField field={name} focused />
 				</Box>
 			</Box>
 			{session.origin === "spawned" ? null : (

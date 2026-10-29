@@ -164,8 +164,8 @@ export function planMaster(input: MasterPlanInput): MasterPlan {
 	};
 }
 
-/** At most this many messages show in the panel, the bottom one last (ADR 0041). */
-export const MAX_CONVERSATION = 4;
+/** At most this many messages show in the panel, the bottom one last (ADR 0041, 0042). */
+export const MAX_CONVERSATION = 3;
 
 /**
  * The messages ending before `end` that fit in `room` rows, at most

@@ -127,6 +127,7 @@ serenity is keyboard-only. The footer shows the moves; `?` opens the full list.
 | `z` / `Z` / `Esc` | Zoom out to the map / zoom in / one level up |
 | `Ctrl+m` | Focus the master from anywhere (Enter in Apple Terminal) |
 | `PgUp` `PgDn` | On the master, scroll its conversation back and on (`Shift+↑` `Shift+↓` too) |
+| `←` `→` `Home` `End` | In a text field, move the cursor; `Option+←` `→` by a word. `Ctrl+a` `e` `w` `u` `k` and `Option+Backspace` edit as in a shell |
 | `Tab` | Jump to the next session that needs you |
 | `y` `e` `n` | Approve, edit or decline the master's suggestion |
 | `[` `]` | Previous / next topic |

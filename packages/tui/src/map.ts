@@ -1,5 +1,6 @@
 import {
 	Canvas,
+	type Color,
 	type MasterMessage,
 	type MasterPermission,
 	type Session,
@@ -11,7 +12,7 @@ import {
 	wrap,
 } from "@serenity/core";
 import { inputRows, PROMPT_W } from "./master-input";
-import { PULSE } from "./pulse";
+import { CURSOR, CURSOR_CELL, drawField, type Field } from "./text-input";
 import {
 	age,
 	askLine,
@@ -52,7 +53,7 @@ export type MasterItem =
 			session: Session;
 			suggestion: string | null;
 			/** Reply being typed to it, or null. */
-			replyText: string | null;
+			reply: Field | null;
 	  }
 	| {
 			/** A Slack mention or DM that needs the user (ADR 0031). */
@@ -60,7 +61,7 @@ export type MasterItem =
 			item: SlackItem;
 			suggestion: SlackSuggestion | null;
 			/** The suggestion's text being edited (e), or null. */
-			replyText: string | null;
+			reply: Field | null;
 			now: number;
 	  }
 	| {
@@ -69,7 +70,7 @@ export type MasterItem =
 			session: Session;
 			text: string;
 			/** Its text being edited (e), or null. */
-			replyText: string | null;
+			reply: Field | null;
 	  };
 
 export interface MapMaster {
@@ -88,12 +89,12 @@ export interface MapMaster {
 	item: MasterItem | null;
 	inputSelected: boolean;
 	/** Text being typed to the master, or null when its input is closed. */
-	inputText: string | null;
+	input: Field | null;
 	/** Session names offered after an `@` in the input, with the selected one. */
 	mentions?: { names: string[]; selected: number } | null;
 	lastMessage: MasterMessage | null;
-	/** Lit by a session's answer to the master (ADR 0039). */
-	pulse?: boolean;
+	/** The glow's colour while a session's answer lights it (ADR 0039, 0042). */
+	pulse?: Color | null;
 }
 
 export interface MapInput {
@@ -106,10 +107,10 @@ export interface MapInput {
 	/** The master's suggestion for the focused agent, shown under its row. */
 	focusSuggestion?: string | null;
 	/** Text being typed to the focused agent, or null when not replying. */
-	replyText: string | null;
+	reply: Field | null;
 	master: MapMaster;
-	/** Sessions lit by a message from the master: their row and bubble (ADR 0039). */
-	pulse?: Set<string>;
+	/** Sessions lit by a message from the master, their row and bubble, with the glow's colour (ADR 0039, 0042). */
+	pulse?: Map<string, Color>;
 }
 
 export interface MapLayout {
@@ -156,8 +157,7 @@ interface Bubble {
 function focusExtras(input: MapInput): string[] {
 	const out: string[] = [];
 	if (input.focusSuggestion) out.push("suggestion");
-	if (input.replyText !== null || input.focusElement === "reply")
-		out.push("reply");
+	if (input.reply !== null || input.focusElement === "reply") out.push("reply");
 	return out;
 }
 
@@ -190,10 +190,12 @@ export function drawMap(input: MapInput): MapLayout {
 	const left = Math.max(0, Math.floor((width - mw - 2 * (bw + GAP)) / 2));
 	const mx = left + bw + GAP;
 	// The input grows the box downward, so its top and the links stay put.
-	const typed = input.master.inputText;
+	const typed = input.master.input;
 	const masterH =
 		MASTER_H +
-		(typed === null ? 0 : inputRows(typed, mw - 4 - PROMPT_W).length - 1);
+		(typed === null
+			? 0
+			: inputRows(typed.text, mw - 4 - PROMPT_W, typed.cursor).length - 1);
 	const my = Math.max(
 		0,
 		Math.min(Math.floor((height - MASTER_H) / 2), height - masterH),
@@ -285,14 +287,19 @@ function drawBubble(
 	rows: CardBox[],
 ): void {
 	const focused = b.focusAt >= 0;
-	const lit = b.group.sessions.some((s) => input.pulse?.has(s.id));
+	const lit =
+		b.group.sessions.map((s) => input.pulse?.get(s.id)).find(Boolean) ?? null;
 	canvas.frame(
 		x,
 		top,
 		w,
 		b.h,
-		focused || lit ? "heavy" : "rounded",
-		lit ? PULSE : focused ? { fg: "whiteBright", bold: true } : DIM,
+		focused ? "heavy" : "rounded",
+		lit
+			? { fg: lit, bold: focused }
+			: focused
+				? { fg: "whiteBright", bold: true }
+				: DIM,
 	);
 	const chips = counts(b.group);
 	const chipsW = chips.reduce((n, c) => n + [...c.text].length + 1, 0);
@@ -318,7 +325,7 @@ function drawBubble(
 			inner,
 			cursor,
 			focused,
-			!!input.pulse?.has(s.id),
+			input.pulse?.get(s.id) ?? null,
 		);
 		rows.push({ sessionId: s.id, x, y, w, h: 1 });
 		y++;
@@ -336,12 +343,7 @@ function drawBubble(
 				);
 				canvas.text(x + 2 + inner - chips.length, y, chips, DIM);
 			} else {
-				const text = input.replyText === null ? "› " : `› ${input.replyText}█`;
-				canvas.fill(x + 4, y, inner - 2, 1, { bg: "black" });
-				canvas.text(x + 4, y, truncate(text, inner - 2), {
-					fg: "whiteBright",
-					bg: "black",
-				});
+				drawField(canvas, x + 4, y, inner - 2, input.reply);
 			}
 			y++;
 		}
@@ -349,7 +351,7 @@ function drawBubble(
 	if (b.hidden) canvas.text(x + 4, y, `+${b.hidden} more`, DIM);
 }
 
-/** One agent: cursor, glyph, name, ⚑. Waiting rows are inverse yellow; a lit name is magenta. */
+/** One agent: cursor, glyph, name, ⚑. Waiting rows are inverse yellow; a lit name glows magenta. */
 function drawRow(
 	canvas: Canvas,
 	s: Session,
@@ -358,7 +360,7 @@ function drawRow(
 	width: number,
 	cursor: boolean,
 	focused: boolean,
-	lit: boolean,
+	lit: Color | null,
 ): void {
 	const waiting = s.status === "waiting";
 	const base: Style = waiting ? { fg: "black", bg: "yellow" } : {};
@@ -383,11 +385,11 @@ function drawRow(
 		fg: waiting
 			? "black"
 			: lit
-				? PULSE.fg
+				? lit
 				: focused
 					? "whiteBright"
 					: nameColor(s.status),
-		bold: focused || waiting || lit,
+		bold: focused || waiting,
 	});
 	if (flag)
 		canvas.text(col, y, flag, { ...base, fg: waiting ? "black" : "white" });
@@ -406,9 +408,9 @@ function drawMaster(
 		y,
 		w,
 		h,
-		m.focused || m.pulse ? "heavy" : "rounded",
+		m.focused ? "heavy" : "rounded",
 		m.pulse
-			? PULSE
+			? { fg: m.pulse, bold: m.focused }
 			: m.focused
 				? { fg: "whiteBright", bold: true }
 				: { fg: "magenta" },
@@ -467,7 +469,7 @@ function drawMaster(
 		);
 		canvas.text(ix + 2, body + 2, "y allow · n deny", DIM);
 	} else if (m.item?.kind === "session") {
-		const { session, suggestion, replyText } = m.item;
+		const { session, suggestion, reply } = m.item;
 		cursor(body);
 		const g = glyph(session.status);
 		let col = ix;
@@ -478,12 +480,8 @@ function drawMaster(
 		});
 		if (session.watched) canvas.text(col, body, " ⚑", { fg: "white" });
 		canvas.text(ix + 2, body + 1, truncate(askLine(session), iw - 2), DIM);
-		if (replyText !== null) {
-			canvas.fill(ix + 2, body + 2, iw - 2, 1, { bg: "black" });
-			canvas.text(ix + 2, body + 2, truncate(`› ${replyText}█`, iw - 2), {
-				fg: "whiteBright",
-				bg: "black",
-			});
+		if (reply !== null) {
+			drawField(canvas, ix + 2, body + 2, iw - 2, reply);
 		} else if (suggestion) {
 			const chips = " y e n";
 			const c = canvas.text(ix + 2, body + 2, "◆ ", { fg: "magenta" });
@@ -491,7 +489,7 @@ function drawMaster(
 			canvas.text(ix + iw - chips.length, body + 2, chips, DIM);
 		}
 	} else if (m.item?.kind === "slack") {
-		const { item, suggestion, replyText, now } = m.item;
+		const { item, suggestion, reply, now } = m.item;
 		cursor(body);
 		const when = age(item.at, now);
 		let col = canvas.text(ix, body, "@ ", { fg: "yellow" });
@@ -514,17 +512,8 @@ function drawMaster(
 		canvas.text(ix + 2, body + 1, truncate(item.action, iw - 2), {
 			fg: "white",
 		});
-		if (replyText !== null) {
-			canvas.fill(ix + 2, body + 2, iw - 2, 1, { bg: "black" });
-			const chars = [...`› ${replyText}█`];
-			canvas.text(
-				ix + 2,
-				body + 2,
-				chars.length > iw - 2
-					? `…${chars.slice(-(iw - 3)).join("")}`
-					: chars.join(""),
-				{ fg: "whiteBright", bg: "black" },
-			);
+		if (reply !== null) {
+			drawField(canvas, ix + 2, body + 2, iw - 2, reply);
 		} else if (suggestion) {
 			const pending = suggestion.status === "pending";
 			const chips = pending ? " y e n" : "";
@@ -544,7 +533,7 @@ function drawMaster(
 			if (chips) canvas.text(ix + iw - chips.length, body + 2, chips, DIM);
 		}
 	} else if (m.item?.kind === "queued") {
-		const { session, text, replyText } = m.item;
+		const { session, text, reply } = m.item;
 		cursor(body);
 		const chips = " y e n";
 		const col = canvas.text(ix, body, "→ ", { fg: QUEUE_COLOR });
@@ -558,13 +547,8 @@ function drawMaster(
 			},
 		);
 		canvas.text(ix + iw - chips.length, body, chips, DIM);
-		if (replyText !== null) {
-			canvas.fill(ix + 2, body + 1, iw - 2, 1, { bg: "black" });
-			canvas.text(ix + 2, body + 1, truncate(`› ${replyText}█`, iw - 2), {
-				fg: "whiteBright",
-				bg: "black",
-			});
-		} else
+		if (reply !== null) drawField(canvas, ix + 2, body + 1, iw - 2, reply);
+		else
 			wrap(text, iw - 2, 2).forEach((line, i) => {
 				canvas.text(ix + 2, body + 1 + i, line, { fg: "white" });
 			});
@@ -579,8 +563,9 @@ function drawMaster(
 	}
 
 	const inputRow = y + MASTER_H - 2;
-	const typed = m.inputText;
-	const rows = typed === null ? [] : inputRows(typed, iw - PROMPT_W);
+	const typed = m.input;
+	const rows =
+		typed === null ? [] : inputRows(typed.text, iw - PROMPT_W, typed.cursor);
 	const lines = Math.max(1, rows.length);
 	if (m.inputSelected) cursor(inputRow);
 	canvas.fill(ix, inputRow, iw, lines, { bg: "black" });
@@ -592,10 +577,21 @@ function drawMaster(
 		});
 	else
 		rows.forEach((row, i) => {
-			canvas.text(ix + PROMPT_W, inputRow + i, row, {
-				fg: "whiteBright",
-				bg: "black",
-			});
+			const style: Style = { fg: "whiteBright", bg: "black" };
+			const chars = [...row.text];
+			const c = row.cursor ?? chars.length;
+			let col = canvas.text(
+				ix + PROMPT_W,
+				inputRow + i,
+				chars.slice(0, c).join(""),
+				style,
+			);
+			if (row.cursor !== null)
+				col =
+					c < chars.length
+						? canvas.text(col, inputRow + i, chars[c] as string, CURSOR_CELL)
+						: canvas.text(col, inputRow + i, CURSOR, style);
+			canvas.text(col, inputRow + i, chars.slice(c + 1).join(""), style);
 		});
 
 	// The @ list sits on the rows just above the input, over the panel's body.
