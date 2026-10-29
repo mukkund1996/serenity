@@ -280,6 +280,36 @@ test(
 );
 
 test(
+	"a card's reply is edited like a terminal line: Home End, Option+b and Ctrl+w; text goes in at the cursor",
+	async () => {
+		keys("i");
+		type("tokens");
+		await waitFor(/› tokens█/);
+		keys("Home");
+		type("rotate ");
+		// The cursor is on the "t" of tokens now, not after the text.
+		await until(
+			() =>
+				screen().includes("› rotate tokens") && !screen().includes("tokens█"),
+			"text typed at the start",
+		);
+		keys("End");
+		type(" twice");
+		await waitFor(/› rotate tokens twice█/);
+		// Option+b to the start of "twice"; Ctrl+w takes "tokens " before it.
+		press("M-b", "C-w");
+		await until(
+			() => screen().includes("› rotate twice") && !screen().includes("twice█"),
+			"a word removed before the cursor",
+		);
+		type("the ");
+		keys("Enter");
+		await waitFor(/Summary: Done: rotate the twice/);
+	},
+	STEP_TIMEOUT,
+);
+
+test(
 	"a permission prompt waits, the master suggests approving, and y approves it",
 	async () => {
 		keys("i");
@@ -323,6 +353,14 @@ test(
 	},
 	STEP_TIMEOUT,
 );
+
+/** Sends keys one at a time, so each reaches the TUI as a key of its own. */
+function press(...k: string[]): void {
+	for (const key of k) {
+		keys(key);
+		Bun.sleepSync(80);
+	}
+}
 
 /** Focuses the master and opens its message input with i, as on any other node. */
 async function openMasterInput(): Promise<void> {
@@ -401,6 +439,52 @@ test(
 );
 
 test(
+	"the master input edits at the cursor: arrows, Home End, Ctrl+a e w u k, Option+b f and Option+Backspace, Delete",
+	async () => {
+		await openMasterInput();
+		type("status now");
+		await waitFor(/› status now█/);
+		press("Left", "Left", "Left");
+		type("right ");
+		await until(
+			() =>
+				screen().includes("› status right now") && !screen().includes("now█"),
+			"text typed before the cursor",
+		);
+		keys("C-a");
+		type("ok ");
+		keys("C-e");
+		type("?");
+		await waitFor(/› ok status right now\?█/);
+		// Option+b twice lands before "right"; Ctrl+w takes "status " back to the space.
+		press("M-b", "M-b", "C-w");
+		await waitFor(/› ok right now\?/);
+		press("End", "M-BSpace");
+		await waitFor(/› ok right █/);
+		type("away");
+		press("Home", "DC", "DC", "DC");
+		await until(
+			() => screen().includes("› right away") && !screen().includes("away█"),
+			"Delete to remove the characters after the cursor",
+		);
+		// Option+f to the word's end, Ctrl+k drops the rest.
+		press("Home", "M-f", "C-k");
+		await waitFor(/› right█/);
+		type(" now");
+		keys("Enter");
+		const chat = await waitFor(/Heard: right now/);
+		expect(chat).toMatch(/you\s+right now/);
+		// Ctrl+u clears what is before the cursor.
+		type("never mind");
+		await waitFor(/› never mind█/);
+		keys("C-u");
+		await waitFor(/› █/);
+		await closeMasterInput();
+	},
+	STEP_TIMEOUT,
+);
+
+test(
 	"g no longer opens the master input",
 	async () => {
 		keys("c");
@@ -445,10 +529,10 @@ test(
 );
 
 test(
-	"the master shows four messages; PgUp and Shift+↑ scroll back, PgDn on, Esc shows the latest again",
+	"the master shows three messages; PgUp and Shift+↑ scroll back, PgDn on, Esc shows the latest again",
 	async () => {
 		await openMasterInput();
-		// The chats above left more than four messages.
+		// The chats above left more than three messages.
 		const more = await waitFor(/↑ \d+ more · PgUp/);
 		const older = Number(more.match(/↑ (\d+) more/)?.[1]);
 		expect(more).not.toContain("newer");

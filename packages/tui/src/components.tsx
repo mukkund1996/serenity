@@ -14,7 +14,7 @@ import type {
 import { prLine } from "@serenity/core";
 import { Box, Text } from "ink";
 import { type ReactNode, useEffect, useState } from "react";
-import { inputRows, PROMPT_W } from "./master-input";
+import { type InputRow, inputRows, PROMPT_W } from "./master-input";
 import {
 	CONVERSATION_EMPTY,
 	type ConversationWindow,
@@ -25,6 +25,7 @@ import {
 	SPEAKER_W,
 	suggestionLines,
 } from "./master-layout";
+import { CURSOR, type Field, fieldWindow } from "./text-input";
 import {
 	age,
 	askLine,
@@ -75,6 +76,21 @@ export function Key({ children }: { children: ReactNode }) {
 	return (
 		<Text color="whiteBright" bold>
 			{children}
+		</Text>
+	);
+}
+
+/**
+ * A one-row reply field (ADR 0042): "› " and the text on black, the
+ * character under the cursor inverted, cut to `width` columns around it.
+ */
+export function FieldLine({ field, width }: { field: Field; width: number }) {
+	const { before, at, after } = fieldWindow(field, width - PROMPT_W);
+	return (
+		<Text color="whiteBright" backgroundColor="black" wrap="truncate">
+			› {before}
+			{at === null ? CURSOR : <Text inverse>{at}</Text>}
+			{after}
 		</Text>
 	);
 }
@@ -206,18 +222,21 @@ function Spinner() {
  * panel's text width.
  */
 function MasterInput({
-	text,
+	field,
 	selected = false,
 	mentions = null,
 	width = 0,
 }: {
-	text: string | null;
+	field: Field | null;
 	selected?: boolean;
 	mentions?: { names: string[]; selected: number } | null;
 	width?: number;
 }) {
 	// Frame (2) and the prompt's "› " leave the rest of the row for text.
-	const rows = text === null ? [] : inputRows(text, width - 2 - PROMPT_W);
+	const rows =
+		field === null
+			? []
+			: inputRows(field.text, width - 2 - PROMPT_W, field.cursor);
 	return (
 		<Box flexDirection="column" marginTop={1}>
 			{mentions?.names.map((name, i) => (
@@ -233,9 +252,9 @@ function MasterInput({
 			<Box
 				flexDirection="column"
 				borderStyle={selected ? "bold" : "single"}
-				borderColor={text === null && !selected ? "gray" : "whiteBright"}
+				borderColor={field === null && !selected ? "gray" : "whiteBright"}
 			>
-				{text === null ? (
+				{field === null ? (
 					<Text wrap="truncate-start">
 						<Text color="magenta">› </Text>
 						<Text color="gray">message master…</Text>
@@ -245,12 +264,29 @@ function MasterInput({
 						// biome-ignore lint/suspicious/noArrayIndexKey: rows have no identity; they are redrawn as a whole
 						<Text key={i} wrap="truncate-end" color="whiteBright">
 							<Text color="magenta">{i === 0 ? "› " : "  "}</Text>
-							{row}
+							<RowWithCursor row={row} />
 						</Text>
 					))
 				)}
 			</Box>
 		</Box>
+	);
+}
+
+/** An input row, the character under the cursor inverted, or CURSOR after the text. */
+function RowWithCursor({ row }: { row: InputRow }) {
+	if (row.cursor === null) return <>{row.text}</>;
+	const chars = [...row.text];
+	return (
+		<>
+			{chars.slice(0, row.cursor).join("")}
+			{row.cursor < chars.length ? (
+				<Text inverse>{chars[row.cursor]}</Text>
+			) : (
+				CURSOR
+			)}
+			{chars.slice(row.cursor + 1).join("")}
+		</>
 	);
 }
 
@@ -281,7 +317,7 @@ function NeedItem({
 	session,
 	suggestion,
 	selected,
-	replyText,
+	reply,
 	inner,
 	first,
 }: {
@@ -289,7 +325,7 @@ function NeedItem({
 	suggestion: Suggestion | undefined;
 	selected: boolean;
 	/** Reply being typed to this session, shown under it while selected. */
-	replyText: string | null;
+	reply: Field | null;
 	inner: number;
 	/** The first item shown; the others are spaced from the one above. */
 	first: boolean;
@@ -335,15 +371,9 @@ function NeedItem({
 					) : null}
 				</Box>
 			))}
-			{selected && replyText !== null ? (
+			{selected && reply !== null ? (
 				<Box paddingLeft={NEED_INDENT}>
-					<Text
-						color="whiteBright"
-						backgroundColor="black"
-						wrap="truncate-start"
-					>
-						› {replyText}█
-					</Text>
+					<FieldLine field={reply} width={inner - NEED_INDENT} />
 				</Box>
 			) : null}
 		</Box>
@@ -386,7 +416,7 @@ function PermissionItem({
 	);
 }
 
-/** The conversation's window (ADR 0041): "↑ N more" above it, "↓ N newer" below once scrolled back. */
+/** The conversation's window (ADR 0041): "↑ N more" above it, "↓ N newer" below once scrolled back; both grey, keys included (0042). */
 function Conversation({
 	messages,
 	window,
@@ -407,7 +437,7 @@ function Conversation({
 		<>
 			{window.older ? (
 				<Text color="gray" wrap="truncate">
-					↑ {window.older} more · <Key>PgUp</Key>
+					↑ {window.older} more · PgUp
 				</Text>
 			) : null}
 			{shown.map((m, i) => (
@@ -426,7 +456,7 @@ function Conversation({
 			))}
 			{window.newer ? (
 				<Text color="gray" wrap="truncate">
-					↓ {window.newer} newer · <Key>PgDn</Key>
+					↓ {window.newer} newer · PgDn
 				</Text>
 			) : null}
 		</>
@@ -526,7 +556,7 @@ function SlackNeedItem({
 	item,
 	suggestion,
 	selected,
-	replyText,
+	reply,
 	inner,
 	first,
 	now,
@@ -535,7 +565,7 @@ function SlackNeedItem({
 	suggestion: SlackSuggestion | undefined;
 	selected: boolean;
 	/** The suggestion's text being edited (e), or null. */
-	replyText: string | null;
+	reply: Field | null;
 	inner: number;
 	first: boolean;
 	now: number;
@@ -563,7 +593,8 @@ function SlackNeedItem({
 			{suggestion ? (
 				<SlackSuggestionLine
 					suggestion={suggestion}
-					replyText={selected ? replyText : null}
+					reply={selected ? reply : null}
+					inner={inner}
 				/>
 			) : null}
 		</Box>
@@ -573,17 +604,17 @@ function SlackNeedItem({
 /** The master's ◆ suggestion for a Slack item: y e n while pending, else what it waits on. */
 function SlackSuggestionLine({
 	suggestion,
-	replyText,
+	reply,
+	inner,
 }: {
 	suggestion: SlackSuggestion;
-	replyText: string | null;
+	reply: Field | null;
+	inner: number;
 }) {
-	if (replyText !== null)
+	if (reply !== null)
 		return (
 			<Box paddingLeft={NEED_INDENT}>
-				<Text color="whiteBright" backgroundColor="black" wrap="truncate-start">
-					› {replyText}█
-				</Text>
+				<FieldLine field={reply} width={inner - NEED_INDENT} />
 			</Box>
 		);
 	const pending = suggestion.status === "pending";
@@ -658,11 +689,11 @@ export function MasterPanel({
 	slack,
 	focused,
 	selected,
-	inputText,
+	input,
 	mentions,
-	replyText,
+	reply,
 	queue = null,
-	pulse = false,
+	pulse = null,
 }: {
 	width: number;
 	sessions: Session[];
@@ -676,13 +707,13 @@ export function MasterPanel({
 	slack: SlackState | null;
 	focused: boolean;
 	selected: string | null;
-	inputText: string | null;
+	input: Field | null;
 	mentions: { names: string[]; selected: number } | null;
-	replyText: string | null;
+	reply: Field | null;
 	/** The master's queue section (ADR 0040), drawn under NEEDS YOU. */
 	queue?: ReactNode;
-	/** Lit by a session's answer (ADR 0039). */
-	pulse?: boolean;
+	/** The glow's colour while a session's answer lights it (ADR 0039, 0042). */
+	pulse?: Color | null;
 }) {
 	const inner = width - 6;
 	const now = Date.now();
@@ -724,7 +755,7 @@ export function MasterPanel({
 								(g) => g.itemId === item.m.id,
 							)}
 							selected={selected === `${SLACK_NEED}${item.m.id}`}
-							replyText={replyText}
+							reply={reply}
 							inner={inner}
 							first={i === 0}
 							now={now}
@@ -735,7 +766,7 @@ export function MasterPanel({
 							session={item.s}
 							suggestion={suggestions.find((g) => g.sessionId === item.s.id)}
 							selected={selected === item.s.id}
-							replyText={replyText}
+							reply={reply}
 							inner={inner}
 							first={i === 0}
 						/>
@@ -758,10 +789,8 @@ export function MasterPanel({
 		<TitledBox
 			title="◆ master"
 			titleColor="magenta"
-			borderStyle={focused || pulse ? "bold" : "round"}
-			borderColor={
-				pulse ? "magentaBright" : focused ? "whiteBright" : "magenta"
-			}
+			borderStyle={focused ? "bold" : "round"}
+			borderColor={pulse ?? (focused ? "whiteBright" : "magenta")}
 			width={width}
 			right={master.status === "thinking" ? <Spinner /> : undefined}
 		>
@@ -805,7 +834,7 @@ export function MasterPanel({
 				</>
 			)}
 			<MasterInput
-				text={inputText}
+				field={input}
 				selected={selected === MASTER_INPUT}
 				mentions={mentions}
 				width={inner}
@@ -867,7 +896,7 @@ export function SessionMaster({
 					))}
 				</>
 			) : null}
-			<MasterInput text={null} />
+			<MasterInput field={null} />
 		</TitledBox>
 	);
 }

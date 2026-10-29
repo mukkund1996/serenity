@@ -1,5 +1,6 @@
 import {
 	Canvas,
+	type Color,
 	type PrTone,
 	prStatus,
 	type Session,
@@ -8,7 +9,7 @@ import {
 	truncate,
 	wrap,
 } from "@serenity/core";
-import { PULSE } from "./pulse";
+import { drawField, type Field } from "./text-input";
 import { cardText, frameColor, glyph, nameColor } from "./theme";
 
 /**
@@ -54,11 +55,11 @@ export interface TopicsInput {
 	/** The master's suggestion for the focused card, shown above its input row. */
 	focusSuggestion?: string | null;
 	/** Text being typed into the focused card's input row, or null when not replying. */
-	replyText: string | null;
+	reply: Field | null;
 	/** Which side of the master this canvas sits on; the master is at its inner edge. Default right. */
 	side?: "left" | "right";
-	/** Cards lit by a message from the master (ADR 0039). */
-	pulse?: Set<string>;
+	/** Cards lit by a message from the master, with their glow's colour (ADR 0039, 0042). */
+	pulse?: Map<string, Color>;
 }
 
 /** What the arrow keys step through on a focused card; `card` is the card itself. */
@@ -279,7 +280,7 @@ function drawPrLine(
 interface CardFocus {
 	element: CardElement;
 	suggestion: string | null;
-	replyText: string | null;
+	reply: Field | null;
 }
 
 function drawCard(
@@ -288,7 +289,7 @@ function drawCard(
 	x: number,
 	y: number,
 	focus: CardFocus | null,
-	lit: boolean,
+	lit: Color | null,
 ): number {
 	const focused = focus !== null;
 	const h = cardHeight(s, focused, focus?.suggestion ?? null);
@@ -297,9 +298,9 @@ function drawCard(
 		y,
 		CARD_W,
 		h,
-		focused || lit ? "heavy" : "light",
+		focused ? "heavy" : "light",
 		lit
-			? PULSE
+			? { fg: lit, bold: focused }
 			: { fg: frameColor(s.status, focused), bold: focused, dim: !focused },
 	);
 
@@ -356,12 +357,7 @@ function drawCard(
 		if (focus.element === "suggestion") cursor(inputRow);
 		inputRow++;
 	}
-	const input = focus.replyText === null ? "› " : `› ${focus.replyText}█`;
-	canvas.fill(x + 2, inputRow, inner, 1, { bg: "black" });
-	canvas.text(x + 2, inputRow, truncate(input, inner), {
-		fg: "whiteBright",
-		bg: "black",
-	});
+	drawField(canvas, x + 2, inputRow, inner, focus.reply);
 	if (focus.element === "reply") cursor(inputRow);
 	return h;
 }
@@ -523,10 +519,10 @@ function drawBubble(
 					? {
 							element: input.focusElement ?? "card",
 							suggestion: input.focusSuggestion ?? null,
-							replyText: input.replyText,
+							reply: input.reply,
 						}
 					: null,
-				!!input.pulse?.has(s.id),
+				input.pulse?.get(s.id) ?? null,
 			);
 			cards.push({ sessionId: s.id, x: cx, y: rowY, w: CARD_W, h });
 		}

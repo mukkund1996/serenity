@@ -45,7 +45,7 @@ function draw(focusId: string | null = null, width = 140) {
 		masterRow: 23,
 		groups: groupTopics(sessions),
 		focusId,
-		replyText: null,
+		reply: null,
 	});
 }
 
@@ -77,7 +77,7 @@ describe("drawTopics", () => {
 				masterRow: 10,
 				groups: groupTopics(sessions),
 				focusId,
-				replyText: null,
+				reply: null,
 			});
 		const top = layout("a1");
 		expect(top.canvas.toString()).toContain("◐ api-auth");
@@ -116,7 +116,7 @@ describe("drawTopics", () => {
 			masterRow: 15,
 			groups: groupTopics(sessions).filter((g) => g.name === "backend"),
 			focusId: null,
-			replyText: null,
+			reply: null,
 			side: "left",
 		});
 		const rows = canvas.toString().split("\n");
@@ -148,7 +148,7 @@ describe("drawTopics", () => {
 			masterRow: 6,
 			groups,
 			focusId: null,
-			replyText: null,
+			reply: null,
 		})
 			.canvas.toString()
 			.split("\n");
@@ -173,7 +173,7 @@ describe("drawTopics", () => {
 			masterRow: 6,
 			groups,
 			focusId: null,
-			replyText: null,
+			reply: null,
 		}).canvas.toString();
 		expect(text).toContain("working…");
 	});
@@ -208,7 +208,7 @@ describe("drawTopics", () => {
 				masterRow: 10,
 				groups: groupTopics([makeSession({ id: "x", summary })]),
 				focusId: null,
-				replyText: null,
+				reply: null,
 			});
 			return {
 				h: layout.cards[0]?.h,
@@ -234,7 +234,7 @@ describe("drawTopics", () => {
 			masterRow: 5,
 			groups: [],
 			focusId: null,
-			replyText: null,
+			reply: null,
 		});
 		expect(layout.cards).toEqual([]);
 		expect(layout.canvas.toString().trim()).toBe("");
@@ -283,7 +283,7 @@ describe("focused card elements", () => {
 			focusId: "x",
 			focusElement,
 			focusSuggestion,
-			replyText: null,
+			reply: null,
 		});
 
 	test("the master's suggestion gets its own row above the input", () => {
@@ -354,7 +354,7 @@ test("card row 1 shows the PR and its status word, or why it is unknown", () => 
 			makeSession({ id: "c", name: "c" }),
 		]),
 		focusId: null,
-		replyText: null,
+		reply: null,
 	}).canvas.toString();
 	expect(text).toContain("PR #482 checks failing");
 	expect(text).toContain("PR unknown · gh not logged in");

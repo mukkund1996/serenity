@@ -157,11 +157,11 @@ const chat = (count: number): MasterMessage[] =>
 	}));
 
 describe("the conversation window (ADR 0041)", () => {
-	test("shows at most four messages, the latest at the bottom", () => {
+	test("shows at most three messages, the latest at the bottom (ADR 0042)", () => {
 		expect(conversationWindow(chat(7), 7, 60, 50)).toEqual({
-			start: 3,
+			start: 4,
 			end: 7,
-			older: 3,
+			older: 4,
 			newer: 0,
 		});
 		expect(conversationWindow(chat(3), 3, 60, 50)).toEqual({
@@ -174,9 +174,9 @@ describe("the conversation window (ADR 0041)", () => {
 
 	test("scrolled back, it ends earlier and counts the newer ones", () => {
 		expect(conversationWindow(chat(7), 5, 60, 50)).toEqual({
-			start: 1,
+			start: 2,
 			end: 5,
-			older: 1,
+			older: 2,
 			newer: 2,
 		});
 		// Never past the oldest, and never empty.
@@ -208,15 +208,15 @@ describe("the conversation window (ADR 0041)", () => {
 	});
 
 	test("planMaster places the window and its hint rows before REVIEW", () => {
-		// 14 fixed with the empty hint; 4 messages, 3 gaps and "↑ 3 more" take 8.
-		const plan = planMaster(input(14 - 1 + 8 + 5, { conversation: chat(7) }));
-		expect(plan.conversation).toEqual({ start: 3, end: 7, older: 3, newer: 0 });
+		// 14 fixed with the empty hint; 3 messages, 2 gaps and "↑ 4 more" take 6.
+		const plan = planMaster(input(14 - 1 + 6 + 5, { conversation: chat(7) }));
+		expect(plan.conversation).toEqual({ start: 4, end: 7, older: 4, newer: 0 });
 		expect(plan.reviews).toHaveLength(3);
 		const back = planMaster(
-			input(14 - 1 + 9 + 5, { conversation: chat(7), conversationEnd: 5 }),
+			input(14 - 1 + 7 + 5, { conversation: chat(7), conversationEnd: 5 }),
 		);
 		// "↓ 2 newer" takes a row too.
-		expect(back.conversation).toEqual({ start: 1, end: 5, older: 1, newer: 2 });
+		expect(back.conversation).toEqual({ start: 2, end: 5, older: 2, newer: 2 });
 		expect(back.reviews).toHaveLength(3);
 	});
 });
