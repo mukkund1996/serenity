@@ -867,9 +867,11 @@ export class Daemon {
 	/** Detaches; with `master`, then presses Ctrl+m in the map so it focuses the master. */
 	private async detach(sessionId: string, master = false): Promise<void> {
 		const session = this.requireSession(sessionId);
-		const attached = this.attached.get(session.repo);
-		if (attached?.sessionId !== sessionId) return;
-		this.attached.delete(session.repo);
+		const known = this.attached.get(session.repo);
+		const attached =
+			known?.sessionId === sessionId ? known : await this.shownBeside(session);
+		if (!attached) return;
+		if (known === attached) this.attached.delete(session.repo);
 		if (attached.clientTty) {
 			// Adopted: its pane stays put; bring the client back to the map.
 			if (await this.tmux.paneExists(attached.clientPane))
@@ -892,6 +894,35 @@ export class Daemon {
 		}
 		this.prs.schedule(session.id, 0);
 		this.broadcast(session.repo);
+	}
+
+	/**
+	 * Where a session is shown when the daemon has no record of attaching it
+	 * (it restarted since, or the user went to the agent's window in tmux):
+	 * beside the map in its window, or on a client of its own. Ctrl+g then
+	 * still gets back to the map.
+	 */
+	private async shownBeside(
+		session: Session,
+	): Promise<{ clientPane: string; clientTty?: string } | null> {
+		const map = this.mapPaneFor(session.repo);
+		const pane = session.tmuxPane;
+		if (!map || !pane || !(await this.tmux.paneExists(pane))) return null;
+		const [here, there] = await Promise.all([
+			this.tmux.describePane(pane),
+			this.tmux.describePane(map),
+		]);
+		if (here.session === there.session && here.window === there.window)
+			return { clientPane: map };
+		const clientTty = await this.tmux.clientShowing(pane);
+		return clientTty ? { clientPane: map, clientTty } : null;
+	}
+
+	/** The pane of a map inside tmux showing `repo`, if any. */
+	private mapPaneFor(repo: string): string | undefined {
+		return [...this.mapPanes].find(([peer]) =>
+			this.subscriptions.get(peer)?.has(repo),
+		)?.[1];
 	}
 
 	private async cleanupFacts(session: Session): Promise<CleanupFacts> {
@@ -1017,9 +1048,7 @@ export class Daemon {
 
 	/** The master's open_session: attach beside a map showing this repo. */
 	private async open(session: Session): Promise<void> {
-		const pane = [...this.mapPanes].find(([peer]) =>
-			this.subscriptions.get(peer)?.has(session.repo),
-		)?.[1];
+		const pane = this.mapPaneFor(session.repo);
 		if (!pane)
 			throw new RpcError(
 				RpcErrorCode.InvalidParams,

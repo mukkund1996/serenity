@@ -227,6 +227,24 @@ describe("ClaudeObserver", () => {
 		expect(tmux.options.has("%7")).toBe(false);
 	});
 
+	test("a /clear in an adopted claude follows the new conversation and keeps the pane marked", async () => {
+		writeProcess({ pid: PID });
+		const [adopted] = await observer.adopt(repo, ["c1"]);
+		const id = (adopted as Session).id;
+		writeProcess({ pid: PID, sessionId: "c2" });
+		writeTranscript(repo, "c2", [
+			{ type: "last-prompt", lastPrompt: "after the clear" },
+		]);
+		await observer.sweep();
+		expect(ended).toEqual([]);
+		expect(tmux.options.get("%7")).toBe(id);
+		expect(storage.sessions.get(id)).toMatchObject({
+			claudeSessionId: "c2",
+			transcriptPath: transcriptPathFor(config, repo, "c2"),
+			lastPrompt: "after the clear",
+		});
+	});
+
 	test("corrects a hook-tracked session when Claude's own status shows a missed hook", async () => {
 		const session = makeSession({
 			repo,

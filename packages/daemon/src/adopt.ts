@@ -248,9 +248,25 @@ export class ClaudeObserver {
 		);
 		const observed = sessions.filter((s) => s.tracking === "observed");
 		const byPid = new Map(procs.map((p) => [p.pid, p]));
-		for (const session of observed) {
+		for (let session of observed) {
 			const proc = session.claudePid ? byPid.get(session.claudePid) : undefined;
-			if (!proc || proc.sessionId !== session.claudeSessionId) {
+			// The same claude on a new conversation (/clear, /resume): follow it,
+			// keeping the pane marked so Ctrl+g still reaches serenity.
+			if (proc && proc.sessionId !== session.claudeSessionId) {
+				this.seen.delete(session.id);
+				session = this.host.change(session, {
+					claudeSessionId: proc.sessionId,
+					transcriptPath: transcriptPathFor(
+						this.configDir,
+						proc.cwd,
+						proc.sessionId,
+					),
+				});
+				this.host.log(
+					`${session.name} moved to conversation ${proc.sessionId}`,
+				);
+			}
+			if (!proc) {
 				this.seen.delete(session.id);
 				if (session.tmuxPane)
 					await this.host.tmux
