@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 import {
+	type Attachment,
 	averageWait,
 	BUILD_ID,
 	type CleanupPlan,
@@ -61,6 +62,7 @@ import {
 	writeMasterPlugin,
 } from "./master";
 import { PrWatcher, workDir } from "./prs";
+import { recoveryPlan } from "./recover";
 import { ReviewWatcher } from "./reviews";
 import { SlackWatcher } from "./slack";
 import { SlackAdvisor } from "./slack-advisor";
@@ -137,11 +139,9 @@ export class Daemon {
 	/**
 	 * repo → the attached session and the map pane it was joined into. For an
 	 * adopted session, `clientTty` is the tmux client that was switched to it.
+	 * Stored on every change, so a restart can detach it (ADR 0045).
 	 */
-	private readonly attached = new Map<
-		string,
-		{ sessionId: string; clientPane: string; clientTty?: string }
-	>();
+	private readonly attached = new Map<string, Attachment>();
 	private readonly tmux: Tmux;
 	private readonly self = selfCommand();
 	private readonly claudeCommand: string[];
@@ -302,6 +302,7 @@ export class Daemon {
 			},
 			opts.claudeConfigDir,
 		);
+		this.usage = opts.storage.recovery.get("usage");
 		this.done = new Promise((resolve) => {
 			this.stopped = resolve;
 		});
@@ -313,6 +314,7 @@ export class Daemon {
 		writeMasterPlugin(masterPluginPath(this.opts.home));
 		const path = socketPath(this.opts.home);
 		if (existsSync(path)) rmSync(path);
+		await this.recover();
 		this.server = createServer((socket) => this.accept(new RpcPeer(socket)));
 		await new Promise<void>((resolve, reject) => {
 			this.server?.once("error", reject);
@@ -320,6 +322,67 @@ export class Daemon {
 		});
 		this.observer.start();
 		this.log(`serenityd ${BUILD_ID} listening on ${path} (pid ${process.pid})`);
+	}
+
+	/**
+	 * Matches what storage says to what is still there after a crash or
+	 * restart (ADR 0045): sessions whose pane closed meanwhile have ended,
+	 * vanished worktrees are forgotten, attachments are kept only while both
+	 * panes live, and timers lost with the old process start again.
+	 */
+	private async recover(): Promise<void> {
+		const storage = this.opts.storage;
+		const sessions = storage.sessions.listAll();
+		const attached = storage.recovery.get("attached") ?? [];
+		const panes = new Set(
+			[
+				...sessions
+					.filter((s) => s.status !== "dead" && s.status !== "archived")
+					.map((s) => s.tmuxPane),
+				...attached.map((a) => a.clientPane),
+			].filter((p): p is string => !!p),
+		);
+		const livePanes = new Set<string>();
+		for (const pane of panes)
+			if (await this.tmux.paneExists(pane)) livePanes.add(pane);
+		const plan = recoveryPlan({
+			sessions,
+			attached,
+			livePanes,
+			exists: existsSync,
+		});
+		const byId = new Map(sessions.map((s) => [s.id, s]));
+		for (const id of plan.worktreeGone) {
+			const session = storage.sessions.get(id);
+			if (session) this.update(session, { worktree: null });
+		}
+		for (const id of plan.ended) {
+			const session = storage.sessions.get(id);
+			if (!session) continue;
+			this.log(`${session.name} ended while the daemon was down`);
+			this.markEnded(session);
+		}
+		for (const id of plan.park) {
+			const s = byId.get(id);
+			if (s?.tmuxPane)
+				await this.tmux
+					.park(s.tmuxPane, tmuxSessionName(s.repo), s.name)
+					.catch((e: Error) => this.log(`park ${s.name}: ${e.message}`));
+		}
+		for (const a of plan.attached) this.attached.set(a.repo, a);
+		this.saveAttached();
+		for (const s of sessions) {
+			const [last] = storage.events.listForSession(s.id, 1);
+			if (last) this.hookAt.set(s.id, last.at);
+		}
+		for (const id of plan.watchStartup) this.watchStartup(id);
+		this.log(
+			`recovered ${sessions.length} sessions: ${plan.ended.length} ended, ${plan.worktreeGone.length} worktrees gone, ${plan.attached.length} attached, ${plan.park.length} parked`,
+		);
+	}
+
+	private saveAttached(): void {
+		this.opts.storage.recovery.set("attached", [...this.attached.values()]);
 	}
 
 	async stop(): Promise<void> {
@@ -673,6 +736,7 @@ export class Daemon {
 			if (!usage) return null;
 			const changed = usageChanged(this.usage, usage);
 			this.usage = usage;
+			this.opts.storage.recovery.set("usage", usage);
 			if (changed) for (const repo of this.openRepos()) this.broadcast(repo);
 			return null;
 		},
@@ -736,8 +800,10 @@ export class Daemon {
 	}
 
 	private markEnded(session: Session, exitNote?: string): void {
-		if (this.attached.get(session.repo)?.sessionId === session.id)
+		if (this.attached.get(session.repo)?.sessionId === session.id) {
 			this.attached.delete(session.repo);
+			this.saveAttached();
+		}
 		if (session.status !== "dead" && session.status !== "archived")
 			this.change(session, {
 				status: "dead",
@@ -871,7 +937,10 @@ export class Daemon {
 		const attached =
 			known?.sessionId === sessionId ? known : await this.shownBeside(session);
 		if (!attached) return;
-		if (known === attached) this.attached.delete(session.repo);
+		if (known === attached) {
+			this.attached.delete(session.repo);
+			this.saveAttached();
+		}
 		if (attached.clientTty) {
 			// Adopted: its pane stays put; bring the client back to the map.
 			if (await this.tmux.paneExists(attached.clientPane))
@@ -998,14 +1067,20 @@ export class Daemon {
 				);
 			await this.tmux.switchClient(clientTty, pane);
 			this.attached.set(session.repo, {
+				repo: session.repo,
 				sessionId: session.id,
 				clientPane,
 				clientTty,
 			});
 		} else {
 			await this.tmux.joinRight(pane, clientPane, ATTACH_PERCENT);
-			this.attached.set(session.repo, { sessionId: session.id, clientPane });
+			this.attached.set(session.repo, {
+				repo: session.repo,
+				sessionId: session.id,
+				clientPane,
+			});
 		}
+		this.saveAttached();
 		this.prs.schedule(session.id, 0);
 		this.broadcast(session.repo);
 	}

@@ -63,3 +63,18 @@ test("older sessions read back with the new fields, category as topic", async ()
 	expect(second.sessions.get("old")).not.toHaveProperty("category");
 	second.close();
 });
+
+test("recovery state survives reopening", () => {
+	const path = join(dir, "recovery.db");
+	const first = createSqliteStorage(path);
+	const usage = {
+		session: { usedPercent: 40, resetsAt: 9 },
+		week: null,
+		at: 3,
+	};
+	first.recovery.set("usage", usage);
+	first.close();
+	const second = createSqliteStorage(path);
+	expect(second.recovery.get("usage")).toEqual(usage);
+	second.close();
+});

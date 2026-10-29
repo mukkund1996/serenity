@@ -58,6 +58,10 @@ const MIGRATIONS = [
 		at INTEGER NOT NULL,
 		PRIMARY KEY (channel_id, ts)
 	);`,
+	`CREATE TABLE recovery (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	);`,
 ];
 
 /** Fields added after a session row may have been written; filled in on read. */
@@ -216,6 +220,16 @@ export function createSqliteStorage(path: string): Storage {
 		"SELECT * FROM slack_dismissals ORDER BY at, rowid",
 	);
 
+	const getRecovery = db.query<{ value: string }, [string]>(
+		"SELECT value FROM recovery WHERE key = ?",
+	);
+	const putRecovery = db.query<unknown, [string, string]>(
+		"INSERT OR REPLACE INTO recovery (key, value) VALUES (?, ?)",
+	);
+	const deleteRecovery = db.query<unknown, [string]>(
+		"DELETE FROM recovery WHERE key = ?",
+	);
+
 	const parse = (row: { data: string } | null): Session | null =>
 		row ? readSession(row.data) : null;
 
@@ -319,6 +333,16 @@ export function createSqliteStorage(path: string): Storage {
 						at: row.at,
 					}),
 				),
+		},
+		recovery: {
+			get: (key) => {
+				const row = getRecovery.get(key);
+				return row ? JSON.parse(row.value) : null;
+			},
+			set: (key, value) => {
+				if (value === null) deleteRecovery.run(key);
+				else putRecovery.run(key, JSON.stringify(value));
+			},
 		},
 		transaction: (fn) => {
 			if (depth > 0) return fn();

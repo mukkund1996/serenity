@@ -36,6 +36,8 @@ export interface PrHost {
 
 /** Opening a map refreshes each session's PR at most this often. */
 const REPO_REFRESH_MS = 60_000;
+/** Offers remembered; the oldest are long merged. */
+const OFFERED_KEPT = 500;
 
 /**
  * After gh fails transiently, even with its own retries, the PR is read
@@ -55,12 +57,14 @@ export class PrWatcher {
 	private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
 	private readonly inflight = new Set<string>();
 	private readonly lastRefresh = new Map<string, number>();
-	/** session:pr pairs already offered a reviewer, so a decline sticks. */
-	private readonly offered = new Set<string>();
+	/** session:pr pairs already offered a reviewer, so a decline sticks; stored, so it sticks across restarts too. */
+	private readonly offered: Set<string>;
 	/** session id → reads again so far after transient gh failures. */
 	private readonly retries = new Map<string, number>();
 
-	constructor(private readonly host: PrHost) {}
+	constructor(private readonly host: PrHost) {
+		this.offered = new Set(host.storage.recovery.get("offeredReviews") ?? []);
+	}
 
 	schedule(sessionId: string, delayMs = this.host.debounceMs): void {
 		clearTimeout(this.timers.get(sessionId));
@@ -161,6 +165,10 @@ export class PrWatcher {
 		});
 		if (!reviewer) return;
 		this.offered.add(key);
+		this.host.storage.recovery.set(
+			"offeredReviews",
+			[...this.offered].slice(-OFFERED_KEPT),
+		);
 		this.host.propose(
 			session,
 			"review",

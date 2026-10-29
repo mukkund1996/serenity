@@ -14,6 +14,12 @@ export function serenityHome(env: NodeJS.ProcessEnv = process.env): string {
 export const socketPath = (home: string) => join(home, "serenity.sock");
 export const dbPath = (home: string) => join(home, "serenity.db");
 export const daemonLogPath = (home: string) => join(home, "daemon.log");
+/** Holds the supervisor's pid, so only one supervises a home (ADR 0045). */
+export const daemonLockPath = (home: string) => join(home, "daemon.lock");
+/** The error a dying daemon leaves for its supervisor to report. */
+export const daemonCrashPath = (home: string) => join(home, "crash.json");
+/** Every crash report, sent or not, and what was sent when. */
+export const crashReportsDir = (home: string) => join(home, "crash-reports");
 /** The plugin holding the master chat's skill, rewritten on every daemon start. */
 export const masterPluginPath = (home: string) => join(home, "master-plugin");
 export const hookSettingsPath = (home: string) =>

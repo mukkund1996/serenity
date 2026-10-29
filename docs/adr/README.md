@@ -10,7 +10,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0002](0002-typescript-ink-on-bun.md) | TypeScript + Ink on Bun, shipped as a compiled binary | Accepted |
 | [0003](0003-hybrid-rendering.md) | Hybrid rendering: cell canvas for the map, Ink for panels | Accepted |
 | [0004](0004-sessions-in-tmux-panes.md) | Claude Code sessions run in tmux panes | Accepted |
-| [0005](0005-daemon-and-json-rpc.md) | Background daemon, JSON-RPC over a unix socket, scoped per repo | Amended by 0043 |
+| [0005](0005-daemon-and-json-rpc.md) | Background daemon, JSON-RPC over a unix socket, scoped per repo | Amended by 0043, 0045 |
 | [0006](0006-status-from-hooks.md) | Session status from Claude Code hooks, plus an exit report | Amended by 0044 |
 | [0007](0007-master-roles-and-models.md) | Master = Opus stream + Haiku/Sonnet one-shot workers via the claude CLI | Accepted |
 | [0008](0008-master-proposes-via-mcp.md) | Master only proposes; MCP tools for the Opus chat only | Accepted |
@@ -50,6 +50,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0042](0042-master-shows-three-eased-pulse-text-fields-edit.md) | The master shows three messages, its scroll hints grey; the pulse is one eased swell, not three blinks; text fields edit at a cursor like a terminal line | Accepted |
 | [0043](0043-dependency-retries-and-health.md) | gh, git and tmux calls retry with backoff and jitter, transient errors only, never anything unsafe twice; the map reconnects on its own (yellow, red after 15 s); dependencies failing call after call show as header badges | Accepted |
 | [0044](0044-claude-restarts-in-its-pane.md) | Any claude exit serenity did not cause restarts it in the same pane with `--resume`, backing off 1–16 s; a sixth exit in 10 min, or one before it started, leaves the session dead with the reason | Accepted |
+| [0045](0045-daemon-supervisor-crash-reports-recovery.md) | A supervisor restarts the daemon, crashes become deduped GitHub issues, and state survives a restart | Accepted |
 
 ## System at a glance
 

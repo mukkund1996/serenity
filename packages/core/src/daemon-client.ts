@@ -1,11 +1,21 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync } from "node:fs";
 import { BUILD_ID } from "./domain";
-import { daemonLogPath, socketPath } from "./paths";
+import { daemonLockPath, daemonLogPath, socketPath } from "./paths";
 import { connectRpc, type RpcPeer } from "./rpc";
 import { selfCommand } from "./self";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * After a shutdown request: waits for the worker's socket, then its
+ * supervisor's lock, to go, so a new supervisor can take the home (ADR 0045).
+ */
+export async function waitForDaemonGone(home: string): Promise<void> {
+	for (let i = 0; i < 40 && existsSync(socketPath(home)); i++) await sleep(50);
+	for (let i = 0; i < 40 && existsSync(daemonLockPath(home)); i++)
+		await sleep(50);
+}
 
 /** Connects to a running daemon of the same version, or returns null. */
 export async function connectDaemon(home: string): Promise<RpcPeer | null> {
@@ -22,13 +32,12 @@ export async function connectDaemon(home: string): Promise<RpcPeer | null> {
 			{ timeoutMs: 1000 },
 		);
 		if (hello.daemonVersion === BUILD_ID) return peer;
-		// Another build: ask it to go, and wait for its socket to disappear.
+		// Another build: ask it to go, and wait for it to be gone.
 		await peer
 			.request("daemon.shutdown", {}, { timeoutMs: 1000 })
 			.catch(() => {});
 		peer.close();
-		for (let i = 0; i < 40 && existsSync(socketPath(home)); i++)
-			await sleep(50);
+		await waitForDaemonGone(home);
 		return null;
 	} catch {
 		peer.close();

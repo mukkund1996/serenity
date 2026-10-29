@@ -223,5 +223,20 @@ export function storageContract(name: string, open: () => Storage): void {
 				{ channelId: "D9", ts: "2.0", at: 40 },
 			]);
 		});
+
+		test("recovery: set, get, replace and remove values by key", () => {
+			expect(storage.recovery.get("attached")).toBeNull();
+			const attached = [
+				{ repo: "/repos/demo", sessionId: "s1", clientPane: "%3" },
+			];
+			storage.recovery.set("attached", attached);
+			storage.recovery.set("offeredReviews", ["s1:4"]);
+			expect(storage.recovery.get("attached")).toEqual(attached);
+			storage.recovery.set("attached", []);
+			expect(storage.recovery.get("attached")).toEqual([]);
+			storage.recovery.set("attached", null);
+			expect(storage.recovery.get("attached")).toBeNull();
+			expect(storage.recovery.get("offeredReviews")).toEqual(["s1:4"]);
+		});
 	});
 }
