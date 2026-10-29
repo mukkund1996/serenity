@@ -10,6 +10,7 @@ import {
 	matchMentions,
 	mentionDraft,
 	needsYou,
+	type Ping,
 	type Session,
 	type Suggestion,
 	type TopicGroup,
@@ -59,6 +60,7 @@ import {
 	RenameDialog,
 	ShortcutsPanel,
 } from "./overlays";
+import { PULSE_PHASE_MS, pulseEnd, pulsing } from "./pulse";
 import { isNewlineKey, splitAtNewline } from "./text-input";
 import { askLine } from "./theme";
 import {
@@ -122,6 +124,8 @@ const PERM = "perm:";
 const TOPIC = "topic:";
 /** The master panel's node id; every other node is a session card. */
 const MASTER = "master";
+/** Stable while the daemon has not answered, so the pulse clock stays idle. */
+const NO_PINGS: Ping[] = [];
 
 /** A text field's keys: backspace, typing, and Enter (also inside a pasted chunk). */
 function editText(
@@ -134,6 +138,26 @@ function editText(
 	if (!input || key.ctrl || key.meta) return null;
 	const { text, submit } = splitAtNewline(input);
 	return { value: value + text, submit };
+}
+
+/**
+ * The clock the pulse reads (ADR 0039): it ticks once a blink while a ping's
+ * pulse runs and stops when it ends, so an idle map never re-renders.
+ */
+function usePulseClock(pings: Ping[]): number {
+	const [now, setNow] = useState(() => Date.now());
+	const end = pulseEnd(pings);
+	useEffect(() => {
+		if (end === null || end <= Date.now()) return;
+		setNow(Date.now());
+		const timer = setInterval(() => {
+			const t = Date.now();
+			setNow(t);
+			if (t >= end) clearInterval(timer);
+		}, PULSE_PHASE_MS);
+		return () => clearInterval(timer);
+	}, [end]);
+	return now;
 }
 
 /**
@@ -188,6 +212,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const suggestions = state?.suggestions ?? [];
 	const permissions = state?.permissions ?? [];
 	const master: MasterState = state?.master ?? { status: "idle", error: null };
+	const pings = state?.pings ?? NO_PINGS;
+	const pulse = pulsing(pings, usePulseClock(pings));
 	const attached =
 		allSessions.find((s) => s.id === state?.attachedSessionId) ?? null;
 	/** Each topic's card order as last drawn; the focused one keeps it. */
@@ -386,7 +412,9 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					inputText: masterText,
 					mentions: mentionList,
 					lastMessage: conversation[conversation.length - 1] ?? null,
+					pulse: pulse.master,
 				},
+				pulse: pulse.sessions,
 			});
 			const masterBox = { ...map.master, id: MASTER };
 			return {
@@ -412,6 +440,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				focusSuggestion: cardSuggestion?.label ?? null,
 				replyText: onMaster ? null : replyText,
 				side: at,
+				pulse: pulse.sessions,
 			});
 		const right = side(columns - leftWidth - panelWidth, sides.right, "right");
 		const left = leftWidth ? side(leftWidth, sides.left, "left") : null;
@@ -1103,6 +1132,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							inputText={masterText}
 							mentions={mentionList}
 							replyText={onMaster ? replyText : null}
+							pulse={pulse.master}
 						/>
 					</Box>
 				) : null}

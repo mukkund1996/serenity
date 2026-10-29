@@ -17,6 +17,7 @@ export type Color =
 	| "whiteBright"
 	| "yellowBright"
 	| "blueBright"
+	| "magentaBright"
 	| "greenBright";
 
 export interface Style {

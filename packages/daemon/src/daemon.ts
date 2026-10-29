@@ -356,6 +356,7 @@ export class Daemon {
 			slack: this.slackRepos.has(repo)
 				? { ...this.slack.state(), suggestions: this.advisor.list(repo) }
 				: null,
+			pings: this.master.pings(repo),
 		};
 	}
 

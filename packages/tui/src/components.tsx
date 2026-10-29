@@ -174,7 +174,7 @@ function SessionLine({ session }: { session: Session }) {
 
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-/** The one animation (ADR 0012): ticks only while the master is thinking. */
+/** The spinner (ADR 0012): ticks only while the master is thinking; the pulse is the other animation (0039). */
 function Spinner() {
 	const [frame, setFrame] = useState(0);
 	useEffect(() => {
@@ -629,6 +629,7 @@ export function MasterPanel({
 	inputText,
 	mentions,
 	replyText,
+	pulse = false,
 }: {
 	width: number;
 	sessions: Session[];
@@ -645,6 +646,8 @@ export function MasterPanel({
 	inputText: string | null;
 	mentions: { names: string[]; selected: number } | null;
 	replyText: string | null;
+	/** Lit by a session's answer (ADR 0039). */
+	pulse?: boolean;
 }) {
 	const inner = width - 6;
 	const now = Date.now();
@@ -720,8 +723,10 @@ export function MasterPanel({
 		<TitledBox
 			title="◆ master"
 			titleColor="magenta"
-			borderStyle={focused ? "bold" : "round"}
-			borderColor={focused ? "whiteBright" : "magenta"}
+			borderStyle={focused || pulse ? "bold" : "round"}
+			borderColor={
+				pulse ? "magentaBright" : focused ? "whiteBright" : "magenta"
+			}
 			width={width}
 			right={master.status === "thinking" ? <Spinner /> : undefined}
 		>
