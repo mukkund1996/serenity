@@ -126,6 +126,7 @@ serenity is keyboard-only. The footer shows the moves; `?` opens the full list.
 | `Ctrl+g` | Back to the map from inside a session |
 | `z` / `Z` / `Esc` | Zoom out to the map / zoom in / one level up |
 | `Ctrl+m` | Focus the master from anywhere (Enter in Apple Terminal) |
+| `PgUp` `PgDn` | On the master, scroll its conversation back and on (`Shift+↑` `Shift+↓` too) |
 | `Tab` | Jump to the next session that needs you |
 | `y` `e` `n` | Approve, edit or decline the master's suggestion |
 | `[` `]` | Previous / next topic |

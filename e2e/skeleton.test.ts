@@ -445,6 +445,40 @@ test(
 );
 
 test(
+	"the master shows four messages; PgUp and Shift+↑ scroll back, PgDn on, Esc shows the latest again",
+	async () => {
+		await openMasterInput();
+		// The chats above left more than four messages.
+		const more = await waitFor(/↑ \d+ more · PgUp/);
+		const older = Number(more.match(/↑ (\d+) more/)?.[1]);
+		expect(more).not.toContain("newer");
+		expect(more).not.toMatch(/you\s+status\?/);
+		for (let i = 0; i < older; i++) {
+			keys("PPage");
+			await waitFor(new RegExp(`↓ ${i + 1} newer · PgDn`));
+		}
+		const top = screen();
+		expect(top).not.toContain("more · PgUp");
+		expect(top).toMatch(/you\s+status\?/);
+		// Past the oldest it stays put.
+		keys("PPage");
+		await Bun.sleep(300);
+		expect(screen()).toContain(`↓ ${older} newer`);
+		keys("NPage");
+		await waitFor(new RegExp(`↓ ${older - 1} newer`));
+		keys("S-Up");
+		await waitFor(new RegExp(`↓ ${older} newer`));
+		keys("S-Down");
+		await waitFor(new RegExp(`↓ ${older - 1} newer`));
+		// Closing the input shows the latest again.
+		await closeMasterInput();
+		const latest = await waitFor(new RegExp(`↑ ${older} more`));
+		expect(latest).not.toContain("newer");
+	},
+	STEP_TIMEOUT,
+);
+
+test(
 	"the master's suggested reply reaches its queue through serenity mcp; n declines it",
 	async () => {
 		await openMasterInput();

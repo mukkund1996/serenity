@@ -208,6 +208,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const [sentReplies, setSentReplies] = useState<string[]>([]);
 	const [overlay, setOverlay] = useState<Overlay>(null);
 	const [zoom, setZoom] = useState<Zoom>("topics");
+	/** The message at the bottom of the master's conversation once scrolled back; null shows the latest (ADR 0041). */
+	const [chatEnd, setChatEnd] = useState<number | null>(null);
 	const [search, setSearch, searchRef] = useLiveState<Search | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 	/** The queued reply Enter shows in full, if any (ADR 0040). */
@@ -280,6 +282,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const slackItems = slack?.items ?? [];
 	const slackSuggestionFor = (itemId: string | undefined) =>
 		slack?.suggestions.find((g) => g.itemId === itemId) ?? null;
+	const conversation = state?.conversation ?? [];
+	const chatEndAt = conversation.findIndex((m) => m.id === chatEnd);
 	// Planned with the raw selection: only its place in NEEDS YOU matters here.
 	const plan = planMaster({
 		height: bodyHeight,
@@ -321,7 +325,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			),
 		})),
 		selected: onMaster && inside ? element : null,
-		conversation: state?.conversation ?? [],
+		conversation,
+		conversationEnd: chatEndAt === -1 ? undefined : chatEndAt + 1,
 		slackError: !!slack?.error,
 		reviews: github.reviewRequests,
 		inputExtra:
@@ -404,7 +409,6 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			: 0;
 	const masterRow = Math.floor(bodyHeight / 2);
 	const calm = groups.filter((g) => g.attention === 0).length;
-	const conversation = state?.conversation ?? [];
 	/** The selected NEEDS YOU item, as the map's master box shows it. */
 	const masterItem: MasterItem | null = !onMaster
 		? null
@@ -556,6 +560,23 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		setElement(null);
 		setInside(false);
 	}, [nodeIds, node, allSessions, setInside]);
+
+	// Leaving the master, the topics zoom or the input shows the latest messages again.
+	const chatOpen = onMaster && zoom === "topics";
+	const inputOpen = masterText !== null;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a change of either is the trigger
+	useEffect(() => setChatEnd(null), [chatOpen, inputOpen]);
+
+	/** PgUp PgDn (Shift+↑↓) step the master's conversation a message back or forward. */
+	const scrollChat = (back: boolean) => {
+		const { start, end, newer } = plan.conversation;
+		if (back) {
+			if (start > 0) setChatEnd(conversation[end - 2]?.id ?? null);
+			return;
+		}
+		if (!newer) return;
+		setChatEnd(newer === 1 ? null : (conversation[end]?.id ?? null));
+	};
 
 	useEffect(() => {
 		if (!notice) return;
@@ -794,6 +815,15 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				return;
 			}
 
+			const scroll =
+				key.pageUp || (key.shift && key.upArrow)
+					? "back"
+					: key.pageDown || (key.shift && key.downArrow)
+						? "forward"
+						: null;
+			if (scroll && chatOpen && !overlay && !searchRef.current)
+				return scrollChat(scroll === "back");
+
 			const reply = replyRef.current;
 			if (reply !== null) {
 				if (key.escape) return endReply();
@@ -814,6 +844,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			if (toMaster !== null) {
 				// Sending keeps the input open, cleared, for the next message.
 				const send = (text: string) => {
+					setChatEnd(null);
 					setMasterText("");
 					setMentionAt(0);
 					setMentionOff(null);

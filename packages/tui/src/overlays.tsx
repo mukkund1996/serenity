@@ -166,6 +166,7 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 			["N I", "new session · import"],
 			["Tab Esc H", "next need · zoom out · archived"],
 			["y e n x", "approve · edit · decline · dismiss"],
+			["PgUp PgDn", "master chat back · on (Shift+↑↓)"],
 		],
 	],
 ];

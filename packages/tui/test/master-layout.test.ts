@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { ReviewRequest } from "@serenity/core";
+import type { MasterMessage, ReviewRequest } from "@serenity/core";
 import {
+	conversationWindow,
 	type MasterPlanInput,
 	needLines,
 	planMaster,
@@ -143,5 +144,79 @@ describe("the queue", () => {
 		const lines = queueLines("word ".repeat(400), 30);
 		expect(lines).toHaveLength(QUEUE_FULL_MAX);
 		expect(lines.at(-1)).toEndWith("…");
+	});
+});
+
+const chat = (count: number): MasterMessage[] =>
+	Array.from({ length: count }, (_, i) => ({
+		id: i + 1,
+		repo: "r",
+		from: i % 2 ? "master" : "you",
+		text: `message ${i + 1}`,
+		at: i,
+	}));
+
+describe("the conversation window (ADR 0041)", () => {
+	test("shows at most four messages, the latest at the bottom", () => {
+		expect(conversationWindow(chat(7), 7, 60, 50)).toEqual({
+			start: 3,
+			end: 7,
+			older: 3,
+			newer: 0,
+		});
+		expect(conversationWindow(chat(3), 3, 60, 50)).toEqual({
+			start: 0,
+			end: 3,
+			older: 0,
+			newer: 0,
+		});
+	});
+
+	test("scrolled back, it ends earlier and counts the newer ones", () => {
+		expect(conversationWindow(chat(7), 5, 60, 50)).toEqual({
+			start: 1,
+			end: 5,
+			older: 1,
+			newer: 2,
+		});
+		// Never past the oldest, and never empty.
+		expect(conversationWindow(chat(7), 0, 60, 50)).toMatchObject({
+			start: 0,
+			end: 1,
+		});
+	});
+
+	test("the oldest give way when rows are short, down to one message", () => {
+		// "↑ N more" + 2 messages a blank row apart.
+		expect(conversationWindow(chat(7), 7, 60, 4)).toMatchObject({
+			start: 5,
+			older: 5,
+		});
+		expect(conversationWindow(chat(7), 7, 60, 0)).toMatchObject({
+			start: 6,
+			end: 7,
+		});
+	});
+
+	test("no messages: the empty hint", () => {
+		expect(conversationWindow([], 0, 60, 10)).toEqual({
+			start: 0,
+			end: 0,
+			older: 0,
+			newer: 0,
+		});
+	});
+
+	test("planMaster places the window and its hint rows before REVIEW", () => {
+		// 14 fixed with the empty hint; 4 messages, 3 gaps and "↑ 3 more" take 8.
+		const plan = planMaster(input(14 - 1 + 8 + 5, { conversation: chat(7) }));
+		expect(plan.conversation).toEqual({ start: 3, end: 7, older: 3, newer: 0 });
+		expect(plan.reviews).toHaveLength(3);
+		const back = planMaster(
+			input(14 - 1 + 9 + 5, { conversation: chat(7), conversationEnd: 5 }),
+		);
+		// "↓ 2 newer" takes a row too.
+		expect(back.conversation).toEqual({ start: 1, end: 5, older: 1, newer: 2 });
+		expect(back.reviews).toHaveLength(3);
 	});
 });

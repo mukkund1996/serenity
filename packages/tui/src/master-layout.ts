@@ -73,6 +73,8 @@ export interface MasterPlanInput {
 	reviews: ReviewRequest[];
 	/** Rows the input takes beyond its one: its extra lines and the @ list over it. */
 	inputExtra?: number;
+	/** Index after the conversation's bottom message; the latest when left out (ADR 0041). */
+	conversationEnd?: number;
 }
 
 export interface MasterPlan {
@@ -80,6 +82,8 @@ export interface MasterPlan {
 	needs: Window;
 	/** The window of the queue on screen, sliding as NEEDS YOU's does. */
 	queue: Window;
+	/** The messages on screen, `conversation.slice(start, end)`; the rest are behind the hints. */
+	conversation: ConversationWindow;
 	reviews: ReviewRequest[];
 }
 
@@ -87,6 +91,16 @@ interface Window {
 	start: number;
 	count: number;
 	hidden: number;
+}
+
+/** The conversation's messages on screen and how many are hidden either side. */
+export interface ConversationWindow {
+	start: number;
+	end: number;
+	/** Older messages above, "↑ N more". */
+	older: number;
+	/** Newer messages below, once scrolled back: "↓ N newer". */
+	newer: number;
 }
 
 /** A section's blank line and header. */
@@ -119,11 +133,19 @@ export function planMaster(input: MasterPlanInput): MasterPlan {
 	// Frame, then the input's blank line and its own frame.
 	let fixed = 2 + 4 + (input.inputExtra ?? 0) + (input.slackError ? 1 : 0);
 	if (input.empty) fixed += 3;
-	else
-		fixed +=
-			1 + HEADER_ROWS + conversationRows(input.conversation, input.inner);
+	else fixed += 1 + HEADER_ROWS;
 	// Slack's items need the user even before the first session.
 	fixed += needs.rows + queue.rows;
+	const conversation = input.empty
+		? { start: 0, end: 0, older: 0, newer: 0 }
+		: conversationWindow(
+				input.conversation,
+				input.conversationEnd ?? input.conversation.length,
+				input.inner,
+				input.height - fixed,
+			);
+	if (!input.empty)
+		fixed += conversationRows(input.conversation, conversation, input.inner);
 	let room = input.height - fixed;
 
 	/** Up to `want` rows under a header, or none when not even one fits. */
@@ -134,20 +156,64 @@ export function planMaster(input: MasterPlanInput): MasterPlan {
 		return rows;
 	};
 	const reviews = input.reviews.slice(0, take(input.reviews.length));
-	return { needs: needs.window, queue: queue.window, reviews };
+	return {
+		needs: needs.window,
+		queue: queue.window,
+		conversation,
+		reviews,
+	};
 }
 
-/** Rows of the conversation's latest exchange, as `Conversation` draws it. */
+/** At most this many messages show in the panel, the bottom one last (ADR 0041). */
+export const MAX_CONVERSATION = 4;
+
+/**
+ * The messages ending before `end` that fit in `room` rows, at most
+ * MAX_CONVERSATION and never fewer than one; the oldest give way first.
+ */
+export function conversationWindow(
+	messages: MasterMessage[],
+	end: number,
+	inner: number,
+	room: number,
+): ConversationWindow {
+	const last = Math.max(
+		Math.min(end, messages.length),
+		Math.min(1, messages.length),
+	);
+	let start = Math.max(0, last - 1);
+	for (let k = 2; k <= Math.min(MAX_CONVERSATION, last); k++) {
+		const at = last - k;
+		const window = {
+			start: at,
+			end: last,
+			older: at,
+			newer: messages.length - last,
+		};
+		if (conversationRows(messages, window, inner) > room) break;
+		start = at;
+	}
+	return { start, end: last, older: start, newer: messages.length - last };
+}
+
+/** Rows of a conversation window, its hint rows included, as `Conversation` draws it. */
 export function conversationRows(
 	messages: MasterMessage[],
+	window: ConversationWindow,
 	inner: number,
 ): number {
-	const latest = messages.slice(-2);
-	if (!latest.length) return wrappedRows(CONVERSATION_EMPTY, inner);
-	return latest.reduce(
-		(sum, m, i) =>
-			sum + (i ? 1 : 0) + wrappedRows(clipLines(m.text, 4), inner - SPEAKER_W),
-		0,
+	const shown = messages.slice(window.start, window.end);
+	if (!shown.length) return wrappedRows(CONVERSATION_EMPTY, inner);
+	return (
+		(window.older ? 1 : 0) +
+		(window.newer ? 1 : 0) +
+		shown.reduce(
+			(sum, m, i) =>
+				sum +
+				(i ? 1 : 0) +
+				wrappedRows(clipLines(m.text, 4), inner - SPEAKER_W),
+			0,
+		)
 	);
 }
 
