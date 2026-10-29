@@ -1,6 +1,6 @@
 # 0031 · Slack joins NEEDS YOU: only mentions and DMs that need an action, at most three
 
-**Status:** Accepted · 2026-10-28 · Amends 0023
+**Status:** Accepted · 2026-10-28 · Amends 0023 · Slack drafts marked `slack`, 0038
 
 ## Context
 ADR 0023 put Slack in its own SLACK section (and a box under the master on the map), one item at a time behind `[` `]`. It took threads the user had replied in where someone wrote after them, which in practice is mostly chatter: thanks, FYIs, a thread moving on without the user. A separate section also split "what needs me" in two, and `[` `]` hid all but one item.

@@ -28,14 +28,41 @@ function needRank(s: Session, suggested: Set<string>): number {
 }
 
 /**
+ * A reply the master's chat wants to send to a session (`suggest` kind
+ * reply, or a `send_reply` the user had not confirmed): it waits in the
+ * master's queue, not NEEDS YOU (ADR 0038).
+ */
+export function isQueued(g: Suggestion): boolean {
+	return g.status === "pending" && g.kind === "reply" && g.source === "chat";
+}
+
+/** The master's queue: its queued replies to sessions on the map, oldest first. */
+export function masterQueue(
+	sessions: Session[],
+	suggestions: Suggestion[],
+): Array<{ suggestion: Suggestion; session: Session }> {
+	const byId = new Map(sessions.map((s) => [s.id, s]));
+	return suggestions
+		.filter(isQueued)
+		.flatMap((suggestion) => {
+			const session = byId.get(suggestion.sessionId);
+			return session ? [{ suggestion, session }] : [];
+		})
+		.sort((a, b) => a.suggestion.createdAt - b.suggestion.createdAt);
+}
+
+/**
  * The master's NEEDS YOU list: watched-and-finished, then waiting, then dead,
- * then anything else with a pending suggestion.
+ * then anything else with a pending suggestion. Queued replies don't count;
+ * they have their own section.
  */
 export function needsYou(
 	sessions: Session[],
 	suggestions: Suggestion[] = [],
 ): Session[] {
-	const suggested = new Set(suggestions.map((g) => g.sessionId));
+	const suggested = new Set(
+		suggestions.filter((g) => !isQueued(g)).map((g) => g.sessionId),
+	);
 	return sessions
 		.filter((s) => needRank(s, suggested) >= 0)
 		.sort(

@@ -11,7 +11,14 @@ import {
 	wrap,
 } from "@serenity/core";
 import { inputRows, PROMPT_W } from "./master-input";
-import { age, askLine, glyph, nameColor } from "./theme";
+import {
+	age,
+	askLine,
+	glyph,
+	nameColor,
+	QUEUE_COLOR,
+	SLACK_COLOR,
+} from "./theme";
 import {
 	type CardBox,
 	type CardElement,
@@ -54,6 +61,14 @@ export type MasterItem =
 			/** The suggestion's text being edited (e), or null. */
 			replyText: string | null;
 			now: number;
+	  }
+	| {
+			/** A reply the master wants to send, waiting for y (ADR 0038). */
+			kind: "queued";
+			session: Session;
+			text: string;
+			/** Its text being edited (e), or null. */
+			replyText: string | null;
 	  };
 
 export interface MapMaster {
@@ -62,6 +77,8 @@ export interface MapMaster {
 	error: string | null;
 	/** NEEDS YOU items, Slack's among them, plus permission requests. */
 	needCount: number;
+	/** Replies in the master's queue (ADR 0038). */
+	queueCount?: number;
 	/** Why Slack could not be read, or null. */
 	slackError?: string | null;
 	calmTopics: number;
@@ -384,10 +401,15 @@ function drawMaster(
 		const col = canvas.text(ix, y + 1, truncate(status, iw), {
 			fg: m.needCount > 0 ? "yellow" : "gray",
 		});
+		const queued = ` · ${m.queueCount} queued`;
+		const after =
+			m.queueCount && [...queued].length <= ix + iw - col
+				? canvas.text(col, y + 1, queued, { fg: QUEUE_COLOR })
+				: col;
 		const calm = ` · ${m.calmTopics} ${m.calmTopics === 1 ? "topic" : "topics"} calm`;
 		// The calm count is a nicety; it shows only when it fits whole.
-		if (m.calmTopics > 0 && [...calm].length <= ix + iw - col)
-			canvas.text(col, y + 1, calm, DIM);
+		if (m.calmTopics > 0 && [...calm].length <= ix + iw - after)
+			canvas.text(after, y + 1, calm, DIM);
 	}
 	if (m.slackError)
 		canvas.text(ix, y + 2, truncate(m.slackError, iw), { fg: "yellow" });
@@ -480,7 +502,8 @@ function drawMaster(
 		} else if (suggestion) {
 			const pending = suggestion.status === "pending";
 			const chips = pending ? " y e n" : "";
-			const c = canvas.text(ix + 2, body + 2, "◆ ", { fg: "magenta" });
+			const d = canvas.text(ix + 2, body + 2, "◆ ", { fg: "magenta" });
+			const c = canvas.text(d, body + 2, "slack ", { fg: SLACK_COLOR });
 			canvas.text(
 				c,
 				body + 2,
@@ -488,12 +511,37 @@ function drawMaster(
 					suggestion.status === "sending"
 						? "Sending to Slack…"
 						: suggestion.label,
-					iw - 4 - chips.length,
+					iw - 10 - chips.length,
 				),
 				pending ? {} : DIM,
 			);
 			if (chips) canvas.text(ix + iw - chips.length, body + 2, chips, DIM);
 		}
+	} else if (m.item?.kind === "queued") {
+		const { session, text, replyText } = m.item;
+		cursor(body);
+		const chips = " y e n";
+		const col = canvas.text(ix, body, "→ ", { fg: QUEUE_COLOR });
+		canvas.text(
+			col,
+			body,
+			truncate(session.name, ix + iw - col - chips.length),
+			{
+				fg: "whiteBright",
+				bold: true,
+			},
+		);
+		canvas.text(ix + iw - chips.length, body, chips, DIM);
+		if (replyText !== null) {
+			canvas.fill(ix + 2, body + 1, iw - 2, 1, { bg: "black" });
+			canvas.text(ix + 2, body + 1, truncate(`› ${replyText}█`, iw - 2), {
+				fg: "whiteBright",
+				bg: "black",
+			});
+		} else
+			wrap(text, iw - 2, 2).forEach((line, i) => {
+				canvas.text(ix + 2, body + 1 + i, line, { fg: "white" });
+			});
 	} else if (m.lastMessage) {
 		const you = m.lastMessage.from === "you";
 		canvas.text(ix, body, you ? "you" : "◆", { fg: you ? "cyan" : "magenta" });

@@ -280,7 +280,7 @@ test("a selected Slack item shows in the master box, like any NEEDS YOU item", (
 			},
 		},
 	}).canvas.toString();
-	expect(suggested).toMatch(/◆ Reply "merged in #42" +y e n/);
+	expect(suggested).toMatch(/◆ slack Reply "merged in #42" +y e n/);
 	const asked = draw({
 		master: {
 			focused: true,
@@ -297,7 +297,7 @@ test("a selected Slack item shows in the master box, like any NEEDS YOU item", (
 			},
 		},
 	}).canvas.toString();
-	expect(asked).toContain("◆ Asked api-auth; waiting for its answer");
+	expect(asked).toContain("◆ slack Asked api-auth; waiting for");
 	expect(asked).not.toContain("y e n");
 });
 
@@ -306,4 +306,23 @@ test("why Slack cannot be read shows in the master box", () => {
 		master: { slackError: "Slack needs a login: run serenity slack login" },
 	}).canvas.toString();
 	expect(text).toContain("Slack needs a login");
+});
+
+test("a selected queued reply shows in the master box with its keys; the status counts the queue", () => {
+	const queued = {
+		kind: "queued" as const,
+		session: sessions[0] as Session,
+		text: "Yes, set the TTL to 15 minutes and add a test for expiry",
+		replyText: null,
+	};
+	const text = draw({
+		master: { focused: true, queueCount: 2, item: queued },
+	}).canvas.toString();
+	expect(text).toContain("1 thing needs you · 2 queued");
+	expect(text).toMatch(/▸→ api-auth +y e n/);
+	expect(text).toContain("Yes, set the TTL to 15 minutes");
+	const editing = draw({
+		master: { focused: true, item: { ...queued, replyText: "No" } },
+	}).canvas.toString();
+	expect(editing).toContain("› No█");
 });
