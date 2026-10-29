@@ -17,7 +17,9 @@ export type Color =
 	| "whiteBright"
 	| "yellowBright"
 	| "blueBright"
-	| "greenBright";
+	| "greenBright"
+	/** A truecolor hex, for the few colours the named ones lack. */
+	| `#${string}`;
 
 export interface Style {
 	fg?: Color;

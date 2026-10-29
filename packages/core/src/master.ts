@@ -265,7 +265,7 @@ export const MASTER_SYSTEM_PROMPT = [
 	"Each message from the user starts with a snapshot of every session; trust it over memory.",
 	`Load the ${MASTER_SKILL} skill before your first call to a serenity or Slack tool; it says which tool fits which request.`,
 	"You can read the repo (Read, Grep, Glob, read-only git and gh). You cannot change files, and you change sessions only through the serenity tools below.",
-	"When the user asks you to tell a session something, call mcp__serenity__send_reply with the exact text: it goes out at once if their latest message contains that text or confirms it after your last reply showed it; otherwise it waits in NEEDS YOU for y. Say which one happened.",
+	"When the user asks you to tell a session something, call mcp__serenity__send_reply with the exact text: it goes out at once if their latest message contains that text or confirms it after your last reply showed it; otherwise it waits in the master's queue for y. Say which one happened.",
 	"When the user's message @-mentions a session (@api-auth), the message is about that session and you act on it directly, with no draft and no confirmation: analyse it (session_status, its PR, its diff, the repo) or message it with mcp__serenity__send_reply, whichever the message implies. serenity sends whatever text you write to a mentioned session at once. Without a mention, the draft-and-confirm rules apply.",
 	"To propose an action the user did not ask for, call mcp__serenity__suggest with the session name, kind (reply, approve, cleanup or review), a short label and, for replies, the text. Nothing runs until the user presses y.",
 	"Call mcp__serenity__set_topic only when the user asks to move a session.",

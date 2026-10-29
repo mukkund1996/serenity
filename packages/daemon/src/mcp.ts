@@ -10,7 +10,7 @@ export const MCP_TOOLS = [
 	{
 		name: "suggest",
 		description:
-			"Propose one action for a session. The user sees it in NEEDS YOU and it runs only if they press y. kind: reply (send text to the agent), approve (accept its permission prompt), cleanup (stop it and remove its worktree, after its PR merged) or review (ask the GitHub login in text to review its open PR).",
+			"Propose one action for a session. A reply waits in the master's queue, any other kind in NEEDS YOU; it runs only if the user presses y. kind: reply (send text to the agent), approve (accept its permission prompt), cleanup (stop it and remove its worktree, after its PR merged) or review (ask the GitHub login in text to review its open PR).",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -32,7 +32,7 @@ export const MCP_TOOLS = [
 	{
 		name: "send_reply",
 		description:
-			"Send text to a session's agent now, as if the user typed it. Only for a reply the user asked for in the chat: their latest message contains the exact text, or your last reply showed it and they confirmed. Anything else is not sent: it waits in NEEDS YOU for y, as suggest kind reply. The session must be live and not on a permission prompt; while it is working, its agent reads the text when its turn ends.",
+			"Send text to a session's agent now, as if the user typed it. Only for a reply the user asked for in the chat: their latest message contains the exact text, or your last reply showed it and they confirmed. Anything else is not sent: it waits in the master's queue for y, as suggest kind reply. The session must be live and not on a permission prompt; while it is working, its agent reads the text when its turn ends.",
 		inputSchema: {
 			type: "object",
 			properties: {

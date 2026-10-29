@@ -4,6 +4,9 @@ import {
 	type MasterPlanInput,
 	needLines,
 	planMaster,
+	QUEUE_FULL_MAX,
+	queueLines,
+	queueRows,
 	suggestionLines,
 	wrappedRows,
 } from "../src/master-layout";
@@ -97,4 +100,48 @@ test("NEEDS YOU shows before the first session, for Slack's items", () => {
 	const empty = input(13 + 5, { empty: true });
 	expect(planMaster(empty).reviews).toHaveLength(3);
 	expect(planMaster({ ...empty, height: 13 + 4 }).reviews).toHaveLength(2);
+});
+
+describe("the queue", () => {
+	const items = (n: number) =>
+		Array.from({ length: n }, (_, i) => ({ id: `q${i}`, rows: 1 }));
+
+	test("takes its header and one row per reply, before REVIEW", () => {
+		// 14 fixed, the queue's header and 2 rows; 5 left for REVIEW.
+		const two = input(14 + 4 + 5, { queue: items(2) });
+		expect(planMaster(two).reviews).toHaveLength(3);
+		expect(planMaster({ ...two, height: two.height - 1 }).reviews).toHaveLength(
+			2,
+		);
+		expect(planMaster(two).queue).toEqual({ start: 0, count: 2, hidden: 0 });
+	});
+
+	test("shows three, the rest as +N more, sliding to the selected reply", () => {
+		expect(planMaster(input(60, { queue: items(5) })).queue).toEqual({
+			start: 0,
+			count: 3,
+			hidden: 2,
+		});
+		expect(
+			planMaster(input(60, { queue: items(5), selected: "q4" })).queue,
+		).toEqual({ start: 2, count: 3, hidden: 2 });
+	});
+
+	test("an expanded reply shows its text in full, line breaks kept", () => {
+		const text = "first line\nsecond line that is long enough to wrap twice";
+		expect(queueLines(text, 30)).toEqual([
+			"first line",
+			"second line that is long",
+			"enough to wrap twice",
+		]);
+		expect(queueRows(text, 30, "collapsed")).toBe(1);
+		expect(queueRows(text, 30, "expanded")).toBe(4);
+		expect(queueRows(text, 30, "editing")).toBe(2);
+	});
+
+	test("a very long reply is cut at QUEUE_FULL_MAX lines", () => {
+		const lines = queueLines("word ".repeat(400), 30);
+		expect(lines).toHaveLength(QUEUE_FULL_MAX);
+		expect(lines.at(-1)).toEndWith("…");
+	});
 });

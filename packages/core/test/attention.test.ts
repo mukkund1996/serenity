@@ -2,11 +2,13 @@ import { describe, expect, test } from "bun:test";
 import {
 	archivedTopics,
 	groupTopics,
+	isQueued,
+	masterQueue,
 	needsYou,
 	PINNED,
 	UNSORTED,
 } from "../src/attention";
-import { makeSession } from "../test-support";
+import { makeSession, makeSuggestion } from "../test-support";
 
 describe("needsYou", () => {
 	test("orders watched-finished, then waiting, then dead; skips the rest", () => {
@@ -25,6 +27,41 @@ describe("needsYou", () => {
 			makeSession({ id: "kept", status: "dead", pinned: true }),
 		]);
 		expect(list).toEqual([]);
+	});
+});
+
+describe("the master's queue", () => {
+	const chat = (id: string, sessionId: string, createdAt: number) =>
+		makeSuggestion({ id, sessionId, source: "chat", createdAt });
+
+	test("holds only pending replies the chat drafted", () => {
+		expect(isQueued(chat("g", "s1", 1))).toBe(true);
+		expect(isQueued(makeSuggestion({ source: "worker" }))).toBe(false);
+		expect(isQueued(makeSuggestion({ source: "chat", kind: "approve" }))).toBe(
+			false,
+		);
+		expect(
+			isQueued(makeSuggestion({ source: "chat", status: "declined" })),
+		).toBe(false);
+	});
+
+	test("oldest first, each with its session; one for a session off the map is left out", () => {
+		const queue = masterQueue(
+			[makeSession({ id: "s1" }), makeSession({ id: "s2" })],
+			[chat("late", "s1", 5), chat("early", "s2", 2), chat("gone", "s9", 1)],
+		);
+		expect(queue.map((q) => [q.suggestion.id, q.session.id])).toEqual([
+			["early", "s2"],
+			["late", "s1"],
+		]);
+	});
+
+	test("a queued reply alone puts no session in NEEDS YOU", () => {
+		const idle = makeSession({ id: "s1", status: "idle" });
+		expect(needsYou([idle], [chat("g", "s1", 1)])).toEqual([]);
+		expect(
+			needsYou([idle], [makeSuggestion({ sessionId: "s1" })]).map((s) => s.id),
+		).toEqual(["s1"]);
 	});
 });
 
