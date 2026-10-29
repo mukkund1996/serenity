@@ -39,6 +39,26 @@ describe("inputRows", () => {
 	test("the cursor wraps to a row of its own when the text fills the last row", () => {
 		expect(inputRows("abcde", 5)).toEqual(["abcde", "█"]);
 	});
+
+	test("each line of a multi-line message starts a row", () => {
+		expect(inputRows("one\ntwo", 20)).toEqual(["one", "two█"]);
+		// After Shift+Enter the cursor waits at the start of the new line.
+		expect(inputRows("one\n", 20)).toEqual(["one", "█"]);
+		expect(inputRows("one\n\nthree", 20)).toEqual(["one", "", "three█"]);
+	});
+
+	test("a long line wraps within its own rows", () => {
+		expect(inputRows("one two three\nfour", 8)).toEqual([
+			"one two ",
+			"three",
+			"four█",
+		]);
+	});
+
+	test("lines count toward the four rows; more show the last four", () => {
+		const rows = inputRows("a\nb\nc\nd\ne", 20);
+		expect(rows).toEqual(["…", "c", "d", "e█"]);
+	});
 });
 
 describe("listWindow", () => {

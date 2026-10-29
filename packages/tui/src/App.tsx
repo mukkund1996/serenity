@@ -59,7 +59,7 @@ import {
 	RenameDialog,
 	ShortcutsPanel,
 } from "./overlays";
-import { splitAtNewline } from "./text-input";
+import { isNewlineKey, splitAtNewline } from "./text-input";
 import { askLine } from "./theme";
 import {
 	type CardElement,
@@ -746,6 +746,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					setMentionOff(null);
 					return setMasterText(null);
 				}
+				// Shift+Enter, Alt+Enter and Ctrl+J start a new line; Enter sends.
+				if (isNewlineKey(input, key)) return setMasterText(`${toMaster}\n`);
 				if (options.length) {
 					const at = Math.min(mentionRef.current, options.length - 1);
 					if (key.upArrow || key.downArrow)
