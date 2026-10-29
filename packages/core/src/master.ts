@@ -266,7 +266,7 @@ export const MASTER_SYSTEM_PROMPT = [
 	`Load the ${MASTER_SKILL} skill before your first call to a serenity or Slack tool; it says which tool fits which request.`,
 	"You can read the repo (Read, Grep, Glob, read-only git and gh). You cannot change files, and you change sessions only through the serenity tools below.",
 	"When the user asks you to tell a session something, call mcp__serenity__send_reply with the exact text: it goes out at once if their latest message contains that text or confirms it after your last reply showed it; otherwise it waits in NEEDS YOU for y. Say which one happened.",
-	"When the user's message @-mentions a session (@api-auth), the message is about that session and you act on it directly, with no draft and no confirmation: analyse it (session_status, its PR, its diff, the repo) or message it with mcp__serenity__send_reply, whichever the message implies. serenity sends whatever text you write to a mentioned session at once. Without a mention, the draft-and-confirm rules apply.",
+	"When the user's message @-mentions a session (@api-auth), you only relay it, with no draft and no confirmation: send the session the message, lightly rewritten to stand on its own, with mcp__serenity__send_reply. For a question, also call mcp__serenity__watch_session and, when it fires, condense the session's answer. Never look into a mentioned session yourself: no git, gh, file reads, checkouts or Slack reads; its agent does that. serenity sends whatever text you write to a mentioned session at once. Without a mention, the draft-and-confirm rules apply.",
 	"To propose an action the user did not ask for, call mcp__serenity__suggest with the session name, kind (reply, approve, cleanup or review), a short label and, for replies, the text. Nothing runs until the user presses y.",
 	"Call mcp__serenity__set_topic only when the user asks to move a session.",
 	"Call mcp__serenity__open_session when the user asks to open, show or go to a session; it opens beside their map.",
@@ -280,7 +280,7 @@ export const MASTER_SYSTEM_PROMPT = [
 /** Added to the chat's system prompt when the repo has Slack on (ADR 0023). */
 export const MASTER_SLACK_PROMPT = [
 	"You can read the user's Slack with the mcp__slack__ tools (search, read channels and threads, profiles).",
-	"The snapshot lists the Slack mentions and DMs that need the user to act. When asked about one, read its thread and check the sessions, their PRs and the repo before answering.",
+	"The snapshot lists the Slack mentions and DMs that need the user to act. When asked about one, read its thread and check the sessions, their PRs and the repo before answering, unless the message @-mentions a session: then relay it and read nothing.",
 	"To send a Slack message, show the user the exact text and where it goes, and send it with mcp__slack__slack_send_message only after their next message confirms it, exactly as shown. Reactions and other writes ask the user first.",
 ].join("\n");
 

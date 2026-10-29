@@ -4,6 +4,7 @@ import {
 	applySummary,
 	capTopic,
 	chatSnapshot,
+	MASTER_SLACK_PROMPT,
 	MASTER_SYSTEM_PROMPT,
 	needsSuggestion,
 	nextTopic,
@@ -326,8 +327,17 @@ test("a done session whose PR merges asks for a suggestion again", () => {
 });
 
 describe("the chat's prompts", () => {
-	test("tell the master an @-mentioned session is acted on directly", () => {
+	test("tell the master an @-mentioned session is relayed to at once", () => {
 		expect(MASTER_SYSTEM_PROMPT).toContain("@-mentions a session");
 		expect(MASTER_SYSTEM_PROMPT).toContain("no draft and no confirmation");
+	});
+
+	test("tell the master never to look into an @-mentioned session itself", () => {
+		expect(MASTER_SYSTEM_PROMPT).toContain(
+			"Never look into a mentioned session yourself",
+		);
+		expect(MASTER_SLACK_PROMPT).toContain(
+			"unless the message @-mentions a session",
+		);
 	});
 });

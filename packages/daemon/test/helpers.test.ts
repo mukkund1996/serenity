@@ -37,10 +37,13 @@ test("hook settings run serenity hook for every event, shell-quoted", () => {
 	});
 });
 
-test("the master skill tells the chat to act on an @-mentioned session without confirming", async () => {
+test("the master skill tells the chat to relay to an @-mentioned session without confirming or looking", async () => {
 	const skill = await Bun.file(
 		new URL("../src/master-skill.md", import.meta.url),
 	).text();
-	expect(skill).toContain("### @-mentions: act on the session directly");
+	expect(skill).toContain(
+		"### @-mentions: relay to the session, don't look yourself",
+	);
 	expect(skill).toContain('No quote block, no "Send it?"');
+	expect(skill).toContain("**Never look into it yourself.**");
 });
