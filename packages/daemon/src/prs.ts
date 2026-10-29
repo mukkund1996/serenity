@@ -1,5 +1,8 @@
 import { existsSync } from "node:fs";
 import {
+	type Backoff,
+	backoffMs,
+	isTransientMessage,
 	ownersFor,
 	parseCodeowners,
 	reviewerCandidates,
@@ -27,10 +30,20 @@ export interface PrHost {
 	): void;
 	log(line: string): void;
 	debounceMs: number;
+	/** Between reads again after gh failed for a while; defaults to PR_RETRY. */
+	retryBackoff?: Backoff;
 }
 
 /** Opening a map refreshes each session's PR at most this often. */
 const REPO_REFRESH_MS = 60_000;
+
+/**
+ * After gh fails transiently, even with its own retries, the PR is read
+ * again this many times, further apart each time, so a card does not stay
+ * stale until the next event (ADR 0043).
+ */
+const PR_RETRIES = 5;
+const PR_RETRY: Backoff = { baseMs: 5_000, maxMs: 60_000 };
 
 /**
  * Keeps each session's PR current from gh (ADR 0011): on events only, no
@@ -44,6 +57,8 @@ export class PrWatcher {
 	private readonly lastRefresh = new Map<string, number>();
 	/** session:pr pairs already offered a reviewer, so a decline sticks. */
 	private readonly offered = new Set<string>();
+	/** session id → reads again so far after transient gh failures. */
+	private readonly retries = new Map<string, number>();
 
 	constructor(private readonly host: PrHost) {}
 
@@ -80,7 +95,12 @@ export class PrWatcher {
 			this.lastRefresh.set(sessionId, Date.now());
 			const fresh = this.host.storage.sessions.get(sessionId);
 			if (!fresh || fresh.status === "archived") return;
-			const patch: Partial<Session> = { pr: lookup.pr, prError: lookup.error };
+			const transient = !!lookup.error && isTransientMessage(lookup.error);
+			// A blip keeps the PR last read rather than blanking the card.
+			const patch: Partial<Session> = {
+				pr: transient ? fresh.pr : lookup.pr,
+				prError: lookup.error,
+			};
 			// Imported sessions often share a checkout, so its PR is not theirs
 			// alone; a pinned one is kept for the next task (ADR 0022).
 			if (
@@ -95,12 +115,27 @@ export class PrWatcher {
 				JSON.stringify([patch.pr, patch.prError, patch.status ?? fresh.status]);
 			const after = changed ? this.host.change(fresh, patch) : fresh;
 			if (changed) this.host.broadcast(fresh.repo);
+			if (transient) this.retryLater(fresh);
+			else this.retries.delete(sessionId);
 			await this.offerReviewer(after);
 		} catch (error) {
 			this.host.log(`PR refresh for ${session.name} failed: ${String(error)}`);
 		} finally {
 			this.inflight.delete(sessionId);
 		}
+	}
+
+	private retryLater(session: Session): void {
+		const n = this.retries.get(session.id) ?? 0;
+		if (n >= PR_RETRIES) {
+			this.host.log(
+				`PR for ${session.name}: gh still failing, waiting for the next event`,
+			);
+			return;
+		}
+		this.retries.set(session.id, n + 1);
+		const delay = backoffMs(n, this.host.retryBackoff ?? PR_RETRY);
+		this.schedule(session.id, Math.max(this.host.debounceMs, delay));
 	}
 
 	private async offerReviewer(session: Session): Promise<void> {

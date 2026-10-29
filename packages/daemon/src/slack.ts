@@ -1,4 +1,6 @@
 import {
+	type Backoff,
+	backoffMs,
 	parseSlackInbox,
 	SLACK_INBOX_SCHEMA,
 	SLACK_READ_TOOLS,
@@ -9,6 +11,7 @@ import {
 	slackMessageKey,
 } from "@serenity/core";
 import type { ClaudeRunner } from "./claude";
+import { reportDependency } from "./exec";
 
 export interface SlackHost {
 	runner: ClaudeRunner;
@@ -28,12 +31,20 @@ export interface SlackHost {
 	log(line: string): void;
 	now(): number;
 	pollMs: number;
+	/** Between reads again after a failed one; defaults to SLACK_RETRY. */
+	retryBackoff?: Backoff;
 }
 
 /** Opening a map reads Slack at most this often. */
 const OPEN_REFRESH_MS = 15_000;
 /** Reading Slack takes several tool calls. */
 const INBOX_TIMEOUT_MS = 180_000;
+/**
+ * A failed read is tried again sooner than the next poll, further apart each
+ * time and never later than the poll would (ADR 0043). Each read is a
+ * Claude worker, so the first wait is long.
+ */
+const SLACK_RETRY: Backoff = { baseMs: 15_000, maxMs: 120_000 };
 
 /**
  * The threads and mentions waiting on the user (ADR 0023). Slack is per
@@ -45,6 +56,9 @@ export class SlackWatcher {
 	private current: SlackInbox = { items: [], error: null, checkedAt: null };
 	private timer: ReturnType<typeof setInterval> | null = null;
 	private inflight = false;
+	/** Failed reads in a row. */
+	private failures = 0;
+	private retryTimer: ReturnType<typeof setTimeout> | null = null;
 	/** slackMessageKey of every dismissed message. */
 	private readonly dismissed: Set<string>;
 
@@ -72,6 +86,7 @@ export class SlackWatcher {
 		if (this.inflight) return;
 		this.inflight = true;
 		let next: SlackInbox;
+		let failed = false;
 		try {
 			const raw = await this.host.runner.runJson({
 				prompt: slackInboxPrompt(this.host.now(), this.host.dismissals.list()),
@@ -91,6 +106,7 @@ export class SlackWatcher {
 				checkedAt: this.host.now(),
 			};
 		} catch (error) {
+			failed = true;
 			const message = error instanceof Error ? error.message : String(error);
 			this.host.log(`slack inbox failed: ${message}`);
 			// A failed read keeps the last items rather than blanking the section.
@@ -106,8 +122,30 @@ export class SlackWatcher {
 			JSON.stringify({ ...next, checkedAt: 0 }) !==
 			JSON.stringify({ ...this.current, checkedAt: 0 });
 		this.current = next;
+		reportDependency("slack", next.error);
 		if (changed) this.host.broadcast();
+		// A read that failed may pass; one that says "not logged in" waits for the poll.
+		if (failed) this.retrySoon();
+		else this.failures = 0;
 		if (!next.error) this.host.onInbox(next.items);
+	}
+
+	private retrySoon(): void {
+		if (this.retryTimer) clearTimeout(this.retryTimer);
+		const backoff = this.host.retryBackoff ?? SLACK_RETRY;
+		const maxMs = Math.min(backoff.maxMs, this.host.pollMs);
+		// Never sooner than baseMs: a worker that failed fast is not rerun at once.
+		const delay = Math.min(
+			maxMs,
+			Math.max(
+				backoff.baseMs,
+				backoffMs(this.failures++, { ...backoff, maxMs }),
+			),
+		);
+		this.retryTimer = setTimeout(() => {
+			this.retryTimer = null;
+			if (this.host.watching()) void this.refresh();
+		}, delay);
 	}
 
 	/**
@@ -134,5 +172,7 @@ export class SlackWatcher {
 	stop(): void {
 		if (this.timer) clearInterval(this.timer);
 		this.timer = null;
+		if (this.retryTimer) clearTimeout(this.retryTimer);
+		this.retryTimer = null;
 	}
 }
