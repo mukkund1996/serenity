@@ -215,6 +215,7 @@ export class ClaudeObserver {
 				claudeSessionId: c.claudeSessionId,
 				watched: false,
 				pinned: false,
+				exitNote: null,
 				createdAt: at,
 				updatedAt: at,
 			};

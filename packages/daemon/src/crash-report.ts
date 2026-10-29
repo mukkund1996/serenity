@@ -14,7 +14,7 @@ import {
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 
-/** How a daemon worker ended, and the error it left behind if it had one (ADR 0044). */
+/** How a daemon worker ended, and the error it left behind if it had one (ADR 0045). */
 export interface CrashInfo {
 	/** The error's name ("TypeError"), or "Exit" when the worker left none. */
 	name: string;
@@ -241,7 +241,7 @@ export function tailFile(path: string, lines = LOG_LINES): string {
 	}
 }
 
-/** Written by a dying worker for its supervisor (ADR 0044). */
+/** Written by a dying worker for its supervisor (ADR 0045). */
 export function recordCrash(path: string, error: unknown): void {
 	const e =
 		error instanceof Error ? error : new Error(`non-error thrown: ${error}`);
@@ -299,7 +299,7 @@ export interface CrashReporterOptions {
 /**
  * Keeps every crash as a local report and, when the user turned it on, files
  * it on GitHub: a new issue for a new signature, a comment on the open one
- * otherwise, never more often than the policy allows (ADR 0044).
+ * otherwise, never more often than the policy allows (ADR 0045).
  */
 export class CrashReporter {
 	private readonly now: () => number;

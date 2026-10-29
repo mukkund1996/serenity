@@ -11,7 +11,7 @@ export interface RecoveryFacts {
 	exists(path: string): boolean;
 }
 
-/** What the daemon does on start to match its storage to tmux and git (ADR 0044). */
+/** What the daemon does on start to match its storage to tmux and git (ADR 0045). */
 export interface RecoveryPlan {
 	/** Hook-tracked sessions whose pane went away while no daemon was watching. */
 	ended: string[];

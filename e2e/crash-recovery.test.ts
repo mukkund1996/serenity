@@ -1,5 +1,5 @@
 /**
- * ADR 0044 end to end: the supervisor restarts a killed daemon, which comes
+ * ADR 0045 end to end: the supervisor restarts a killed daemon, which comes
  * back with its state and matches it to tmux; a crashing daemon files one
  * deduped issue through the fake gh, then the supervisor gives up.
  */

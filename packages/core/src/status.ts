@@ -35,6 +35,7 @@ function permissionAsk(payload: HookPayload): string {
 /**
  * Applies one hook event to a session. Pure: returns the fields that change.
  * Archived is sticky; the master (milestone 2) decides finished vs idle after Stop.
+ * Claude exiting is reported by the agent's wrapper, not by SessionEnd.
  * A turn that ends while subagents still run (background agents) stays working:
  * Claude resumes the turn when they report back.
  */
@@ -60,6 +61,8 @@ export function reduceHook(
 			patch.ask = null;
 			patch.waitingOn = null;
 			patch.lastPrompt = oneLine(payload.prompt);
+			// A restart note has been seen once the user carries on.
+			if (session.exitNote) patch.exitNote = null;
 			// The previous reply is older than this prompt now.
 			patch.lastAssistantMessage = null;
 			break;
@@ -117,8 +120,9 @@ export function reduceHook(
 				REPLY_MAX,
 			);
 			break;
+		// Not dead yet: the agent's wrapper reports the exit, and the daemon
+		// restarts claude or ends the session (ADR 0044).
 		case "SessionEnd":
-			patch.status = "dead";
 			patch.ask = null;
 			patch.waitingOn = null;
 			if (session.subagents.length) patch.subagents = [];

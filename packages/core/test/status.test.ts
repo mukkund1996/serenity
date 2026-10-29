@@ -126,8 +126,10 @@ describe("reduceHook", () => {
 		expect(kept.length).toBeLessThanOrEqual(2000);
 	});
 
-	test("session end is dead; archived is sticky", () => {
-		expect(reduceHook(makeSession(), "SessionEnd", {}).status).toBe("dead");
+	test("session end leaves the status to the exit report; archived is sticky", () => {
+		expect(
+			reduceHook(makeSession({ status: "working" }), "SessionEnd", {}).status,
+		).toBeUndefined();
 		expect(
 			reduceHook(makeSession({ status: "archived" }), "UserPromptSubmit", {
 				prompt: "hi",
@@ -197,6 +199,16 @@ describe("reduceHook", () => {
 		expect(
 			reduceHook(makeSession(), "SubagentStop", { agent_id: "a-9" }),
 		).toEqual({});
+	});
+
+	test("a prompt clears the note that claude was restarted", () => {
+		const session = makeSession({
+			exitNote: "claude exited (code 1); restarted",
+		});
+		expect(
+			reduceHook(session, "UserPromptSubmit", { prompt: "go on" }).exitNote,
+		).toBeNull();
+		expect(reduceHook(session, "Stop", {}).exitNote).toBeUndefined();
 	});
 
 	test("a new or ended session forgets its subagents", () => {

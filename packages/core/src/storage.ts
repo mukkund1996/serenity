@@ -77,7 +77,7 @@ export interface Attachment {
 
 /**
  * What the daemon would otherwise hold only in memory, kept so a restart
- * after a crash picks up where it left off (ADR 0044).
+ * after a crash picks up where it left off (ADR 0045).
  */
 export interface RecoveryState {
 	/** The latest plan usage report (ADR 0020). */
@@ -105,7 +105,7 @@ export interface Storage {
 	readonly waits: WaitStore;
 	/** Slack messages dismissed from NEEDS YOU; per account, not per repo (ADR 0034). */
 	readonly slackDismissals: SlackDismissalStore;
-	/** In-memory daemon state that must survive a restart (ADR 0044). */
+	/** In-memory daemon state that must survive a restart (ADR 0045). */
 	readonly recovery: RecoveryStore;
 	/** Runs `fn` atomically; nested calls join the outer transaction. */
 	transaction<T>(fn: () => T): T;

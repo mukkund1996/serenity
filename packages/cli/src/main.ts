@@ -191,7 +191,7 @@ async function detach(
 	peer.close();
 }
 
-/** Exit code of a worker that crashed; its supervisor restarts it (ADR 0044). */
+/** Exit code of a worker that crashed; its supervisor restarts it (ADR 0045). */
 const CRASH_EXIT = 70;
 
 /** `serenity daemon --worker`: the daemon itself, run by its supervisor. */
@@ -230,7 +230,7 @@ async function runDaemon(): Promise<void> {
 	process.exit(0);
 }
 
-/** `serenity daemon`: supervises the worker, restarting it when it crashes (ADR 0044). */
+/** `serenity daemon`: supervises the worker, restarting it when it crashes (ADR 0045). */
 async function superviseDaemon(): Promise<void> {
 	const { runSupervisor } = await import("@serenity/daemon");
 	mkdirSync(home, { recursive: true });

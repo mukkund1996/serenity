@@ -9,7 +9,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * After a shutdown request: waits for the worker's socket, then its
- * supervisor's lock, to go, so a new supervisor can take the home (ADR 0044).
+ * supervisor's lock, to go, so a new supervisor can take the home (ADR 0045).
  */
 export async function waitForDaemonGone(home: string): Promise<void> {
 	for (let i = 0; i < 40 && existsSync(socketPath(home)); i++) await sleep(50);

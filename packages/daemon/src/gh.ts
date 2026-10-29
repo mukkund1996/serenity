@@ -159,7 +159,7 @@ export class Gh {
 			);
 	}
 
-	/** The open issue in `repo` whose title contains `needle`, or null (ADR 0044). */
+	/** The open issue in `repo` whose title contains `needle`, or null (ADR 0045). */
 	async findOpenIssue(
 		cwd: string,
 		repo: string,
