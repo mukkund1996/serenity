@@ -3,6 +3,7 @@ import {
 	type CleanupPlan,
 	type CreateSessionParams,
 	completeMention,
+	type DependencyIssue,
 	groupTopics,
 	type ImportCandidate,
 	isQueued,
@@ -47,6 +48,12 @@ import {
 	SessionMaster,
 	SLACK_NEED,
 } from "./components";
+import {
+	type Badge,
+	healthBadges,
+	type LinkStatus,
+	linkBadge,
+} from "./daemon-link";
 import { drawMap, type MasterItem, rowElements } from "./map";
 import { inputRows, listWindow, PROMPT_W, stepSelection } from "./master-input";
 import {
@@ -205,7 +212,7 @@ function useLiveState<T>(
 export function App({ home, repo, tmuxPane }: AppProps) {
 	const { exit } = useApp();
 	const { columns, rows } = useWindowSize();
-	const { state, connected, call } = useDaemon(home, repo, tmuxPane);
+	const { state, link, call } = useDaemon(home, repo, tmuxPane);
 	/** The focused node: MASTER or a session card's id (arrow keys, WASD). */
 	const [node, setNode] = useState<string>(MASTER);
 	/** Whether Enter has gone into the master, so ↑↓ w s select inside it. */
@@ -1233,7 +1240,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			<Header
 				repo={repo}
 				needs={needs.length + permissions.length}
-				connected={connected}
+				link={link}
+				health={state?.health ?? []}
 				masterError={!!master.error}
 				sessions={sessions}
 				zoom={zoom}
@@ -1412,7 +1420,8 @@ function Centered({ rows, children }: { rows: number; children: ReactNode }) {
 function Header({
 	repo,
 	needs,
-	connected,
+	link,
+	health,
 	masterError,
 	sessions,
 	zoom,
@@ -1421,7 +1430,8 @@ function Header({
 }: {
 	repo: string;
 	needs: number;
-	connected: boolean;
+	link: LinkStatus;
+	health: DependencyIssue[];
 	masterError: boolean;
 	sessions: Session[];
 	zoom: string;
@@ -1429,6 +1439,7 @@ function Header({
 	averageWaitMs: number | null;
 }) {
 	const parts = usageParts(usage, averageWaitMs, Date.now());
+	const linkNote = linkBadge(link);
 	return (
 		<Box width="100%" backgroundColor="black" paddingX={1}>
 			<Box flexShrink={1} overflow="hidden">
@@ -1451,10 +1462,9 @@ function Header({
 			</Box>
 			<Box flexGrow={1} flexShrink={0} justifyContent="center">
 				<Text>
-					{!connected ? (
-						<Text backgroundColor="red" color="black" bold>
-							{" daemon down "}
-						</Text>
+					{/* A stale map stays on screen while it reconnects (ADR 0043). */}
+					{linkNote ? (
+						<BadgeText badge={linkNote} />
 					) : (
 						<>
 							{needs > 0 ? (
@@ -1467,6 +1477,9 @@ function Header({
 									{" master error "}
 								</Text>
 							) : null}
+							{healthBadges(health).map((badge) => (
+								<BadgeText key={badge.text} badge={badge} />
+							))}
 						</>
 					)}
 				</Text>
@@ -1481,6 +1494,14 @@ function Header({
 				<Text color="gray">zoom: {zoom}</Text>
 			</Box>
 		</Box>
+	);
+}
+
+function BadgeText({ badge }: { badge: Badge }) {
+	return (
+		<Text backgroundColor={badge.color} color="black" bold>
+			{badge.text}
+		</Text>
 	);
 }
 

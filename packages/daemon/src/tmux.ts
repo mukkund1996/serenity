@@ -5,6 +5,31 @@ const CTRL_M_CSI_U = "[109;5u";
 /** Shift+Enter as a CSI u key, after its Escape; Ink reads it as Enter with shift. */
 const SHIFT_ENTER_CSI_U = "[13;2u";
 
+/** tmux commands that leave the same result however often they run. */
+const IDEMPOTENT = new Set([
+	"has-session",
+	"display-message",
+	"show-options",
+	"capture-pane",
+	"list-clients",
+	"select-pane",
+	"switch-client",
+	"rename-window",
+	"bind-key",
+	"set-option",
+]);
+
+/**
+ * Whether a transient failure may be retried (ADR 0043). Never keystrokes,
+ * new windows or panes moved, killed or respawned; nor `set-option -a`,
+ * which appends.
+ */
+export function isIdempotent(args: string[]): boolean {
+	const [command = "", ...rest] = args;
+	if (!IDEMPOTENT.has(command)) return false;
+	return !(command === "set-option" && rest.some((a) => /^-[a-z]*a/.test(a)));
+}
+
 /**
  * Thin tmux driver (ADR 0004). `socketName` selects a private tmux server
  * (`tmux -L`), which the E2E tests use; in normal use it is unset.
@@ -20,6 +45,7 @@ export class Tmux {
 			this.socketName
 				? ["tmux", "-L", this.socketName, ...args]
 				: ["tmux", ...args],
+			{ retry: isIdempotent(args) },
 		);
 	}
 

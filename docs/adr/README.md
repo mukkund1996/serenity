@@ -10,13 +10,13 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0002](0002-typescript-ink-on-bun.md) | TypeScript + Ink on Bun, shipped as a compiled binary | Accepted |
 | [0003](0003-hybrid-rendering.md) | Hybrid rendering: cell canvas for the map, Ink for panels | Accepted |
 | [0004](0004-sessions-in-tmux-panes.md) | Claude Code sessions run in tmux panes | Accepted |
-| [0005](0005-daemon-and-json-rpc.md) | Background daemon, JSON-RPC over a unix socket, scoped per repo | Accepted |
+| [0005](0005-daemon-and-json-rpc.md) | Background daemon, JSON-RPC over a unix socket, scoped per repo | Amended by 0043 |
 | [0006](0006-status-from-hooks.md) | Session status from Claude Code hooks, plus an exit report | Accepted |
 | [0007](0007-master-roles-and-models.md) | Master = Opus stream + Haiku/Sonnet one-shot workers via the claude CLI | Accepted |
 | [0008](0008-master-proposes-via-mcp.md) | Master only proposes; MCP tools for the Opus chat only | Accepted |
 | [0009](0009-storage-interface-sqlite.md) | SQLite behind a swappable storage interface | Accepted |
 | [0010](0010-worktrees-beside-repo.md) | New worktrees live beside the repo | Accepted |
-| [0011](0011-pr-status-via-gh.md) | PR status via `gh`, refreshed on events | Accepted |
+| [0011](0011-pr-status-via-gh.md) | PR status via `gh`, refreshed on events | Amended by 0043 |
 | [0012](0012-ux-decisions.md) | UX decisions not covered by the canvas | Accepted |
 | [0013](0013-testing-strategy.md) | Testing strategy | Accepted |
 | [0014](0014-distribution-and-release.md) | Distribution, release, licence, telemetry | Accepted |
@@ -48,6 +48,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0040](0040-master-queue.md) | The master's queue: replies its chat wants to send wait under NEEDS YOU, one line each, Enter shows one in full; Slack drafts stay in NEEDS YOU, marked `slack` | Accepted |
 | [0041](0041-master-chat-scrolls.md) | The topics zoom's master shows four messages; `PgUp` `PgDn` (`Shift+↑↓`) scroll back and on; leaving resets it | Amended by 0042 |
 | [0042](0042-master-shows-three-eased-pulse-text-fields-edit.md) | The master shows three messages, its scroll hints grey; the pulse is one eased swell, not three blinks; text fields edit at a cursor like a terminal line | Accepted |
+| [0043](0043-dependency-retries-and-health.md) | gh, git and tmux calls retry with backoff and jitter, transient errors only, never anything unsafe twice; the map reconnects on its own (yellow, red after 15 s); dependencies failing call after call show as header badges | Accepted |
 
 ## System at a glance
 

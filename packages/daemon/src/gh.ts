@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	CODEOWNERS_PATHS,
+	isTransientMessage,
 	PR_FIELDS,
 	type PrInfo,
 	parsePr,
@@ -9,7 +10,9 @@ import {
 	REVIEW_FIELDS,
 	REVIEW_LIMIT,
 	type ReviewRequest,
+	withRetry,
 } from "@serenity/core";
+import { reportDependency } from "./exec";
 
 /** What reading a branch's PR gave: the PR, or why it could not be read. */
 export interface PrLookup {
@@ -49,18 +52,45 @@ export class Gh {
 		} catch {
 			return { ok: false, stdout: "", stderr: "gh: command not found" };
 		}
-		const timer = setTimeout(() => proc.kill(), TIMEOUT_MS);
+		let timedOut = false;
+		const timer = setTimeout(() => {
+			timedOut = true;
+			proc.kill();
+		}, TIMEOUT_MS);
 		const [stdout, stderr, code] = await Promise.all([
 			new Response(proc.stdout as ReadableStream).text(),
 			new Response(proc.stderr as ReadableStream).text(),
 			proc.exited,
 		]);
 		clearTimeout(timer);
+		if (timedOut) return { ok: false, stdout, stderr: "gh timed out" };
 		return { ok: code === 0, stdout, stderr };
 	}
 
+	/**
+	 * A read: retried while gh fails in a way that may pass (ADR 0043), and
+	 * reported to the dependency health.
+	 */
+	private async read(args: string[], cwd: string): Promise<Output> {
+		const out = await withRetry(
+			async () => {
+				const out = await this.run(args, cwd);
+				if (!out.ok && isTransientMessage(out.stderr))
+					throw new TransientGh(out);
+				return out;
+			},
+			{ isTransient: (e) => e instanceof TransientGh },
+		).catch((e: unknown) => {
+			if (e instanceof TransientGh) return e.out;
+			throw e;
+		});
+		const problem = healthOf(out);
+		if (problem !== undefined) reportDependency("gh", problem);
+		return out;
+	}
+
 	async prForBranch(cwd: string, branch: string): Promise<PrLookup> {
-		const out = await this.run(
+		const out = await this.read(
 			["pr", "view", branch, "--json", PR_FIELDS],
 			cwd,
 		);
@@ -78,7 +108,7 @@ export class Gh {
 	async reviewRequests(
 		cwd: string,
 	): Promise<{ prs: ReviewRequest[]; error: string | null }> {
-		const out = await this.run(
+		const out = await this.read(
 			[
 				"pr",
 				"list",
@@ -101,10 +131,15 @@ export class Gh {
 		}
 	}
 
-	/** The logged-in GitHub user, asked once. */
+	/** The logged-in GitHub user, asked until gh answers. */
 	currentUser(cwd: string): Promise<string | null> {
-		this.me ??= this.run(["api", "user", "--jq", ".login"], cwd).then((out) =>
-			out.ok ? out.stdout.trim() || null : null,
+		this.me ??= this.read(["api", "user", "--jq", ".login"], cwd).then(
+			(out) => {
+				const login = out.ok ? out.stdout.trim() || null : null;
+				// A failure is asked again next time rather than kept for good.
+				if (!login) this.me = null;
+				return login;
+			},
 		);
 		return this.me;
 	}
@@ -123,6 +158,26 @@ export class Gh {
 				`gh could not request ${reviewer}: ${firstLine(out.stderr)}`,
 			);
 	}
+}
+
+class TransientGh extends Error {
+	constructor(readonly out: Output) {
+		super(out.stderr);
+	}
+}
+
+/**
+ * What a read says about gh itself. A missing PR or remote is gh answering;
+ * an error that is neither about gh nor transient says nothing either way.
+ */
+function healthOf(out: Output): string | null | undefined {
+	if (out.ok) return null;
+	const reason = classifyGhError(out.stderr);
+	if (reason === null) return null;
+	if (reason === "gh not installed" || reason === "gh not logged in")
+		return reason;
+	if (isTransientMessage(out.stderr)) return "gh unreachable";
+	return undefined;
 }
 
 function firstLine(text: string): string {

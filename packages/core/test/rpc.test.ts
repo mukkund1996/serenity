@@ -18,6 +18,7 @@ const EMPTY_STATE = {
 	averageWaitMs: null,
 	pings: [],
 	slack: null,
+	health: [],
 };
 
 let server: Server | null = null;

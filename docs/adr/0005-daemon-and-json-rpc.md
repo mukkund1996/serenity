@@ -1,6 +1,6 @@
 # 0005 · Background daemon, JSON-RPC over a unix socket, scoped per repo
 
-**Status:** Accepted · 2026-10-25
+**Status:** Accepted · 2026-10-25 · Amended by [0043](0043-dependency-retries-and-health.md): the map reconnects with backoff, yellow then red
 
 ## Context
 `q` quits the map but sessions keep running, and the master, status pipeline and PR refresh should keep working while the map is closed. serenity is one map per repo (0001).
