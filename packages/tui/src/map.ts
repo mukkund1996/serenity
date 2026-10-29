@@ -11,6 +11,7 @@ import {
 	wrap,
 } from "@serenity/core";
 import { inputRows, PROMPT_W } from "./master-input";
+import { PULSE } from "./pulse";
 import {
 	age,
 	askLine,
@@ -63,7 +64,7 @@ export type MasterItem =
 			now: number;
 	  }
 	| {
-			/** A reply the master wants to send, waiting for y (ADR 0039). */
+			/** A reply the master wants to send, waiting for y (ADR 0040). */
 			kind: "queued";
 			session: Session;
 			text: string;
@@ -77,7 +78,7 @@ export interface MapMaster {
 	error: string | null;
 	/** NEEDS YOU items, Slack's among them, plus permission requests. */
 	needCount: number;
-	/** Replies in the master's queue (ADR 0039). */
+	/** Replies in the master's queue (ADR 0040). */
 	queueCount?: number;
 	/** Why Slack could not be read, or null. */
 	slackError?: string | null;
@@ -91,6 +92,8 @@ export interface MapMaster {
 	/** Session names offered after an `@` in the input, with the selected one. */
 	mentions?: { names: string[]; selected: number } | null;
 	lastMessage: MasterMessage | null;
+	/** Lit by a session's answer to the master (ADR 0039). */
+	pulse?: boolean;
 }
 
 export interface MapInput {
@@ -105,6 +108,8 @@ export interface MapInput {
 	/** Text being typed to the focused agent, or null when not replying. */
 	replyText: string | null;
 	master: MapMaster;
+	/** Sessions lit by a message from the master: their row and bubble (ADR 0039). */
+	pulse?: Set<string>;
 }
 
 export interface MapLayout {
@@ -280,13 +285,14 @@ function drawBubble(
 	rows: CardBox[],
 ): void {
 	const focused = b.focusAt >= 0;
+	const lit = b.group.sessions.some((s) => input.pulse?.has(s.id));
 	canvas.frame(
 		x,
 		top,
 		w,
 		b.h,
-		focused ? "heavy" : "rounded",
-		focused ? { fg: "whiteBright", bold: true } : DIM,
+		focused || lit ? "heavy" : "rounded",
+		lit ? PULSE : focused ? { fg: "whiteBright", bold: true } : DIM,
 	);
 	const chips = counts(b.group);
 	const chipsW = chips.reduce((n, c) => n + [...c.text].length + 1, 0);
@@ -304,7 +310,16 @@ function drawBubble(
 	b.shown.forEach((s, i) => {
 		const focused = i === b.focusAt;
 		const cursor = focused && (input.focusElement ?? "card") === "card";
-		drawRow(canvas, s, x + 2, y, inner, cursor, focused);
+		drawRow(
+			canvas,
+			s,
+			x + 2,
+			y,
+			inner,
+			cursor,
+			focused,
+			!!input.pulse?.has(s.id),
+		);
 		rows.push({ sessionId: s.id, x, y, w, h: 1 });
 		y++;
 		if (!focused) return;
@@ -334,7 +349,7 @@ function drawBubble(
 	if (b.hidden) canvas.text(x + 4, y, `+${b.hidden} more`, DIM);
 }
 
-/** One agent: cursor, glyph, name, ⚑. Waiting rows are inverse yellow. */
+/** One agent: cursor, glyph, name, ⚑. Waiting rows are inverse yellow; a lit name is magenta. */
 function drawRow(
 	canvas: Canvas,
 	s: Session,
@@ -343,6 +358,7 @@ function drawRow(
 	width: number,
 	cursor: boolean,
 	focused: boolean,
+	lit: boolean,
 ): void {
 	const waiting = s.status === "waiting";
 	const base: Style = waiting ? { fg: "black", bg: "yellow" } : {};
@@ -364,8 +380,14 @@ function drawRow(
 	const flag = s.watched ? " ⚑" : "";
 	col = canvas.text(col, y, truncate(s.name, x + width - col - flag.length), {
 		...base,
-		fg: waiting ? "black" : focused ? "whiteBright" : nameColor(s.status),
-		bold: focused || waiting,
+		fg: waiting
+			? "black"
+			: lit
+				? PULSE.fg
+				: focused
+					? "whiteBright"
+					: nameColor(s.status),
+		bold: focused || waiting || lit,
 	});
 	if (flag)
 		canvas.text(col, y, flag, { ...base, fg: waiting ? "black" : "white" });
@@ -384,8 +406,12 @@ function drawMaster(
 		y,
 		w,
 		h,
-		m.focused ? "heavy" : "rounded",
-		m.focused ? { fg: "whiteBright", bold: true } : { fg: "magenta" },
+		m.focused || m.pulse ? "heavy" : "rounded",
+		m.pulse
+			? PULSE
+			: m.focused
+				? { fg: "whiteBright", bold: true }
+				: { fg: "magenta" },
 	);
 	canvas.text(x + 2, y, " ◆ master ", { fg: "magenta", bold: true });
 	if (m.thinking) canvas.text(x + w - 12, y, " thinking ", { fg: "magenta" });

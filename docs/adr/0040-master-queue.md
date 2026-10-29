@@ -1,4 +1,4 @@
-# 0039 · The master's queue: replies it wants to send wait in their own section, not NEEDS YOU
+# 0040 · The master's queue: replies it wants to send wait in their own section, not NEEDS YOU
 
 **Status:** Accepted · 2026-10-29 · Amends 0031, 0035
 

@@ -12,6 +12,7 @@ import {
 	matchMentions,
 	mentionDraft,
 	needsYou,
+	type Ping,
 	type Session,
 	type Suggestion,
 	type TopicGroup,
@@ -66,6 +67,7 @@ import {
 	RenameDialog,
 	ShortcutsPanel,
 } from "./overlays";
+import { PULSE_PHASE_MS, pulseEnd, pulsing } from "./pulse";
 import { QUEUE_ROW, QueueSection } from "./queue";
 import { isNewlineKey, splitAtNewline } from "./text-input";
 import { askLine } from "./theme";
@@ -130,6 +132,8 @@ const PERM = "perm:";
 const TOPIC = "topic:";
 /** The master panel's node id; every other node is a session card. */
 const MASTER = "master";
+/** Stable while the daemon has not answered, so the pulse clock stays idle. */
+const NO_PINGS: Ping[] = [];
 
 /** A text field's keys: backspace, typing, and Enter (also inside a pasted chunk). */
 function editText(
@@ -142,6 +146,26 @@ function editText(
 	if (!input || key.ctrl || key.meta) return null;
 	const { text, submit } = splitAtNewline(input);
 	return { value: value + text, submit };
+}
+
+/**
+ * The clock the pulse reads (ADR 0039): it ticks once a blink while a ping's
+ * pulse runs and stops when it ends, so an idle map never re-renders.
+ */
+function usePulseClock(pings: Ping[]): number {
+	const [now, setNow] = useState(() => Date.now());
+	const end = pulseEnd(pings);
+	useEffect(() => {
+		if (end === null || end <= Date.now()) return;
+		setNow(Date.now());
+		const timer = setInterval(() => {
+			const t = Date.now();
+			setNow(t);
+			if (t >= end) clearInterval(timer);
+		}, PULSE_PHASE_MS);
+		return () => clearInterval(timer);
+	}, [end]);
+	return now;
 }
 
 /**
@@ -186,7 +210,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const [zoom, setZoom] = useState<Zoom>("topics");
 	const [search, setSearch, searchRef] = useLiveState<Search | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
-	/** The queued reply Enter shows in full, if any (ADR 0039). */
+	/** The queued reply Enter shows in full, if any (ADR 0040). */
 	const [expanded, setExpanded] = useState<string | null>(null);
 
 	const allSessions = state?.sessions ?? [];
@@ -198,6 +222,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const suggestions = state?.suggestions ?? [];
 	const permissions = state?.permissions ?? [];
 	const master: MasterState = state?.master ?? { status: "idle", error: null };
+	const pings = state?.pings ?? NO_PINGS;
+	const pulse = pulsing(pings, usePulseClock(pings));
 	const attached =
 		allSessions.find((s) => s.id === state?.attachedSessionId) ?? null;
 	/** Each topic's card order as last drawn; the focused one keeps it. */
@@ -217,7 +243,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		[sessions, suggestions],
 	);
 
-	/** Replies the master's chat wants to send, waiting for y in its queue (ADR 0039). */
+	/** Replies the master's chat wants to send, waiting for y in its queue (ADR 0040). */
 	const queue = useMemo(
 		() => masterQueue(sessions, suggestions),
 		[sessions, suggestions],
@@ -432,7 +458,9 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					inputText: masterText,
 					mentions: mentionList,
 					lastMessage: conversation[conversation.length - 1] ?? null,
+					pulse: pulse.master,
 				},
+				pulse: pulse.sessions,
 			});
 			const masterBox = { ...map.master, id: MASTER };
 			return {
@@ -458,6 +486,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				focusSuggestion: cardSuggestion?.label ?? null,
 				replyText: onMaster ? null : replyText,
 				side: at,
+				pulse: pulse.sessions,
 			});
 		const right = side(columns - leftWidth - panelWidth, sides.right, "right");
 		const left = leftWidth ? side(leftWidth, sides.left, "left") : null;
@@ -920,7 +949,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				return;
 			}
 
-			// y sends a queued reply, e edits it, n or x drops it, Enter shows it in full (ADR 0039).
+			// y sends a queued reply, e edits it, n or x drops it, Enter shows it in full (ADR 0040).
 			if (queued) {
 				const { suggestion } = queued;
 				if (key.return)
@@ -1181,6 +1210,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 									inner={masterInner}
 								/>
 							}
+							pulse={pulse.master}
 						/>
 					</Box>
 				) : null}

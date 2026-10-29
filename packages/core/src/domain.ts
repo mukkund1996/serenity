@@ -197,6 +197,17 @@ export interface MasterState {
 	error: string | null;
 }
 
+/**
+ * A message between the master and a session (ADR 0039): `session` when the
+ * chat's send_reply typed into it, `master` when that session's turn ended
+ * after it. The map pulses the receiving node for a moment.
+ */
+export interface Ping {
+	sessionId: string;
+	to: "session" | "master";
+	at: number;
+}
+
 /** One stretch a session spent waiting on you, answered (ADR 0020). */
 export interface Wait {
 	repo: string;
@@ -243,4 +254,6 @@ export interface RepoState {
 	averageWaitMs: number | null;
 	/** Slack threads and mentions waiting on you; null when Slack is off for the repo (ADR 0023). */
 	slack: SlackState | null;
+	/** Messages between the master and sessions in the last few seconds, oldest first. */
+	pings: Ping[];
 }

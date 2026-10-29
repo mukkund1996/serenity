@@ -19,6 +19,7 @@ import {
 	needsSuggestion,
 	normalizeTopic,
 	PINNED,
+	type Ping,
 	parseSuggestion,
 	parseSummary,
 	type Session,
@@ -95,6 +96,20 @@ interface Watch {
 	slack: string | null;
 }
 
+/** A master send a session has not answered yet (ADR 0039). */
+interface Awaiting {
+	repo: string;
+	/** Sent while it worked: Claude may read it in that turn or queue it for the next. */
+	queued: boolean;
+	/** After a queued send's turn ends: pings unless a new turn starts first. */
+	timer: ReturnType<typeof setTimeout> | null;
+}
+
+/** How long the map keeps a ping; it pulses for less. */
+const PING_KEEP_MS = 5_000;
+/** After a turn ends, how long a message queued during it has to start the next one. */
+const QUEUE_GRACE_MS = 2_000;
+
 interface PendingPermission {
 	permission: MasterPermission;
 	resolve: (allow: boolean) => void;
@@ -118,6 +133,10 @@ export class MasterSupervisor {
 	private readonly watches = new Map<string, Watch>();
 	/** repo → confirmed Slack messages released by a finished watch, each sent once. */
 	private readonly released = new Map<string, string[]>();
+	/** session id → a master send it has not answered. */
+	private readonly awaiting = new Map<string, Awaiting>();
+	/** repo → recent pings, oldest first. */
+	private readonly pingLog = new Map<string, Ping[]>();
 
 	constructor(
 		private readonly host: MasterHost,
@@ -139,6 +158,45 @@ export class MasterSupervisor {
 			.filter((p) => p.repo === repo);
 	}
 
+	/** Messages between the master and sessions in the last few seconds (ADR 0039). */
+	pings(repo: string): Ping[] {
+		const since = this.host.now() - PING_KEEP_MS;
+		return (this.pingLog.get(repo) ?? []).filter((p) => p.at >= since);
+	}
+
+	private ping(repo: string, sessionId: string, to: Ping["to"]): void {
+		this.pingLog.set(repo, [
+			...this.pings(repo),
+			{ sessionId, to, at: this.host.now() },
+		]);
+		this.host.broadcast(repo);
+	}
+
+	/**
+	 * Pings the master when a session answers a send_reply: its next turn
+	 * end. A send to a working session may be read in that turn or queued
+	 * for the next; a turn that starts soon after the end is the answer.
+	 */
+	private trackAnswer(before: Session | null, after: Session): void {
+		const wait = this.awaiting.get(after.id);
+		if (!wait || !before) return;
+		const answered = () => {
+			this.awaiting.delete(after.id);
+			this.ping(wait.repo, after.id, "master");
+		};
+		if (after.status === "dead" || after.status === "archived") {
+			if (wait.timer) clearTimeout(wait.timer);
+			this.awaiting.delete(after.id);
+		} else if (wait.timer && after.status === "working") {
+			clearTimeout(wait.timer);
+			wait.timer = null;
+			wait.queued = false;
+		} else if (turnEnded(before, after)) {
+			if (wait.queued) wait.timer = setTimeout(answered, QUEUE_GRACE_MS);
+			else answered();
+		}
+	}
+
 	/** Called after every change to a session, with what it was before. */
 	onSessionChanged(before: Session | null, after: Session): void {
 		const replied =
@@ -151,6 +209,7 @@ export class MasterSupervisor {
 		if (before && needsSuggestion(before, after))
 			this.schedule("suggest", after.id, () => this.suggest(after.id));
 		if (before && turnEnded(before, after)) this.fireWatch(after);
+		this.trackAnswer(before, after);
 	}
 
 	/** Tells the chat a watched session's turn ended (ADR 0032). */
@@ -605,6 +664,14 @@ export class MasterSupervisor {
 		// It answers the session, so a reply waiting for y no longer applies.
 		this.supersede(session.id);
 		this.host.log(`master sent a confirmed reply to ${session.name}`);
+		const earlier = this.awaiting.get(session.id);
+		if (earlier?.timer) clearTimeout(earlier.timer);
+		this.awaiting.set(session.id, {
+			repo,
+			queued: session.status === "working",
+			timer: null,
+		});
+		this.ping(repo, session.id, "session");
 		return {
 			text:
 				session.status === "working"
@@ -727,6 +794,9 @@ export class MasterSupervisor {
 	stop(): void {
 		for (const timer of this.timers.values()) clearTimeout(timer);
 		this.timers.clear();
+		for (const wait of this.awaiting.values())
+			if (wait.timer) clearTimeout(wait.timer);
+		this.awaiting.clear();
 		for (const entry of this.pending.values()) entry.resolve(false);
 		for (const chat of this.chats.values()) chat.process.stop();
 		this.chats.clear();

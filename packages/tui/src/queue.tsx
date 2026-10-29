@@ -4,7 +4,7 @@ import { Chips, SectionHeader, Selector } from "./components";
 import { NEED_INDENT, queueLines } from "./master-layout";
 import { QUEUE_COLOR } from "./theme";
 
-/** Element id prefix of a queued reply in the master (ADR 0039). */
+/** Element id prefix of a queued reply in the master (ADR 0040). */
 export const QUEUE_ROW = "q:";
 
 export interface QueuedReply {
@@ -13,7 +13,7 @@ export interface QueuedReply {
 }
 
 /**
- * The master's queue (ADR 0039): replies its chat wants to send, one line
+ * The master's queue (ADR 0040): replies its chat wants to send, one line
  * each, the target session and a preview. Enter shows the whole message;
  * y sends it, e edits it, n drops it.
  */

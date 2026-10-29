@@ -17,6 +17,7 @@ export type Color =
 	| "whiteBright"
 	| "yellowBright"
 	| "blueBright"
+	| "magentaBright"
 	| "greenBright"
 	/** A truecolor hex, for the few colours the named ones lack. */
 	| `#${string}`;

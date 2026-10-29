@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
 import {
 	type CreateSessionParams,
 	createMemoryStorage,
@@ -588,6 +588,82 @@ describe("chat", () => {
 			expect(storage.suggestions.listPending(REPO)).toMatchObject([
 				{ label: 'Reply "yes, set it to 30m"', text: "yes, set it to 30m" },
 			]);
+		});
+
+		describe("pings for the map (ADR 0039)", () => {
+			const send = async () => {
+				say("you", "@api-auth add tests");
+				return master.handleTool(REPO, "send_reply", {
+					session: "api-auth",
+					text: "Add tests for the refresh.",
+				});
+			};
+			const pinged = () => master.pings(REPO).map((p) => p.to);
+
+			afterEach(() => jest.useRealTimers());
+
+			test("a send pings the session, and its next turn end the master", async () => {
+				put({ id: "a", name: "api-auth", status: "idle" });
+				await send();
+				expect(master.pings(REPO)).toMatchObject([
+					{ sessionId: "a", to: "session" },
+				]);
+				change("a", { status: "working" });
+				expect(pinged()).toEqual(["session"]);
+				change("a", { status: "idle" });
+				expect(master.pings(REPO)).toMatchObject([
+					{ sessionId: "a", to: "session" },
+					{ sessionId: "a", to: "master" },
+				]);
+				// Answered once: later turns are the session's own.
+				change("a", { status: "working" });
+				change("a", { status: "idle" });
+				expect(pinged()).toEqual(["session", "master"]);
+			});
+
+			test("a send it never answers, or one the user did not ask for, pings nothing back", async () => {
+				put({ id: "a", name: "api-auth", status: "idle" });
+				put({ id: "b", name: "web", status: "idle" });
+				say("you", "tell web something");
+				await master.handleTool(REPO, "send_reply", {
+					session: "web",
+					text: "Rebase on main.",
+				});
+				expect(master.pings(REPO)).toEqual([]);
+				await send();
+				change("a", { status: "dead" });
+				expect(pinged()).toEqual(["session"]);
+			});
+
+			test("a send to a working session: the turn after it answers when the message was queued", async () => {
+				jest.useFakeTimers();
+				put({ id: "a", name: "api-auth", status: "working" });
+				await send();
+				change("a", { status: "idle" });
+				change("a", { status: "working", lastPrompt: "Add tests" });
+				jest.advanceTimersByTime(5_000);
+				expect(pinged()).toEqual(["session"]);
+				change("a", { status: "idle" });
+				expect(pinged()).toEqual(["session", "master"]);
+			});
+
+			test("a send to a working session: that turn answers when Claude read it there", async () => {
+				jest.useFakeTimers();
+				put({ id: "a", name: "api-auth", status: "working" });
+				await send();
+				change("a", { status: "waiting", waitingOn: "question" });
+				expect(pinged()).toEqual(["session"]);
+				jest.advanceTimersByTime(2_000);
+				expect(pinged()).toEqual(["session", "master"]);
+			});
+
+			test("pings fade after a few seconds", async () => {
+				put({ id: "a", name: "api-auth", status: "idle" });
+				await send();
+				expect(pinged()).toEqual(["session"]);
+				now += 6_000;
+				expect(master.pings(REPO)).toEqual([]);
+			});
 		});
 
 		describe("an @mention of the session (ADR 0036)", () => {

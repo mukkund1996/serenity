@@ -152,7 +152,7 @@ export function SectionHeader({
 	width: number;
 	/** NEEDS YOU: yellow, like the header's count. */
 	urgent?: boolean;
-	/** The chip's own colour, as the queue's (ADR 0039). */
+	/** The chip's own colour, as the queue's (ADR 0040). */
 	color?: Color;
 }) {
 	const chip = ` ${label} `;
@@ -186,7 +186,7 @@ function SessionLine({ session }: { session: Session }) {
 
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-/** The one animation (ADR 0012): ticks only while the master is thinking. */
+/** The spinner (ADR 0012): ticks only while the master is thinking; the pulse is the other animation (0039). */
 function Spinner() {
 	const [frame, setFrame] = useState(0);
 	useEffect(() => {
@@ -643,6 +643,7 @@ export function MasterPanel({
 	mentions,
 	replyText,
 	queue = null,
+	pulse = false,
 }: {
 	width: number;
 	sessions: Session[];
@@ -659,8 +660,10 @@ export function MasterPanel({
 	inputText: string | null;
 	mentions: { names: string[]; selected: number } | null;
 	replyText: string | null;
-	/** The master's queue section (ADR 0039), drawn under NEEDS YOU. */
+	/** The master's queue section (ADR 0040), drawn under NEEDS YOU. */
 	queue?: ReactNode;
+	/** Lit by a session's answer (ADR 0039). */
+	pulse?: boolean;
 }) {
 	const inner = width - 6;
 	const now = Date.now();
@@ -736,8 +739,10 @@ export function MasterPanel({
 		<TitledBox
 			title="◆ master"
 			titleColor="magenta"
-			borderStyle={focused ? "bold" : "round"}
-			borderColor={focused ? "whiteBright" : "magenta"}
+			borderStyle={focused || pulse ? "bold" : "round"}
+			borderColor={
+				pulse ? "magentaBright" : focused ? "whiteBright" : "magenta"
+			}
 			width={width}
 			right={master.status === "thinking" ? <Spinner /> : undefined}
 		>
