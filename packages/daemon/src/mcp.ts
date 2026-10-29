@@ -1,4 +1,10 @@
-import { connectDaemon, type MasterToolResult } from "@serenity/core";
+import {
+	connectDaemon,
+	type MasterToolResult,
+	RpcError,
+	RpcErrorCode,
+	type RpcPeer,
+} from "@serenity/core";
 
 /**
  * `serenity mcp <repo>` (ADR 0008): the MCP stdio server that the master
@@ -186,7 +192,14 @@ export async function handleMcpMessage(
 			return reply({ tools: MCP_TOOLS });
 		case "tools/call": {
 			const name = String(msg.params?.name ?? "");
-			const args = (msg.params?.arguments ?? {}) as Record<string, unknown>;
+			const raw = msg.params?.arguments ?? {};
+			if (typeof raw !== "object" || raw === null || Array.isArray(raw))
+				return {
+					jsonrpc: "2.0",
+					id: msg.id,
+					error: { code: -32602, message: "arguments must be an object" },
+				};
+			const args = raw as Record<string, unknown>;
 			let result: MasterToolResult;
 			try {
 				result = await callTool(name, args);
@@ -214,21 +227,59 @@ export async function handleMcpMessage(
 
 /** The master's permission requests wait for the user, so tool calls may take minutes. */
 const TOOL_TIMEOUT_MS = 15 * 60_000;
+/** Waits between tries to reach the daemon, e.g. while it restarts; then the call fails. */
+const CONNECT_RETRY_MS = [250, 1_000, 3_000];
+/** Tools that change nothing, so a call cut off mid-way may be made again. */
+const READ_ONLY_TOOLS = new Set(["session_status"]);
 
-export async function runMcpProxy(home: string, repo: string): Promise<void> {
-	const callTool: CallTool = async (name, args) => {
-		const peer = await connectDaemon(home);
-		if (!peer)
-			return { text: "serenity's daemon is not running.", isError: true };
+type Peer = Pick<RpcPeer, "request" | "close">;
+
+/**
+ * Forwards one tool call to the daemon. Reaching it is retried, since
+ * nothing was sent yet; a connection lost mid-call is retried only for a
+ * read-only tool, as another may already have acted.
+ */
+export async function forwardTool(
+	connect: () => Promise<Peer | null>,
+	repo: string,
+	name: string,
+	args: Record<string, unknown>,
+	retryMs: readonly number[] = CONNECT_RETRY_MS,
+): Promise<MasterToolResult> {
+	for (let attempt = 0; ; attempt++) {
+		const retry = attempt < retryMs.length;
+		const peer = await connect().catch(() => null);
+		if (!peer) {
+			if (!retry)
+				return { text: "serenity's daemon is not running.", isError: true };
+			await Bun.sleep(retryMs[attempt] as number);
+			continue;
+		}
 		try {
 			return await peer.request(
 				"master.tool",
 				{ repo, name, args },
 				{ timeoutMs: TOOL_TIMEOUT_MS },
 			);
+		} catch (error) {
+			const lost =
+				error instanceof RpcError && error.code === RpcErrorCode.Closed;
+			if (!lost || !retry || !READ_ONLY_TOOLS.has(name)) throw error;
 		} finally {
 			peer.close();
 		}
+		await Bun.sleep(retryMs[attempt] as number);
+	}
+}
+
+export async function runMcpProxy(home: string, repo: string): Promise<void> {
+	const callTool: CallTool = (name, args) =>
+		forwardTool(() => connectDaemon(home), repo, name, args);
+	// claude may have gone; a failed write must not take the server down with it.
+	const write = (out: object) => {
+		try {
+			process.stdout.write(`${JSON.stringify(out)}\n`);
+		} catch {}
 	};
 	const pending: Promise<void>[] = [];
 	for await (const line of console) {
@@ -237,12 +288,17 @@ export async function runMcpProxy(home: string, repo: string): Promise<void> {
 		try {
 			msg = JSON.parse(line);
 		} catch {
+			write({
+				jsonrpc: "2.0",
+				id: null,
+				error: { code: -32700, message: "parse error" },
+			});
 			continue;
 		}
 		// Calls can overlap (a permission request may wait), so answer each when ready.
 		pending.push(
 			handleMcpMessage(msg, callTool).then((out) => {
-				if (out) process.stdout.write(`${JSON.stringify(out)}\n`);
+				if (out) write(out);
 			}),
 		);
 	}

@@ -34,6 +34,8 @@ export type ChatEvent =
 	| { type: "session"; sessionId: string }
 	| { type: "text"; text: string }
 	| { type: "result"; isError: boolean; text: string }
+	/** Any other output (tool calls, their results): the chat is alive. */
+	| { type: "activity" }
 	| { type: "exit"; code: number | null; stderr: string };
 
 export interface ChatProcess {
@@ -225,15 +227,20 @@ export function parseChatLine(line: string): ChatEvent[] {
 	}
 	if (msg.type === "system" && msg.subtype === "init" && msg.session_id)
 		return [{ type: "session", sessionId: msg.session_id }];
-	if (msg.type === "assistant")
-		return (msg.message?.content ?? [])
-			.filter((block) => block.type === "text" && block.text?.trim())
-			.map((block) => ({ type: "text", text: (block.text as string).trim() }));
 	if (msg.type === "result")
 		return [
 			{ type: "result", isError: !!msg.is_error, text: msg.result ?? "" },
 		];
-	return [];
+	const texts: ChatEvent[] =
+		msg.type === "assistant"
+			? (msg.message?.content ?? [])
+					.filter((block) => block.type === "text" && block.text?.trim())
+					.map((block) => ({
+						type: "text",
+						text: (block.text as string).trim(),
+					}))
+			: [];
+	return texts.length ? texts : [{ type: "activity" }];
 }
 
 async function readLines(

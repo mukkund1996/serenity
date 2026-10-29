@@ -12,8 +12,8 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0004](0004-sessions-in-tmux-panes.md) | Claude Code sessions run in tmux panes | Accepted |
 | [0005](0005-daemon-and-json-rpc.md) | Background daemon, JSON-RPC over a unix socket, scoped per repo | Amended by 0043, 0045 |
 | [0006](0006-status-from-hooks.md) | Session status from Claude Code hooks, plus an exit report | Amended by 0044 |
-| [0007](0007-master-roles-and-models.md) | Master = Opus stream + Haiku/Sonnet one-shot workers via the claude CLI | Accepted |
-| [0008](0008-master-proposes-via-mcp.md) | Master only proposes; MCP tools for the Opus chat only | Accepted |
+| [0007](0007-master-roles-and-models.md) | Master = Opus stream + Haiku/Sonnet one-shot workers via the claude CLI | Amended by 0046 |
+| [0008](0008-master-proposes-via-mcp.md) | Master only proposes; MCP tools for the Opus chat only | Amended by 0046 |
 | [0009](0009-storage-interface-sqlite.md) | SQLite behind a swappable storage interface | Accepted |
 | [0010](0010-worktrees-beside-repo.md) | New worktrees live beside the repo | Accepted |
 | [0011](0011-pr-status-via-gh.md) | PR status via `gh`, refreshed on events | Amended by 0043 |
@@ -37,7 +37,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0029](0029-website-on-github-pages.md) | The website: static page on GitHub Pages at getserenity.dev, release version filled in at deploy | Accepted |
 | [0030](0030-master-skill-auto-mode-confirmed-slack.md) | The master's skill, auto mode, and Slack messages sent once confirmed in the chat | Accepted |
 | [0031](0031-slack-joins-needs-you.md) | Slack joins NEEDS YOU: only mentions and DMs that need an action, at most three; no SLACK section, `[` `]` back to topics | Accepted |
-| [0032](0032-master-watches-sessions.md) | The master reads status on demand and watches sessions; hook status is checked against Claude's own | Accepted |
+| [0032](0032-master-watches-sessions.md) | The master reads status on demand and watches sessions; hook status is checked against Claude's own | Amended by 0046 |
 | [0033](0033-master-starts-sessions-from-a-brief.md) | The master starts sessions from a brief with `create_session` | Accepted |
 | [0034](0034-dismiss-slack-items.md) | `x` dismisses a Slack item from NEEDS YOU for good, by message; a newer message in its thread shows again | Accepted |
 | [0035](0035-master-sends-replies-the-user-asked-for.md) | The master sends replies the user asked for with `send_reply` | Accepted |
@@ -51,6 +51,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0043](0043-dependency-retries-and-health.md) | gh, git and tmux calls retry with backoff and jitter, transient errors only, never anything unsafe twice; the map reconnects on its own (yellow, red after 15 s); dependencies failing call after call show as header badges | Accepted |
 | [0044](0044-claude-restarts-in-its-pane.md) | Any claude exit serenity did not cause restarts it in the same pane with `--resume`, backing off 1–16 s; a sixth exit in 10 min, or one before it started, leaves the session dead with the reason | Accepted |
 | [0045](0045-daemon-supervisor-crash-reports-recovery.md) | A supervisor restarts the daemon, crashes become deduped GitHub issues, and state survives a restart | Accepted |
+| [0046](0046-master-survives-crashes-hangs-and-restarts.md) | The master survives crashes, hangs and daemon restarts: an outbox per repo, a 5-minute watchdog, restart with `--resume` and re-send, its state in SQLite, tools that answer within 2 minutes | Accepted |
 
 ## System at a glance
 

@@ -3,6 +3,7 @@ import type {
 	HookKind,
 	HookPayload,
 	MasterMessage,
+	MasterRecord,
 	Session,
 	Suggestion,
 	Usage,
@@ -97,6 +98,13 @@ export interface RecoveryStore {
 	): void;
 }
 
+export interface MasterStore {
+	get(repo: string): MasterRecord | null;
+	/** Inserts or replaces the repo's record. */
+	put(record: MasterRecord): void;
+	listAll(): MasterRecord[];
+}
+
 export interface Storage {
 	readonly sessions: SessionStore;
 	readonly events: EventStore;
@@ -107,6 +115,8 @@ export interface Storage {
 	readonly slackDismissals: SlackDismissalStore;
 	/** In-memory daemon state that must survive a restart (ADR 0045). */
 	readonly recovery: RecoveryStore;
+	/** The master's chat state that outlives the daemon (ADR 0046). */
+	readonly master: MasterStore;
 	/** Runs `fn` atomically; nested calls join the outer transaction. */
 	transaction<T>(fn: () => T): T;
 	close(): void;
@@ -120,6 +130,8 @@ export function createMemoryStorage(): Storage {
 	const waits: Wait[] = [];
 	const dismissals = new Map<string, SlackDismissal>();
 	const recovery = new Map<string, string>();
+	const masters = new Map<string, MasterRecord>();
+	const copy = (r: MasterRecord): MasterRecord => structuredClone(r);
 	let nextEventId = 1;
 	let nextMessageId = 1;
 
@@ -212,6 +224,16 @@ export function createMemoryStorage(): Storage {
 				if (value === null) recovery.delete(key);
 				else recovery.set(key, JSON.stringify(value));
 			},
+		},
+		master: {
+			get: (repo) => {
+				const r = masters.get(repo);
+				return r ? copy(r) : null;
+			},
+			put: (record) => {
+				masters.set(record.repo, copy(record));
+			},
+			listAll: () => [...masters.values()].map(copy),
 		},
 		transaction: (fn) => fn(),
 		close: () => {},

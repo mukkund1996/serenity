@@ -210,6 +210,31 @@ export function storageContract(name: string, open: () => Storage): void {
 			]);
 		});
 
+		test("master: put replaces a repo's record, get and listAll return copies", () => {
+			const record = {
+				repo: "/repos/demo",
+				claudeSessionId: "c1",
+				watches: [{ sessionId: "s1", note: "tell me", slack: null }],
+				released: ["api is done"],
+				outbox: [{ from: "you" as const, text: "hi" }],
+			};
+			expect(storage.master.get("/repos/demo")).toBeNull();
+			storage.master.put(record);
+			storage.master.put({ ...record, repo: "/repos/other", outbox: [] });
+			const got = storage.master.get("/repos/demo");
+			expect(got).toEqual(record);
+			got?.outbox.push({ from: "serenity", text: "x" });
+			expect(storage.master.get("/repos/demo")).toEqual(record);
+			storage.master.put({ ...record, claudeSessionId: null, outbox: [] });
+			expect(storage.master.get("/repos/demo")?.claudeSessionId).toBeNull();
+			expect(
+				storage.master
+					.listAll()
+					.map((r) => r.repo)
+					.sort(),
+			).toEqual(["/repos/demo", "/repos/other"]);
+		});
+
 		test("slack dismissals: add once per message, list oldest first", () => {
 			storage.slackDismissals.add({ channelId: "C1", ts: "2.0", at: 20 });
 			storage.slackDismissals.add({ channelId: "C1", ts: "1.0", at: 10 });

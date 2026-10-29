@@ -321,6 +321,7 @@ export class Daemon {
 			this.server?.listen(path, resolve);
 		});
 		this.observer.start();
+		this.master.start();
 		this.log(`serenityd ${BUILD_ID} listening on ${path} (pid ${process.pid})`);
 	}
 
