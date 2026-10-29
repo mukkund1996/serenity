@@ -7,6 +7,7 @@ import {
 	fieldWindow,
 	insertText,
 	isNewlineKey,
+	isTyping,
 	splitAtNewline,
 } from "../src/text-input";
 
@@ -222,5 +223,23 @@ describe("fieldWindow", () => {
 
 	test("line breaks show as ↵", () => {
 		expect(win("a\nb|", 10)).toBe("a↵b█");
+	});
+});
+
+describe("isTyping", () => {
+	const none = { master: null, reply: null, search: null, dialog: false };
+
+	test("an open field that holds text is typing", () => {
+		expect(isTyping({ ...none, master: fieldAt("move it") })).toBe(true);
+		expect(isTyping({ ...none, reply: fieldAt("y") })).toBe(true);
+		expect(isTyping({ ...none, search: "auth" })).toBe(true);
+		// New session and Rename always hold text.
+		expect(isTyping({ ...none, dialog: true })).toBe(true);
+	});
+
+	test("closed or empty fields are not: a sent message clears the input", () => {
+		expect(isTyping(none)).toBe(false);
+		expect(isTyping({ ...none, master: fieldAt("") })).toBe(false);
+		expect(isTyping({ ...none, reply: fieldAt(""), search: "" })).toBe(false);
 	});
 });

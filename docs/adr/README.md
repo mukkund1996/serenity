@@ -12,7 +12,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0004](0004-sessions-in-tmux-panes.md) | Claude Code sessions run in tmux panes | Accepted |
 | [0005](0005-daemon-and-json-rpc.md) | Background daemon, JSON-RPC over a unix socket, scoped per repo | Amended by 0043, 0045 |
 | [0006](0006-status-from-hooks.md) | Session status from Claude Code hooks, plus an exit report | Amended by 0044 |
-| [0007](0007-master-roles-and-models.md) | Master = Opus stream + Haiku/Sonnet one-shot workers via the claude CLI | Amended by 0046 |
+| [0007](0007-master-roles-and-models.md) | Master = Opus stream + Haiku/Sonnet one-shot workers via the claude CLI | Amended by 0046, 0047 |
 | [0008](0008-master-proposes-via-mcp.md) | Master only proposes; MCP tools for the Opus chat only | Amended by 0046 |
 | [0009](0009-storage-interface-sqlite.md) | SQLite behind a swappable storage interface | Accepted |
 | [0010](0010-worktrees-beside-repo.md) | New worktrees live beside the repo | Accepted |
@@ -24,7 +24,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0016](0016-importing-running-sessions.md) | Importing Claude sessions already running in tmux | Accepted |
 | [0017](0017-topics-zoom-shows-every-topic.md) | The topics zoom shows every topic; "topic" replaces "category" | Accepted |
 | [0018](0018-map-zoom-and-navigation.md) | Map zoom layout; `z` `Z` `Esc` `c` `/` `r` | Accepted |
-| [0019](0019-topic-focus-shelves-and-topic-cap.md) | WASD between topics on the map; `z` out, `Z` in; shelves in the topics zoom; at most 10 topics; roomier master and cards | Accepted |
+| [0019](0019-topic-focus-shelves-and-topic-cap.md) | WASD between topics on the map; `z` out, `Z` in; shelves in the topics zoom; at most 10 topics; roomier master and cards | Amended by 0047 |
 | [0020](0020-usage-bar.md) | Usage bar in the header: session and weekly plan limits from the status line, average wait on you | Accepted |
 | [0021](0021-z-into-session-counts-in-header.md) | `Z` on a card attaches; session counts in the header, no SESSIONS section; roomier topics zoom | Accepted |
 | [0022](0022-pinned-sessions.md) | `p` pins a session for reuse: a `pinned` topic, never done or cleaned up, resumed on attach | Amended by 0044 |
@@ -52,6 +52,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0044](0044-claude-restarts-in-its-pane.md) | Any claude exit serenity did not cause restarts it in the same pane with `--resume`, backing off 1–16 s; a sixth exit in 10 min, or one before it started, leaves the session dead with the reason | Accepted |
 | [0045](0045-daemon-supervisor-crash-reports-recovery.md) | A supervisor restarts the daemon, crashes become deduped GitHub issues, and state survives a restart | Accepted |
 | [0046](0046-master-survives-crashes-hangs-and-restarts.md) | The master survives crashes, hangs and daemon restarts: an outbox per repo, a 5-minute watchdog, restart with `--resume` and re-send, its state in SQLite, tools that answer within 2 minutes | Accepted |
+| [0047](0047-finer-topics-moves-wait.md) | Finer topics: named for a feature or area, a new one for clearly distinct work; near-duplicate names join their topic; a topic move waits while the session works or the user types; `set_topic` stays immediate | Accepted |
 
 ## System at a glance
 

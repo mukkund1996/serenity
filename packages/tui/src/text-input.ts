@@ -41,6 +41,25 @@ export function fieldAt(text: string): Field {
 	return { text, cursor: [...text].length };
 }
 
+/**
+ * Whether the user is typing on the map (ADR 0047): a text field is open,
+ * which gives it the keys, and holds text. The New session and Rename
+ * dialogs always hold some (the working dir, the name), so open is typing.
+ */
+export function isTyping(fields: {
+	master: Field | null;
+	reply: Field | null;
+	search: string | null;
+	dialog: boolean;
+}): boolean {
+	return (
+		fields.dialog ||
+		!!fields.master?.text ||
+		!!fields.reply?.text ||
+		!!fields.search
+	);
+}
+
 /** The keys editField reads, as Ink reports them. */
 export interface EditKey {
 	leftArrow: boolean;

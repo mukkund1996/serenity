@@ -82,6 +82,7 @@ import {
 	fieldAt,
 	insertText,
 	isNewlineKey,
+	isTyping,
 	splitAtNewline,
 } from "./text-input";
 import { askLine } from "./theme";
@@ -610,6 +611,18 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		if (!newer) return;
 		setChatEnd(newer === 1 ? null : (conversation[end]?.id ?? null));
 	};
+
+	// Topic moves wait while the user types (ADR 0047). Sent again on reconnect.
+	const typing = isTyping({
+		master: masterField,
+		reply,
+		search: search?.query ?? null,
+		dialog: overlay?.kind === "new" || overlay?.kind === "rename",
+	});
+	useEffect(() => {
+		if (link !== "connected") return;
+		call("map.typing", { repo, typing }).catch(() => {});
+	}, [typing, link, call, repo]);
 
 	useEffect(() => {
 		if (!notice) return;

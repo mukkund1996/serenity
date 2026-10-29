@@ -4,6 +4,7 @@ import {
 	applySummary,
 	capTopic,
 	chatSnapshot,
+	heldTopic,
 	MASTER_SLACK_PROMPT,
 	MASTER_SYSTEM_PROMPT,
 	needsSuggestion,
@@ -50,6 +51,43 @@ describe("topics", () => {
 		});
 		expect(nextTopic(backend, null)).toEqual(backend);
 	});
+
+	test("a move is held while it works or the user types, then counts as its topic", () => {
+		const backend = { topic: "backend", topicCandidate: null, topicHeld: null };
+		// The first proposal only becomes a candidate, held or not.
+		expect(heldTopic(backend, "infra", true)).toEqual({
+			topic: "backend",
+			topicCandidate: "infra",
+			topicHeld: null,
+		});
+		const settled = { ...backend, topicCandidate: "infra" };
+		expect(heldTopic(settled, "infra", false)).toEqual({
+			topic: "infra",
+			topicCandidate: null,
+			topicHeld: null,
+		});
+		const held = heldTopic(settled, "infra", true);
+		expect(held).toEqual({
+			topic: "backend",
+			topicCandidate: null,
+			topicHeld: "infra",
+		});
+		// Proposed again while held, it stays held; it needs no new candidate.
+		expect(heldTopic(held, "infra", true)).toEqual(held);
+		expect(heldTopic(held, null, true)).toEqual(held);
+		// Back to where it is: nothing is held any more.
+		expect(
+			heldTopic({ ...held, topicCandidate: "backend" }, "backend", true),
+		).toEqual(backend);
+		// A session with no topic yet waits for its first one too.
+		expect(
+			heldTopic(
+				{ topic: null, topicCandidate: null, topicHeld: null },
+				"web",
+				true,
+			),
+		).toEqual({ topic: null, topicCandidate: null, topicHeld: "web" });
+	});
 });
 
 describe("summaries", () => {
@@ -65,7 +103,34 @@ describe("summaries", () => {
 		expect(prompt).toContain("rotate tokens");
 		expect(prompt).toContain("Done.");
 		expect(prompt).toContain("backend, infra");
-		expect(prompt).toContain("Strongly prefer an existing topic");
+	});
+
+	test("the prompt asks for a narrow topic and a new one for distinct work", () => {
+		const prompt = summaryPrompt(makeSession(), ["backend", "infra"], 10);
+		expect(prompt).toContain("feature or area of the code");
+		expect(prompt).toContain("not a broad theme");
+		expect(prompt).toContain(
+			"create a new topic instead of stretching a broad one",
+		);
+		expect(prompt).toContain("Never create a variant of an existing topic");
+		expect(prompt).toContain("8 new topics are left.");
+		expect(prompt).not.toContain("Strongly prefer");
+		expect(summaryPrompt(makeSession(), ["a", "b"], 3)).toContain(
+			"1 new topic is left, so keep them for clearly distinct work.",
+		);
+	});
+
+	test("a near-duplicate topic name joins the existing topic", () => {
+		const topics = ["master agent", "pr-status", "slack"];
+		expect(capTopic("master agents", topics, 10)).toBe("master agent");
+		expect(capTopic("agent master", topics, 10)).toBe("master agent");
+		expect(capTopic("pr status", topics, 10)).toBe("pr-status");
+		expect(capTopic("slacks", topics, 10)).toBe("slack");
+		// A word ending in "ss" is not a plural.
+		expect(capTopic("access", ["acces"], 10)).toBe("access");
+		// At the cap, a near-duplicate still lands in its topic.
+		expect(capTopic("master agents", topics, 3)).toBe("master agent");
+		expect(capTopic("master chat", topics, 10)).toBe("master chat");
 	});
 
 	test("the topic cap: reuse below it is free, a new topic past it is dropped", () => {
@@ -75,9 +140,12 @@ describe("summaries", () => {
 		expect(capTopic("infra", topics, 2)).toBe("infra");
 		// Only the user's pin puts a session there.
 		expect(capTopic("pinned", topics, 3)).toBeNull();
-		expect(summarySchema(topics, 3).properties.topic).toEqual({
+		expect(summarySchema(topics, 3).properties.topic).toMatchObject({
 			type: "string",
 		});
+		expect(summarySchema(topics, 3).properties.topic).not.toHaveProperty(
+			"enum",
+		);
 		expect(summarySchema(topics, 2).properties.topic).toEqual({
 			type: "string",
 			enum: topics,
@@ -143,6 +211,21 @@ describe("summaries", () => {
 		});
 		expect(working.status).toBeUndefined();
 		expect(working.summary).toBe("s");
+	});
+
+	test("a topic move waits while the session works or the user types", () => {
+		const result = { summary: "s", ask: null, finished: false, topic: "infra" };
+		const settled = { topic: "backend", topicCandidate: "infra" };
+		expect(
+			applySummary(makeSession({ ...settled, status: "working" }), result),
+		).toMatchObject({ topic: "backend", topicHeld: "infra" });
+		expect(
+			applySummary(makeSession({ ...settled, status: "idle" }), result, true),
+		).toMatchObject({ topic: "backend", topicHeld: "infra" });
+		for (const status of ["idle", "waiting", "done"] as const)
+			expect(
+				applySummary(makeSession({ ...settled, status }), result),
+			).toMatchObject({ topic: "infra", topicHeld: null });
 	});
 });
 

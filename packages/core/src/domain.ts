@@ -63,6 +63,11 @@ export interface Session {
 	waitingSince: number | null;
 	/** A different topic the summarizer proposed once; adopted if proposed again. */
 	topicCandidate: string | null;
+	/**
+	 * A topic move the summarizer settled on, held while the session works
+	 * or the user types on the map; applied once neither is true (ADR 0047).
+	 */
+	topicHeld: string | null;
 	lastPrompt: string | null;
 	lastAssistantMessage: string | null;
 	/**

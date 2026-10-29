@@ -55,9 +55,23 @@ export function nextTopic(
 }
 
 /**
- * A topic proposal under the cap: an existing topic, or a new one while
- * there are fewer than `maxTopics`. Anything else is dropped (null), as is
- * the pinned topic, which only the user's pin puts a session in.
+ * What makes two topic names the same topic: their words, singular, in any
+ * order, whatever joins them. "master agents" and "agent-master" match.
+ */
+function topicKey(name: string): string {
+	return name
+		.split(/[ _-]+/)
+		.filter(Boolean)
+		.map((w) => (w.length > 3 && /[^s]s$/.test(w) ? w.slice(0, -1) : w))
+		.sort()
+		.join(" ");
+}
+
+/**
+ * A topic proposal under the cap: an existing topic (a near-duplicate name
+ * becomes the existing one), or a new one while there are fewer than
+ * `maxTopics`. Anything else is dropped (null), as is the pinned topic,
+ * which only the user's pin puts a session in.
  */
 export function capTopic(
 	proposed: string | null,
@@ -66,7 +80,36 @@ export function capTopic(
 ): string | null {
 	if (proposed === PINNED) return null;
 	if (!proposed || topics.includes(proposed)) return proposed;
+	const same = topics.find((t) => topicKey(t) === topicKey(proposed));
+	if (same) return same;
 	return topics.length < maxTopics ? proposed : null;
+}
+
+/**
+ * The next topic fields after a summary (ADR 0047). The sticky rule decides
+ * where the session belongs, counting a held move as its topic; while
+ * `hold` (it works, or the user types) a move is held instead of made.
+ */
+export function heldTopic(
+	session: Pick<Session, "topic" | "topicCandidate" | "topicHeld">,
+	proposed: string | null,
+	hold: boolean,
+): Pick<Session, "topic" | "topicCandidate" | "topicHeld"> {
+	const next = nextTopic(
+		{
+			topic: session.topicHeld ?? session.topic,
+			topicCandidate: session.topicCandidate,
+		},
+		proposed,
+	);
+	if (next.topic === session.topic) return { ...next, topicHeld: null };
+	if (hold)
+		return {
+			topic: session.topic,
+			topicCandidate: next.topicCandidate,
+			topicHeld: next.topic,
+		};
+	return { ...next, topicHeld: null };
 }
 
 // ---------------------------------------------------------------- summarizer
@@ -85,7 +128,11 @@ export function summarySchema(topics: string[], maxTopics: number) {
 			topic:
 				topics.length >= maxTopics
 					? { type: "string", enum: topics }
-					: { type: "string" },
+					: {
+							type: "string",
+							description:
+								"The feature or area of the code this work is about, 1–2 lowercase words.",
+						},
 		},
 		required: ["summary", "ask", "finished", "topic"],
 		additionalProperties: false,
@@ -105,6 +152,7 @@ export function summaryPrompt(
 	maxTopics: number,
 ): string {
 	const full = topics.length >= maxTopics;
+	const left = maxTopics - topics.length;
 	return [
 		"You keep a dashboard of coding-agent sessions and describe one session for its card.",
 		"",
@@ -119,7 +167,12 @@ export function summaryPrompt(
 		"- finished: true only if the reply says the task is complete and nothing is asked.",
 		full
 			? `- topic: one of the existing topics, the closest fit. There are already ${maxTopics}, the most allowed.`
-			: `- topic: a short lowercase name of 1–2 words for grouping sessions. Strongly prefer an existing topic, even a loose fit: a broad topic with many sessions beats a new one. Create a new topic only when no existing one is related at all. At most ${maxTopics} topics in total.`,
+			: [
+					`- topic: a short lowercase name of 1–2 words, at most ${TOPIC_MAX} characters, naming the feature or area of the code this work is about (like "pr status" or "slack replies"), not a broad theme (like "robustness" or "improvements").`,
+					"  Reuse an existing topic when this work is on the same feature or area as it. When the work is clearly distinct, create a new topic instead of stretching a broad one: a loose fit is not a fit.",
+					"  Never create a variant of an existing topic (a plural, a synonym, the same words reordered): use that topic.",
+					`  At most ${maxTopics} topics in total; ${left === 1 ? "1 new topic is" : `${left} new topics are`} left${left <= 2 ? ", so keep them for clearly distinct work" : ""}.`,
+				].join("\n"),
 	].join("\n");
 }
 
@@ -142,14 +195,17 @@ export function parseSummary(raw: unknown): SummaryResult | null {
  * a finished task is done. Only applied to a session that is still idle, so
  * a summary arriving late never overrides newer activity. A pinned session
  * keeps its topic for when it is unpinned, and is never done (ADR 0022).
+ * A topic move waits while the session works or the user types (ADR 0047).
  */
 export function applySummary(
 	session: Session,
 	result: SummaryResult,
+	typing = false,
 ): Partial<Session> {
+	const hold = typing || session.status === "working";
 	const patch: Partial<Session> = {
 		summary: result.summary,
-		...(session.pinned ? {} : nextTopic(session, result.topic)),
+		...(session.pinned ? {} : heldTopic(session, result.topic, hold)),
 	};
 	if (session.status !== "idle") return patch;
 	if (result.ask) {

@@ -59,6 +59,7 @@ test("older sessions read back with the new fields, category as topic", async ()
 		waitingOn: null,
 		topic: "backend",
 		topicCandidate: null,
+		topicHeld: null,
 	});
 	expect(second.sessions.get("old")).not.toHaveProperty("category");
 	second.close();

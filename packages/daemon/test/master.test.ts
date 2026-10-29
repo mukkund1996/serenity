@@ -214,6 +214,113 @@ describe("summaries", () => {
 		expect(storage.sessions.get("a")?.topic).toBeNull();
 	});
 
+	describe("topic moves wait (ADR 0047)", () => {
+		const summary = (topic: string) => ({
+			summary: "s",
+			ask: null,
+			finished: false,
+			topic,
+		});
+
+		test("a move settled while the session works waits until it stops", async () => {
+			put({ id: "t", name: "other", topic: "infra" });
+			put({ id: "a", topic: "backend", topicCandidate: "infra" });
+			runner.answers.push(summary("infra"));
+			change("a", { status: "working", lastAssistantMessage: "progress" });
+			await settle();
+			expect(storage.sessions.get("a")).toMatchObject({
+				topic: "backend",
+				topicHeld: "infra",
+			});
+			change("a", { status: "idle" });
+			await settle();
+			expect(storage.sessions.get("a")).toMatchObject({
+				topic: "infra",
+				topicHeld: null,
+			});
+		});
+
+		test("a move waits while the user types, and goes through when they stop", async () => {
+			put({ id: "a", topic: "backend", topicCandidate: "infra" });
+			master.setTyping(REPO, true);
+			runner.answers.push(summary("infra"));
+			change("a", { status: "idle", lastAssistantMessage: "x" });
+			await settle();
+			expect(storage.sessions.get("a")).toMatchObject({
+				topic: "backend",
+				topicHeld: "infra",
+			});
+			// Stopping work is not enough while the user still types.
+			change("a", { status: "waiting" });
+			await settle();
+			expect(storage.sessions.get("a")?.topic).toBe("backend");
+			master.setTyping(REPO, false);
+			expect(storage.sessions.get("a")).toMatchObject({
+				topic: "infra",
+				topicHeld: null,
+			});
+		});
+
+		test("typing stops while it still works: the move waits for the work", async () => {
+			put({ id: "a", status: "working", topic: "backend", topicHeld: "infra" });
+			master.setTyping(REPO, true);
+			master.setTyping(REPO, false);
+			expect(storage.sessions.get("a")?.topic).toBe("backend");
+			change("a", { status: "done" });
+			await settle();
+			expect(storage.sessions.get("a")?.topic).toBe("infra");
+		});
+
+		test("a held new topic is dropped if the cap filled up meanwhile", async () => {
+			put({ id: "t1", name: "one", topic: "backend" });
+			put({ id: "t2", name: "two", topic: "infra" });
+			put({ id: "t3", name: "three", topic: "docs" });
+			put({ id: "a", status: "working", topic: "backend", topicHeld: "web" });
+			change("a", { status: "idle" });
+			await settle();
+			expect(storage.sessions.get("a")).toMatchObject({
+				topic: "backend",
+				topicHeld: null,
+			});
+		});
+
+		test("set_topic and create_session move at once, while working or typing", async () => {
+			put({
+				id: "a",
+				name: "api-auth",
+				status: "working",
+				topic: "backend",
+				topicHeld: "infra",
+			});
+			master.setTyping(REPO, true);
+			await master.handleTool(REPO, "set_topic", {
+				session: "api-auth",
+				topic: "docs",
+			});
+			expect(storage.sessions.get("a")).toMatchObject({
+				topic: "docs",
+				topicHeld: null,
+			});
+			await master.handleTool(REPO, "create_session", {
+				name: "fresh",
+				prompt: "go",
+				topic: "docs",
+			});
+			expect(storage.sessions.get("new-fresh")?.topic).toBe("docs");
+		});
+	});
+
+	test("a near-duplicate topic name joins the existing topic", async () => {
+		put({ id: "t", name: "other", topic: "master agent" });
+		put({ id: "a", name: "api-auth", topic: "backend" });
+		const result = await master.handleTool(REPO, "set_topic", {
+			session: "api-auth",
+			topic: "Master Agents",
+		});
+		expect(result.text).toBe("Moved api-auth to master agent.");
+		expect(storage.sessions.get("a")?.topic).toBe("master agent");
+	});
+
 	test("a failing worker is recorded as the master's error, then cleared by a success", async () => {
 		put({ id: "a", status: "working" });
 		change("a", { status: "idle", lastAssistantMessage: "x" });
