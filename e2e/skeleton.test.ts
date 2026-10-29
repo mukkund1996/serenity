@@ -372,6 +372,34 @@ test(
 	STEP_TIMEOUT,
 );
 
+test(
+	"the Ctrl+g command still detaches after the daemon restarted while attached",
+	async () => {
+		keys("Enter");
+		await until(
+			() => panesInMap().length === 2,
+			"the agent pane to join the map window",
+		);
+		const agentPane = panesInMap()[1] as string;
+		spawnSync(process.execPath, [MAIN, "stop"], {
+			env: { ...process.env, ...env },
+		});
+		// The map starts a fresh daemon, which has no record of the attach.
+		await until(
+			() => {
+				spawnSync(process.execPath, [MAIN, "detach", agentPane], {
+					env: { ...process.env, ...env },
+				});
+				return panesInMap().length === 1;
+			},
+			"the agent pane to be parked again",
+			15_000,
+		);
+		await waitFor(/zoom: topics/);
+	},
+	STEP_TIMEOUT,
+);
+
 /** Sends keys one at a time, so each reaches the TUI as a key of its own. */
 function press(...k: string[]): void {
 	for (const key of k) {
