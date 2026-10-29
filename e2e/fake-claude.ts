@@ -11,7 +11,8 @@
  *   "crash"           → exit 3 with no hook, like a crash
  *   "exit"            → SessionEnd, then exit
  *   In a folder whose name ends in "-untrusted" it first asks to trust the
- *   folder and fires no hooks until the answer is "y".
+ *   folder and fires no hooks until the answer is "y"; a resumed session
+ *   does not ask again.
  *   Like Claude Code, with CLAUDE_CONFIG_DIR set and inside tmux it keeps
  *   `sessions/<pid>.json` (status, pane) and a transcript current, which is
  *   what serenity reads for sessions it adopted (ADR 0016). `--resume <id>`
@@ -196,7 +197,8 @@ async function interactive(): Promise<void> {
 	const settings = settingsPath
 		? JSON.parse(readFileSync(settingsPath, "utf8"))
 		: { hooks: {} };
-	const sessionId = flag("--resume") ?? `fake-${process.pid}`;
+	const resumed = flag("--resume");
+	const sessionId = resumed ?? `fake-${process.pid}`;
 	const registry = claudeRegistry(sessionId);
 
 	const fire = (event: string, extra: Record<string, unknown> = {}) => {
@@ -232,16 +234,15 @@ async function interactive(): Promise<void> {
 		});
 	};
 
-	let state: "trust" | "ready" | "permission" = process
-		.cwd()
-		.endsWith("-untrusted")
-		? "trust"
-		: "ready";
+	let state: "trust" | "ready" | "permission" =
+		process.cwd().endsWith("-untrusted") && !resumed ? "trust" : "ready";
 	const start = () => {
 		state = "ready";
 		registry.status("idle");
-		fire("SessionStart", { source: "startup" });
-		process.stdout.write("fake claude ready\r\n> ");
+		fire("SessionStart", { source: resumed ? "resume" : "startup" });
+		process.stdout.write(
+			`fake claude ready${resumed ? ` · resumed ${resumed}` : ""}\r\n> `,
+		);
 	};
 	if (state === "trust")
 		process.stdout.write("Do you trust this folder? (y/n) ");

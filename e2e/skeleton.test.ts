@@ -85,7 +85,24 @@ function typeInAgent(name: string, text: string): void {
 	tmux("send-keys", "-t", `serenity-demo:${name}`, "Enter");
 }
 
-const endedCards = () => (screen().match(/Session ended\./g) ?? []).length;
+const endedCards = () => (screen().match(/Session ended\b/g) ?? []).length;
+
+/** One format of an agent's pane, e.g. its pane id or the pid running in it. */
+const paneFormat = (name: string, format: string) =>
+	tmux("display-message", "-p", "-t", `serenity-demo:${name}`, format).trim();
+
+/** Crashes an agent's claude and waits for serenity to start it again in the same pane. */
+async function crashAndWaitForRestart(name: string): Promise<void> {
+	const pid = paneFormat(name, "#{pane_pid}");
+	typeInAgent(name, "crash");
+	await until(
+		() =>
+			paneFormat(name, "#{pane_pid}") !== pid &&
+			paneFormat(name, "#{pane_dead}") === "0",
+		`${name} to restart`,
+	);
+	await waitFor(/resumed fake-/, `serenity-demo:${name}`);
+}
 
 async function newSession(name: string): Promise<void> {
 	// N, not n: n declines a suggestion on the focused node (ADR 0012).
@@ -199,6 +216,7 @@ beforeAll(() => {
 		SERENITY_CLAUDE_BIN: FAKE,
 		SERENITY_SELF: JSON.stringify([process.execPath, MAIN]),
 		SERENITY_STARTUP_GRACE_MS: "300",
+		SERENITY_RESPAWN_BASE_MS: "100",
 		SERENITY_WORKER_DEBOUNCE_MS: "100",
 		SERENITY_GH_BIN: FAKE_GH,
 		SERENITY_FAKE_GH_DIR: ghDir(),
@@ -622,21 +640,49 @@ test(
 );
 
 test(
-	"a crash with no SessionEnd hook is shown as ended",
+	"a crash restarts claude in the same pane, resuming its conversation",
 	async () => {
-		typeInAgent("a-untrusted", "crash");
-		await until(() => endedCards() === 2, "a-untrusted to show as ended");
+		const pane = paneFormat("a-untrusted", "#{pane_id}");
+		await crashAndWaitForRestart("a-untrusted");
+		expect(paneFormat("a-untrusted", "#{pane_id}")).toBe(pane);
+		await waitFor(/Claude exited \(code 3\); restarted/);
+		expect(endedCards()).toBe(1);
 	},
 	STEP_TIMEOUT,
 );
 
 test(
-	"an agent that exits normally is shown as ended",
+	"an agent that exits normally is restarted too",
 	async () => {
+		const pid = paneFormat("api-auth", "#{pane_pid}");
 		typeInAgent("api-auth", "exit");
-		await until(() => endedCards() === 3, "api-auth to show as ended");
+		await until(
+			() => paneFormat("api-auth", "#{pane_pid}") !== pid,
+			"api-auth to restart",
+		);
+		await waitFor(/resumed fake-/, "serenity-demo:api-auth");
+		expect(endedCards()).toBe(1);
 	},
 	STEP_TIMEOUT,
+);
+
+test(
+	"a claude that keeps exiting is left ended, saying why",
+	async () => {
+		// One restart already; four more are allowed in the window.
+		for (let i = 0; i < 4; i++) await crashAndWaitForRestart("a-untrusted");
+		typeInAgent("a-untrusted", "crash");
+		await until(() => endedCards() === 2, "a-untrusted to show as ended");
+		await waitFor(/exited 6 times in 10 min/);
+		await until(
+			() =>
+				!tmux("list-windows", "-t", "=serenity-demo", "-F", "#{window_name}")
+					.split("\n")
+					.includes("a-untrusted"),
+			"the a-untrusted window to close",
+		);
+	},
+	STEP_TIMEOUT * 2,
 );
 
 test(

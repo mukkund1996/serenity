@@ -49,13 +49,16 @@ export function nameColor(status: SessionStatus): Color {
 export function cardText(session: Session): string {
 	const ended =
 		session.status === "dead"
-			? session.pinned
-				? "Ended. Enter resumes it."
-				: "Session ended."
+			? endedText(session)
 			: session.status === "archived"
 				? "Archived."
 				: null;
 	if (ended) return session.summary ? `${ended} ${session.summary}` : ended;
+	// A restart is news until the next prompt (ADR 0044).
+	if (session.exitNote)
+		return session.summary
+			? `${capitalize(session.exitNote)}. ${session.summary}`
+			: `${capitalize(session.exitNote)}.`;
 	if (session.summary) return session.summary;
 	if (session.status === "waiting" && session.ask) return session.ask;
 	if (session.status === "working" && session.lastPrompt)
@@ -64,10 +67,22 @@ export function cardText(session: Session): string {
 	return "New session. Press i to send a first prompt.";
 }
 
+/** A dead session's card line, with why claude was not restarted (ADR 0044). */
+export function endedText(session: Session): string {
+	if (session.pinned) return "Ended. Enter resumes it.";
+	return session.exitNote
+		? `Session ended: ${session.exitNote}.`
+		: "Session ended.";
+}
+
+const capitalize = (text: string) =>
+	text.charAt(0).toUpperCase() + text.slice(1);
+
 /** The one grey line under a session in the master's NEEDS YOU list. */
 export function askLine(session: Session): string {
 	if (session.status === "waiting") return session.ask ?? "needs you";
-	if (session.status === "dead") return "session ended";
+	if (session.status === "dead")
+		return session.exitNote ? `ended: ${session.exitNote}` : "session ended";
 	if (session.status === "done") return "finished";
 	return session.status;
 }

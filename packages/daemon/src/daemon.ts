@@ -15,12 +15,16 @@ import {
 	masterPluginPath,
 	type Params,
 	parseRateLimits,
+	RESPAWN_BASE_MS,
+	RESPAWN_WINDOW_MS,
 	type RepoState,
 	type Result,
 	RpcError,
 	RpcErrorCode,
 	RpcPeer,
 	reduceHook,
+	respawnDecision,
+	resumeArgs,
 	type Session,
 	SLACK_SERVER,
 	STARTUP_ASK,
@@ -90,6 +94,8 @@ export interface DaemonOptions {
 	claudeConfigDir?: string;
 	/** How often review requests are polled while a map is open; SERENITY_REVIEW_POLL_MS overrides it. */
 	reviewPollMs?: number;
+	/** The first restart's delay after claude exits; SERENITY_RESPAWN_BASE_MS overrides it (ADR 0044). */
+	respawnBaseMs?: number;
 	/** Repos whose map shows Slack; defaults to config (ADR 0023). */
 	slackRepos?: string[];
 	/** How often Slack is read while such a map is open; SERENITY_SLACK_POLL_MS overrides it. */
@@ -142,6 +148,9 @@ export class Daemon {
 	private readonly now: () => number;
 	private readonly log: (line: string) => void;
 	private readonly startupGraceMs: number;
+	private readonly respawnBaseMs: number;
+	/** session id → when its claude was restarted, within RESPAWN_WINDOW_MS (ADR 0044). */
+	private readonly respawns = new Map<string, number[]>();
 	private readonly timers = new Set<ReturnType<typeof setTimeout>>();
 	private readonly master: MasterSupervisor;
 	private readonly gh: Gh;
@@ -172,6 +181,9 @@ export class Daemon {
 		this.startupGraceMs =
 			opts.startupGraceMs ??
 			envNumber("SERENITY_STARTUP_GRACE_MS", DEFAULT_STARTUP_GRACE_MS);
+		this.respawnBaseMs =
+			opts.respawnBaseMs ??
+			envNumber("SERENITY_RESPAWN_BASE_MS", RESPAWN_BASE_MS);
 		this.log =
 			opts.log ??
 			((line) => console.log(`${new Date().toISOString()} ${line}`));
@@ -652,7 +664,7 @@ export class Daemon {
 			const session = this.opts.storage.sessions.get(sessionId);
 			if (!session) return null;
 			this.log(`${session.name} exited (code ${code ?? "unknown"})`);
-			this.markEnded(session);
+			this.onExit(session, code);
 			return null;
 		},
 
@@ -723,12 +735,116 @@ export class Daemon {
 		throw new RpcError(RpcErrorCode.InvalidParams, `${session.name} has ended`);
 	}
 
-	private markEnded(session: Session): void {
+	private markEnded(session: Session, exitNote?: string): void {
 		if (this.attached.get(session.repo)?.sessionId === session.id)
 			this.attached.delete(session.repo);
 		if (session.status !== "dead" && session.status !== "archived")
-			this.change(session, { status: "dead", ask: null, waitingOn: null });
+			this.change(session, {
+				status: "dead",
+				ask: null,
+				waitingOn: null,
+				subagents: [],
+				...(exitNote ? { exitNote } : {}),
+			});
 		this.broadcast(session.repo);
+	}
+
+	/**
+	 * Claude exited in a session's pane without serenity ending it: restart it
+	 * there, continuing the conversation, after a backoff; or, if it never
+	 * started or keeps exiting, end the session with the reason (ADR 0044).
+	 */
+	private onExit(session: Session, code: number | null): void {
+		const now = this.now();
+		const recent = (this.respawns.get(session.id) ?? []).filter(
+			(at) => now - at < RESPAWN_WINDOW_MS,
+		);
+		const decision = respawnDecision(
+			session,
+			code,
+			recent.length,
+			this.respawnBaseMs,
+		);
+		if (decision.kind === "ignore") return;
+		if (decision.kind === "end") {
+			this.respawns.delete(session.id);
+			this.log(`${session.name} ended: ${decision.reason}`);
+			this.markEnded(session, decision.reason);
+			// The pane stays after its command exits (remain-on-exit); close it.
+			if (session.tmuxPane)
+				void this.tmux.killPane(session.tmuxPane).catch(() => {});
+			return;
+		}
+		this.respawns.set(session.id, [...recent, now]);
+		this.change(session, {
+			status: "idle",
+			ask: null,
+			waitingOn: null,
+			subagents: [],
+			exitNote: decision.note,
+		});
+		this.broadcast(session.repo);
+		const timer = setTimeout(() => {
+			this.timers.delete(timer);
+			void this.respawn(session.id).catch((e: Error) => {
+				const current = this.opts.storage.sessions.get(session.id);
+				if (current)
+					this.markEnded(current, `claude could not restart: ${e.message}`);
+			});
+		}, decision.delayMs);
+		this.timers.add(timer);
+	}
+
+	private async respawn(sessionId: string): Promise<void> {
+		const session = this.opts.storage.sessions.get(sessionId);
+		// Archived or killed meanwhile: leave it.
+		if (!session || session.status === "archived" || session.status === "dead")
+			return;
+		if (!existsSync(session.cwd)) throw new Error(`${session.cwd} is gone`);
+		const pane = await this.launchAgent(session, resumeArgs(session));
+		this.change(session, { tmuxPane: pane });
+		this.log(`restarted ${session.name} (pane ${pane})`);
+		this.broadcast(session.repo);
+	}
+
+	/**
+	 * Runs claude with `args` under serenity's hooks for `session`: in its
+	 * pane if that is still there (an attached one stays attached), else in a
+	 * new window. The pane outlives claude (remain-on-exit), so a restart can
+	 * reuse it. Returns the pane id.
+	 */
+	private async launchAgent(
+		session: Session,
+		args: string[],
+		prompt?: string,
+	): Promise<string> {
+		const env = {
+			SERENITY_SESSION_ID: session.id,
+			SERENITY_HOME: this.opts.home,
+		};
+		const command = agentCommand(
+			[...this.claudeCommand, ...args],
+			hookSettingsPath(this.opts.home),
+			this.self,
+			prompt,
+		);
+		let pane = session.tmuxPane;
+		if (pane && (await this.tmux.paneExists(pane))) {
+			await this.tmux.respawnPane({ pane, cwd: session.cwd, env, command });
+		} else {
+			const tmuxSession = tmuxSessionName(session.repo);
+			await this.tmux.ensureSession(tmuxSession, session.repo);
+			pane = await this.tmux.newWindow({
+				session: tmuxSession,
+				name: session.name,
+				cwd: session.cwd,
+				env,
+				command,
+			});
+		}
+		await this.tmux.setPaneOption(pane, "@serenity_session", session.id);
+		await this.tmux.setPaneOption(pane, "remain-on-exit", "on");
+		return pane;
 	}
 
 	/** After the grace period, a session that never said hello is waiting on Claude's startup prompt. */
@@ -878,23 +994,11 @@ export class Daemon {
 				`${session.name} cannot resume: ${session.cwd} is gone`,
 			);
 		if (session.tracking === "observed") this.observer.forget(session.id);
-		const tmuxSession = tmuxSessionName(session.repo);
-		await this.tmux.ensureSession(tmuxSession, session.repo);
-		const resume = session.claudeSessionId
-			? ["--resume", session.claudeSessionId]
-			: [];
-		const pane = await this.tmux.newWindow({
-			session: tmuxSession,
-			name: session.name,
-			cwd: session.cwd,
-			env: { SERENITY_SESSION_ID: session.id, SERENITY_HOME: this.opts.home },
-			command: agentCommand(
-				[...this.claudeCommand, ...resume],
-				hookSettingsPath(this.opts.home),
-				this.self,
-			),
-		});
-		await this.tmux.setPaneOption(pane, "@serenity_session", session.id);
+		const pane = await this.launchAgent(
+			{ ...session, tmuxPane: null },
+			session.claudeSessionId ? ["--resume", session.claudeSessionId] : [],
+		);
+		this.respawns.delete(session.id);
 		const next = this.change(session, {
 			tmuxPane: pane,
 			origin: "spawned",
@@ -903,6 +1007,7 @@ export class Daemon {
 			status: "idle",
 			ask: null,
 			waitingOn: null,
+			exitNote: null,
 		});
 		this.watchStartup(session.id);
 		this.log(`resumed ${session.name} in ${session.cwd} (pane ${pane})`);
@@ -977,17 +1082,10 @@ export class Daemon {
 			);
 		this.observer.forget(fresh.id);
 		this.change(fresh, { tracking: "hooks", claudePid: null });
-		await this.tmux.respawnPane({
-			pane,
-			cwd: fresh.cwd,
-			env: { SERENITY_SESSION_ID: fresh.id, SERENITY_HOME: this.opts.home },
-			command: agentCommand(
-				[...this.claudeCommand, "--resume", fresh.claudeSessionId as string],
-				hookSettingsPath(this.opts.home),
-				this.self,
-			),
-		});
-		await this.tmux.setPaneOption(pane, "@serenity_session", fresh.id);
+		await this.launchAgent({ ...fresh, tmuxPane: pane }, [
+			"--resume",
+			fresh.claudeSessionId as string,
+		]);
 		this.log(`restarted ${fresh.name} under serenity's hooks`);
 		this.broadcast(fresh.repo);
 	}
@@ -1065,22 +1163,6 @@ export class Daemon {
 		}
 
 		const id = randomUUID();
-		const tmuxSession = tmuxSessionName(repo);
-		await this.tmux.ensureSession(tmuxSession, repo);
-		const pane = await this.tmux.newWindow({
-			session: tmuxSession,
-			name,
-			cwd,
-			env: { SERENITY_SESSION_ID: id, SERENITY_HOME: this.opts.home },
-			command: agentCommand(
-				this.claudeCommand,
-				hookSettingsPath(this.opts.home),
-				this.self,
-				params.prompt?.trim() || undefined,
-			),
-		});
-		await this.tmux.setPaneOption(pane, "@serenity_session", id);
-
 		const at = this.now();
 		const session: Session = {
 			id,
@@ -1093,7 +1175,7 @@ export class Daemon {
 			ownsBranch: mode === "worktree",
 			pr: null,
 			prError: null,
-			tmuxPane: pane,
+			tmuxPane: null,
 			origin: "spawned",
 			tracking: "hooks",
 			claudePid: null,
@@ -1110,12 +1192,18 @@ export class Daemon {
 			claudeSessionId: null,
 			watched: false,
 			pinned: false,
+			exitNote: null,
 			createdAt: at,
 			updatedAt: at,
 		};
+		session.tmuxPane = await this.launchAgent(
+			session,
+			[],
+			params.prompt?.trim() || undefined,
+		);
 		this.opts.storage.sessions.put(session);
 		this.watchStartup(id);
-		this.log(`created ${name} in ${cwd} (pane ${pane})`);
+		this.log(`created ${name} in ${cwd} (pane ${session.tmuxPane})`);
 		this.broadcast(repo);
 		return session;
 	}
