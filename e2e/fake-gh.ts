@@ -7,6 +7,10 @@
  *                                         adds the request to that PR's file
  *   gh pr list --search … --json …      → review-requests.json, or []
  *   gh api user --jq .login             → "me"
+ *   gh issue list --search '"<x>" in:title' → open issues in issues.json
+ *                                         whose title contains <x>
+ *   gh issue create --title … --body …  → appends to issues.json, prints its URL
+ *   gh issue comment <n> --body …       → appends to comments.json
  */
 import {
 	appendFileSync,
@@ -50,6 +54,51 @@ if (group === "pr" && command === "edit") {
 		pr.reviewRequests = [...(pr.reviewRequests ?? []), { login: reviewer }];
 		writeFileSync(join(dir, name), JSON.stringify(pr));
 	}
+	process.exit(0);
+}
+
+const flag = (name: string) => {
+	const args = process.argv.slice(2);
+	return args[args.indexOf(name) + 1] ?? "";
+};
+const readJson = (name: string) => {
+	const file = join(dir, name);
+	return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : [];
+};
+
+if (group === "issue" && command === "list") {
+	const needle = flag("--search").match(/"([^"]+)"/)?.[1] ?? "";
+	const issues = readJson("issues.json") as {
+		number: number;
+		title: string;
+		state: string;
+	}[];
+	const found = issues
+		.filter((i) => i.state === "open" && i.title.includes(needle))
+		.map(({ number, title }) => ({ number, title }));
+	process.stdout.write(JSON.stringify(found));
+	process.exit(0);
+}
+
+if (group === "issue" && command === "create") {
+	const issues = readJson("issues.json");
+	const number = issues.length + 1;
+	issues.push({
+		number,
+		repo: flag("--repo"),
+		title: flag("--title"),
+		body: flag("--body"),
+		state: "open",
+	});
+	writeFileSync(join(dir, "issues.json"), JSON.stringify(issues));
+	console.log(`https://github.com/${flag("--repo")}/issues/${number}`);
+	process.exit(0);
+}
+
+if (group === "issue" && command === "comment") {
+	const comments = readJson("comments.json");
+	comments.push({ issue: Number(target), body: flag("--body") });
+	writeFileSync(join(dir, "comments.json"), JSON.stringify(comments));
 	process.exit(0);
 }
 

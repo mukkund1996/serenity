@@ -5,6 +5,7 @@ import type {
 	MasterMessage,
 	Session,
 	Suggestion,
+	Usage,
 	Wait,
 } from "./domain";
 import { type SlackDismissal, slackMessageKey } from "./slack";
@@ -65,6 +66,37 @@ export interface SlackDismissalStore {
 	list(): SlackDismissal[];
 }
 
+/** A session joined beside a repo's map, or an adopted one its client was switched to. */
+export interface Attachment {
+	repo: string;
+	sessionId: string;
+	clientPane: string;
+	/** For an adopted session: the tmux client switched to it. */
+	clientTty?: string;
+}
+
+/**
+ * What the daemon would otherwise hold only in memory, kept so a restart
+ * after a crash picks up where it left off (ADR 0043).
+ */
+export interface RecoveryState {
+	/** The latest plan usage report (ADR 0020). */
+	usage: Usage;
+	/** Sessions attached beside a map, one per repo. */
+	attached: Attachment[];
+	/** `session:pr` pairs already offered a reviewer, so a decline sticks. */
+	offeredReviews: string[];
+}
+
+export interface RecoveryStore {
+	get<K extends keyof RecoveryState>(key: K): RecoveryState[K] | null;
+	/** Replaces the value; null removes it. */
+	set<K extends keyof RecoveryState>(
+		key: K,
+		value: RecoveryState[K] | null,
+	): void;
+}
+
 export interface Storage {
 	readonly sessions: SessionStore;
 	readonly events: EventStore;
@@ -73,6 +105,8 @@ export interface Storage {
 	readonly waits: WaitStore;
 	/** Slack messages dismissed from NEEDS YOU; per account, not per repo (ADR 0034). */
 	readonly slackDismissals: SlackDismissalStore;
+	/** In-memory daemon state that must survive a restart (ADR 0043). */
+	readonly recovery: RecoveryStore;
 	/** Runs `fn` atomically; nested calls join the outer transaction. */
 	transaction<T>(fn: () => T): T;
 	close(): void;
@@ -85,6 +119,7 @@ export function createMemoryStorage(): Storage {
 	const messages: MasterMessage[] = [];
 	const waits: Wait[] = [];
 	const dismissals = new Map<string, SlackDismissal>();
+	const recovery = new Map<string, string>();
 	let nextEventId = 1;
 	let nextMessageId = 1;
 
@@ -167,6 +202,16 @@ export function createMemoryStorage(): Storage {
 				[...dismissals.values()]
 					.sort((a, b) => a.at - b.at)
 					.map((d) => ({ ...d })),
+		},
+		recovery: {
+			get: (key) => {
+				const value = recovery.get(key);
+				return value === undefined ? null : JSON.parse(value);
+			},
+			set: (key, value) => {
+				if (value === null) recovery.delete(key);
+				else recovery.set(key, JSON.stringify(value));
+			},
 		},
 		transaction: (fn) => fn(),
 		close: () => {},

@@ -18,6 +18,12 @@ export interface Config {
 		/** The MCP server entry for Slack, as `--mcp-config` takes it. */
 		mcp: Record<string, unknown>;
 	};
+	/** Crash reports filed as GitHub issues (ADR 0043); off until the user turns them on. */
+	crashReports: {
+		enabled: boolean;
+		/** `owner/name` the issues go to. */
+		repo: string;
+	};
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -25,7 +31,10 @@ export const DEFAULT_CONFIG: Config = {
 	reviewers: [],
 	maxTopics: 10,
 	slack: { repos: [], mcp: DEFAULT_SLACK_MCP },
+	crashReports: { enabled: false, repo: "mukkund1996/serenity" },
 };
+
+const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
 
 /** Repos are named by their real path, as `git rev-parse --show-toplevel` gives it. */
 function realPath(path: string): string {
@@ -49,6 +58,7 @@ export function loadConfig(path = configPath()): Config {
 		reviewers?: unknown;
 		maxTopics?: unknown;
 		slack?: { repos?: unknown; mcp?: unknown };
+		crashReports?: { enabled?: unknown; repo?: unknown };
 	};
 	try {
 		raw = JSON.parse(readFileSync(path, "utf8"));
@@ -83,6 +93,14 @@ export function loadConfig(path = configPath()): Config {
 				raw.slack?.mcp && typeof raw.slack.mcp === "object"
 					? (raw.slack.mcp as Record<string, unknown>)
 					: DEFAULT_CONFIG.slack.mcp,
+		},
+		crashReports: {
+			enabled: raw.crashReports?.enabled === true,
+			repo:
+				typeof raw.crashReports?.repo === "string" &&
+				REPO_PATTERN.test(raw.crashReports.repo.trim())
+					? raw.crashReports.repo.trim()
+					: DEFAULT_CONFIG.crashReports.repo,
 		},
 	};
 }

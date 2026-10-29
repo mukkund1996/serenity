@@ -123,6 +123,68 @@ export class Gh {
 				`gh could not request ${reviewer}: ${firstLine(out.stderr)}`,
 			);
 	}
+
+	/** The open issue in `repo` whose title contains `needle`, or null (ADR 0043). */
+	async findOpenIssue(
+		cwd: string,
+		repo: string,
+		needle: string,
+	): Promise<number | null> {
+		const out = await this.run(
+			[
+				"issue",
+				"list",
+				"--repo",
+				repo,
+				"--state",
+				"open",
+				"--search",
+				`"${needle}" in:title`,
+				"--limit",
+				"10",
+				"--json",
+				"number,title",
+			],
+			cwd,
+		);
+		if (!out.ok) throw new Error(`gh issue list: ${firstLine(out.stderr)}`);
+		const issues = JSON.parse(out.stdout) as {
+			number: number;
+			title: string;
+		}[];
+		return issues.find((i) => i.title.includes(needle))?.number ?? null;
+	}
+
+	/** Files an issue; returns its number. */
+	async createIssue(
+		cwd: string,
+		repo: string,
+		title: string,
+		body: string,
+	): Promise<number> {
+		const out = await this.run(
+			["issue", "create", "--repo", repo, "--title", title, "--body", body],
+			cwd,
+		);
+		if (!out.ok) throw new Error(`gh issue create: ${firstLine(out.stderr)}`);
+		const number = Number(out.stdout.trim().match(/\/issues\/(\d+)/)?.[1]);
+		if (!Number.isInteger(number))
+			throw new Error(`gh issue create: unreadable output ${out.stdout}`);
+		return number;
+	}
+
+	async commentIssue(
+		cwd: string,
+		repo: string,
+		issue: number,
+		body: string,
+	): Promise<void> {
+		const out = await this.run(
+			["issue", "comment", String(issue), "--repo", repo, "--body", body],
+			cwd,
+		);
+		if (!out.ok) throw new Error(`gh issue comment: ${firstLine(out.stderr)}`);
+	}
 }
 
 function firstLine(text: string): string {

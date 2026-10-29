@@ -58,3 +58,25 @@ test("Slack is off unless repos list it; ~ and links resolve to real paths", () 
 		command: "slack-mcp",
 	});
 });
+
+test("crash reports are off by default and need an owner/name repo", () => {
+	expect(loadConfig(join(dir, "missing.json")).crashReports).toEqual({
+		enabled: false,
+		repo: "mukkund1996/serenity",
+	});
+	writeFileSync(
+		join(dir, "cr.json"),
+		JSON.stringify({ crashReports: { enabled: true, repo: " me/fork " } }),
+	);
+	expect(loadConfig(join(dir, "cr.json")).crashReports).toEqual({
+		enabled: true,
+		repo: "me/fork",
+	});
+	writeFileSync(
+		join(dir, "cr2.json"),
+		JSON.stringify({ crashReports: { enabled: "yes", repo: "no slash" } }),
+	);
+	expect(loadConfig(join(dir, "cr2.json")).crashReports).toEqual(
+		DEFAULT_CONFIG.crashReports,
+	);
+});

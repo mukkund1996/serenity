@@ -6,6 +6,7 @@ import {
 	BUILD_ID,
 	configPath,
 	connectDaemon,
+	daemonCrashPath,
 	doctorMarkerPath,
 	ensureDaemon,
 	isHookKind,
@@ -13,9 +14,9 @@ import {
 	SLACK_SERVER,
 	selfCommand,
 	serenityHome,
-	socketPath,
 	tmuxSessionName,
 	VERSION,
+	waitForDaemonGone,
 } from "@serenity/core";
 import { printChecks, runChecks } from "./doctor";
 import {
@@ -35,7 +36,7 @@ usage:
   serenity version
 
 internal:
-  serenity daemon | tui | hook <Event> | statusline | exited <code> | detach <pane> [master] | mcp <repo>`;
+  serenity daemon [--worker] | tui | hook <Event> | statusline | exited <code> | detach <pane> [master] | mcp <repo>`;
 
 const home = serenityHome();
 
@@ -190,20 +191,50 @@ async function detach(
 	peer.close();
 }
 
+/** Exit code of a worker that crashed; its supervisor restarts it (ADR 0043). */
+const CRASH_EXIT = 70;
+
+/** `serenity daemon --worker`: the daemon itself, run by its supervisor. */
 async function runDaemon(): Promise<void> {
-	const { Daemon, createSqliteStorage } = await import("@serenity/daemon");
+	const { Daemon, createSqliteStorage, recordCrash } = await import(
+		"@serenity/daemon"
+	);
 	const { dbPath } = await import("@serenity/core");
 	mkdirSync(home, { recursive: true });
-	const daemon = new Daemon({
-		home,
-		storage: createSqliteStorage(dbPath(home)),
-	});
-	await daemon.start();
-	const stop = () => void daemon.stop();
-	process.on("SIGTERM", stop);
-	process.on("SIGINT", stop);
-	await daemon.done;
+	const crash = (error: unknown) => {
+		console.error(`serenityd crashed: ${(error as Error)?.stack ?? error}`);
+		recordCrash(daemonCrashPath(home), error);
+		process.exit(CRASH_EXIT);
+	};
+	process.on("uncaughtException", crash);
+	process.on("unhandledRejection", crash);
+	try {
+		const daemon = new Daemon({
+			home,
+			storage: createSqliteStorage(dbPath(home)),
+		});
+		await daemon.start();
+		const stop = () => void daemon.stop();
+		process.on("SIGTERM", stop);
+		process.on("SIGINT", stop);
+		// Tests make the worker crash on purpose, to exercise the supervisor.
+		const debugCrash = process.env.SERENITY_DEBUG_CRASH;
+		if (debugCrash)
+			setTimeout(() => {
+				throw new Error(debugCrash);
+			}, 200);
+		await daemon.done;
+	} catch (error) {
+		crash(error);
+	}
 	process.exit(0);
+}
+
+/** `serenity daemon`: supervises the worker, restarting it when it crashes (ADR 0043). */
+async function superviseDaemon(): Promise<void> {
+	const { runSupervisor } = await import("@serenity/daemon");
+	mkdirSync(home, { recursive: true });
+	process.exit(await runSupervisor(home));
 }
 
 async function stopDaemon(): Promise<void> {
@@ -213,8 +244,7 @@ async function stopDaemon(): Promise<void> {
 		.request("daemon.shutdown", {}, { timeoutMs: 2000 })
 		.catch(() => {});
 	peer.close();
-	for (let i = 0; i < 40 && existsSync(socketPath(home)); i++)
-		await Bun.sleep(50);
+	await waitForDaemonGone(home);
 	console.log("daemon stopped");
 }
 
@@ -281,7 +311,8 @@ switch (command) {
 		await detach(arg, process.argv[4]);
 		break;
 	case "daemon":
-		await runDaemon();
+		if (arg === "--worker") await runDaemon();
+		else await superviseDaemon();
 		break;
 	case "doctor": {
 		const ok = printChecks(runChecks());
