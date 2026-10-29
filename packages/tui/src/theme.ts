@@ -4,12 +4,12 @@ import type { Color, PrTone, Session, SessionStatus } from "@serenity/core";
 export const BRAND_COLOR = "#7fc77f";
 
 /**
- * The master's queue (ADR 0038): replies it wants to send, waiting for y.
+ * The master's queue (ADR 0039): replies it wants to send, waiting for y.
  * Coral, apart from NEEDS YOU's yellow and the master's magenta.
  */
 export const QUEUE_COLOR: Color = "#ff875f";
 
-/** Marks a ◆ draft in NEEDS YOU that goes to Slack, not to a session (ADR 0038). */
+/** Marks a ◆ draft in NEEDS YOU that goes to Slack, not to a session (ADR 0039). */
 export const SLACK_COLOR: Color = "#36c5f0";
 
 /** The only three status glyphs (design handover, "Status language"). */

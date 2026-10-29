@@ -2,7 +2,7 @@ import { type MasterMessage, type ReviewRequest, wrap } from "@serenity/core";
 
 /**
  * What the master panel shows in the rows it has (ADR 0012). NEEDS YOU
- * (Slack's items among them, ADR 0031), the queue (ADR 0038), the
+ * (Slack's items among them, ADR 0031), the queue (ADR 0039), the
  * conversation and the input always show; the rows left over go to REVIEW, trimmed to fit or dropped.
  * MY PRS is off for now. The session counts sit in the header.
  */

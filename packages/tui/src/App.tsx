@@ -67,7 +67,7 @@ import {
 	ShortcutsPanel,
 } from "./overlays";
 import { QUEUE_ROW, QueueSection } from "./queue";
-import { splitAtNewline } from "./text-input";
+import { isNewlineKey, splitAtNewline } from "./text-input";
 import { askLine } from "./theme";
 import {
 	type CardElement,
@@ -186,7 +186,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const [zoom, setZoom] = useState<Zoom>("topics");
 	const [search, setSearch, searchRef] = useLiveState<Search | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
-	/** The queued reply Enter shows in full, if any (ADR 0038). */
+	/** The queued reply Enter shows in full, if any (ADR 0039). */
 	const [expanded, setExpanded] = useState<string | null>(null);
 
 	const allSessions = state?.sessions ?? [];
@@ -217,7 +217,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		[sessions, suggestions],
 	);
 
-	/** Replies the master's chat wants to send, waiting for y in its queue (ADR 0038). */
+	/** Replies the master's chat wants to send, waiting for y in its queue (ADR 0039). */
 	const queue = useMemo(
 		() => masterQueue(sessions, suggestions),
 		[sessions, suggestions],
@@ -797,6 +797,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					setMentionOff(null);
 					return setMasterText(null);
 				}
+				// Shift+Enter, Alt+Enter and Ctrl+J start a new line; Enter sends.
+				if (isNewlineKey(input, key)) return setMasterText(`${toMaster}\n`);
 				if (options.length) {
 					const at = Math.min(mentionRef.current, options.length - 1);
 					if (key.upArrow || key.downArrow)
@@ -918,7 +920,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				return;
 			}
 
-			// y sends a queued reply, e edits it, n or x drops it, Enter shows it in full (ADR 0038).
+			// y sends a queued reply, e edits it, n or x drops it, Enter shows it in full (ADR 0039).
 			if (queued) {
 				const { suggestion } = queued;
 				if (key.return)

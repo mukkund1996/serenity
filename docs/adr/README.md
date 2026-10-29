@@ -43,7 +43,8 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0035](0035-master-sends-replies-the-user-asked-for.md) | The master sends replies the user asked for with `send_reply` | Accepted |
 | [0036](0036-master-input-i-and-session-mentions.md) | `i` opens the master chat input and it stays open; `@session` tells the master to act on that session at once | Amended by 0037 |
 | [0037](0037-mentions-relay-to-the-session.md) | An `@session` message is relayed to the session, questions answered by it; the master never looks into it | Accepted |
-| [0038](0038-master-queue.md) | The master's queue: replies its chat wants to send wait under NEEDS YOU, one line each, Enter shows one in full; Slack drafts stay in NEEDS YOU, marked `slack` | Accepted |
+| [0038](0038-shift-enter-new-line-in-master-input.md) | Shift+Enter starts a new line in the master input (Alt+Enter, Ctrl+J as fallbacks); Enter sends | Accepted |
+| [0039](0039-master-queue.md) | The master's queue: replies its chat wants to send wait under NEEDS YOU, one line each, Enter shows one in full; Slack drafts stay in NEEDS YOU, marked `slack` | Accepted |
 
 ## System at a glance
 

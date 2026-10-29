@@ -152,7 +152,7 @@ export function SectionHeader({
 	width: number;
 	/** NEEDS YOU: yellow, like the header's count. */
 	urgent?: boolean;
-	/** The chip's own colour, as the queue's (ADR 0038). */
+	/** The chip's own colour, as the queue's (ADR 0039). */
 	color?: Color;
 }) {
 	const chip = ` ${label} `;
@@ -659,7 +659,7 @@ export function MasterPanel({
 	inputText: string | null;
 	mentions: { names: string[]; selected: number } | null;
 	replyText: string | null;
-	/** The master's queue section (ADR 0038), drawn under NEEDS YOU. */
+	/** The master's queue section (ADR 0039), drawn under NEEDS YOU. */
 	queue?: ReactNode;
 }) {
 	const inner = width - 6;

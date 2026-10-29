@@ -30,7 +30,7 @@ function needRank(s: Session, suggested: Set<string>): number {
 /**
  * A reply the master's chat wants to send to a session (`suggest` kind
  * reply, or a `send_reply` the user had not confirmed): it waits in the
- * master's queue, not NEEDS YOU (ADR 0038).
+ * master's queue, not NEEDS YOU (ADR 0039).
  */
 export function isQueued(g: Suggestion): boolean {
 	return g.status === "pending" && g.kind === "reply" && g.source === "chat";

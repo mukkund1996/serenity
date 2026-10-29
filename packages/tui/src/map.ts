@@ -63,7 +63,7 @@ export type MasterItem =
 			now: number;
 	  }
 	| {
-			/** A reply the master wants to send, waiting for y (ADR 0038). */
+			/** A reply the master wants to send, waiting for y (ADR 0039). */
 			kind: "queued";
 			session: Session;
 			text: string;
@@ -77,7 +77,7 @@ export interface MapMaster {
 	error: string | null;
 	/** NEEDS YOU items, Slack's among them, plus permission requests. */
 	needCount: number;
-	/** Replies in the master's queue (ADR 0038). */
+	/** Replies in the master's queue (ADR 0039). */
 	queueCount?: number;
 	/** Why Slack could not be read, or null. */
 	slackError?: string | null;
