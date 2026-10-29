@@ -8,6 +8,7 @@ import {
 	truncate,
 	wrap,
 } from "@serenity/core";
+import { PULSE } from "./pulse";
 import { cardText, frameColor, glyph, nameColor } from "./theme";
 
 /**
@@ -56,6 +57,8 @@ export interface TopicsInput {
 	replyText: string | null;
 	/** Which side of the master this canvas sits on; the master is at its inner edge. Default right. */
 	side?: "left" | "right";
+	/** Cards lit by a message from the master (ADR 0039). */
+	pulse?: Set<string>;
 }
 
 /** What the arrow keys step through on a focused card; `card` is the card itself. */
@@ -285,14 +288,20 @@ function drawCard(
 	x: number,
 	y: number,
 	focus: CardFocus | null,
+	lit: boolean,
 ): number {
 	const focused = focus !== null;
 	const h = cardHeight(s, focused, focus?.suggestion ?? null);
-	canvas.frame(x, y, CARD_W, h, focused ? "heavy" : "light", {
-		fg: frameColor(s.status, focused),
-		bold: focused,
-		dim: !focused,
-	});
+	canvas.frame(
+		x,
+		y,
+		CARD_W,
+		h,
+		focused || lit ? "heavy" : "light",
+		lit
+			? PULSE
+			: { fg: frameColor(s.status, focused), bold: focused, dim: !focused },
+	);
 
 	const g = glyph(s.status);
 	let col = canvas.text(x + 1, y, " ");
@@ -517,6 +526,7 @@ function drawBubble(
 							replyText: input.replyText,
 						}
 					: null,
+				!!input.pulse?.has(s.id),
 			);
 			cards.push({ sessionId: s.id, x: cx, y: rowY, w: CARD_W, h });
 		}

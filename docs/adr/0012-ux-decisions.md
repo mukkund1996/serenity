@@ -32,4 +32,4 @@ The canvas's colours, frames, status language, card anatomy and keymap are final
 | Master width | Between 38 and 64 columns: the terminal's width less 50. |
 
 ## Consequences
-- The spinner is the one animation; keep its tick cheap (no full canvas re-render).
+- The spinner is the one animation (0039 adds a brief pulse when the master and a session message each other); keep its tick cheap (no full canvas re-render).
