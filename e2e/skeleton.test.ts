@@ -1030,9 +1030,13 @@ test(
 				.split("\n")
 				.find((line) => line.includes("▸")) ?? "";
 		const selectDana = async () => {
+			// c focuses the master without going in. Wait for that render before
+			// Enter: keys that arrive in one chunk all see the state before it.
 			keys("c");
-			keys("Escape");
-			await until(() => !selectedRow(), "Esc to leave the master");
+			await until(
+				() => screen().includes("┏━ ◆ master") && !selectedRow(),
+				"c to focus the master",
+			);
 			keys("Enter");
 			await waitFor(/▸/);
 			for (let i = 0; i < 15 && !selectedRow().includes("Dana"); i++) {
