@@ -9,7 +9,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0001](0001-product-scope-v1.md) | Product scope for v1 | Accepted |
 | [0002](0002-typescript-ink-on-bun.md) | TypeScript + Ink on Bun, shipped as a compiled binary | Accepted |
 | [0003](0003-hybrid-rendering.md) | Hybrid rendering: cell canvas for the map, Ink for panels | Accepted |
-| [0004](0004-sessions-in-tmux-panes.md) | Claude Code sessions run in tmux panes | Accepted |
+| [0004](0004-sessions-in-tmux-panes.md) | Claude Code sessions run in tmux panes | Amended by 0051 |
 | [0005](0005-daemon-and-json-rpc.md) | Background daemon, JSON-RPC over a unix socket, scoped per repo | Amended by 0043, 0045 |
 | [0006](0006-status-from-hooks.md) | Session status from Claude Code hooks, plus an exit report | Amended by 0044 |
 | [0007](0007-master-roles-and-models.md) | Master = Opus stream + Haiku/Sonnet one-shot workers via the claude CLI | Amended by 0046, 0047 |
@@ -31,7 +31,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0023](0023-slack-for-the-master.md) | Slack for the master: threads and mentions waiting on you, per repo, read through Slack's MCP server; `[` `]` cycle them | Amended by 0031 |
 | [0024](0024-slack-reply-suggestions.md) | Slack suggestions: a reply from sessions, PRs and reviews, or ask a session first; `y` posts it in the thread | Amended by 0050 |
 | [0025](0025-install-script-and-homebrew.md) | Installer and Homebrew formula install tmux, git, gh and Claude Code too; release-please and the release workflow | Accepted |
-| [0026](0026-arrows-between-nodes-enter-into-ctrl-m-master.md) | Arrow keys between nodes, Enter into a node and `w` `s` inside it, Esc out; `Ctrl+m` focuses the master from every view | Accepted |
+| [0026](0026-arrows-between-nodes-enter-into-ctrl-m-master.md) | Arrow keys between nodes, Enter into a node and `w` `s` inside it, Esc out; `Ctrl+m` focuses the master from every view | Amended by 0051 |
 | [0027](0027-master-centred-in-topics-zoom.md) | The master sits in the centre of the topics zoom, topics on both sides; docks left when too narrow | Accepted |
 | [0028](0028-enter-attaches-enter-into-master-only.md) | Enter attaches a card and `i` messages it; only the master is gone into; WASD back beside the arrows; dim card frames; Slack keeps its place; MY PRS off | Accepted |
 | [0029](0029-website-on-github-pages.md) | The website: static page on GitHub Pages at getserenity.dev, release version filled in at deploy | Accepted |
@@ -56,6 +56,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0048](0048-at-new-starts-sessions-from-a-brief.md) | `@new <brief>` starts sessions at once, the master choosing the split, names and prompts; command words are never session names and lead the `@` list | Accepted |
 | [0049](0049-copy-and-handover-docs.md) | `@copy @session` and `@handover @session`: the session writes a handover doc in its worktree, serenity copies it to its state; `@copy` starts a follow-up session carrying it, `@handover` gives its path, and it can go to Slack as a file once confirmed | Accepted |
 | [0050](0050-needs-you-seen-and-explicit-actions.md) | NEEDS YOU: Enter marks an item seen (a Slack item dismissed and opened; a session hidden until it changes, never one waiting on you); ◆ says what `y` does to whom; Slack items you wrote after are read; Slack follow-ups reply, tell a session, or start one | Accepted |
+| [0051](0051-ctrl-g-always-reaches-serenity.md) | Ctrl+g in an agent pane always reaches serenity: Ctrl+G and Ctrl+M (Caps Lock) bound too; the daemon puts back a lost pane marker or binding every 5 s and logs it; detach by pane prefers the live session | Accepted |
 
 ## System at a glance
 

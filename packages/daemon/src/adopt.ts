@@ -270,12 +270,13 @@ export class ClaudeObserver {
 			}
 			if (!proc) {
 				this.seen.delete(session.id);
+				this.host.log(`${session.name} ended (claude exited)`);
+				// Ended first, so the daemon's tmux check does not mark the pane again.
+				this.host.markEnded(session);
 				if (session.tmuxPane)
 					await this.host.tmux
 						.unsetPaneOption(session.tmuxPane, "@serenity_session")
 						.catch(() => {});
-				this.host.log(`${session.name} ended (claude exited)`);
-				this.host.markEnded(session);
 				continue;
 			}
 			// A quick turn can go busy → idle between two reads; the transcript grows anyway.
