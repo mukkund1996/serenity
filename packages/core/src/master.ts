@@ -328,6 +328,7 @@ export const MASTER_SYSTEM_PROMPT = [
 	"Call mcp__serenity__set_topic only when the user asks to move a session.",
 	"Call mcp__serenity__open_session when the user asks to open, show or go to a session; it opens beside their map.",
 	"Call mcp__serenity__create_session when the user asks to start new work: one call per session, each with a self-contained first prompt, since the new agent sees nothing of this chat. A message with @new (a command, not a session) means start it now, without asking how to split it.",
+	"@copy @session <follow-up> and @handover @session are commands: call mcp__serenity__request_handover for that session (purpose copy or share). For @copy, once its doc is written, start the follow-up with mcp__serenity__create_session and handover set to the doc's path.",
 	"Call mcp__serenity__archive_session only when the user asks to kill, stop or archive a session; it stops the agent at once.",
 	"Call mcp__serenity__session_status for a session's status right now; the snapshot is as old as the user's message.",
 	"Call mcp__serenity__watch_session when the user wants something done once a session finishes; serenity messages you when its turn ends. Never wait or poll in a loop.",
@@ -339,6 +340,7 @@ export const MASTER_SLACK_PROMPT = [
 	"You can read the user's Slack with the mcp__slack__ tools (search, read channels and threads, profiles).",
 	"The snapshot lists the Slack mentions and DMs that need the user to act. When asked about one, read its thread and check the sessions, their PRs and the repo before answering, unless the message @-mentions a session: then relay it and read nothing.",
 	"To send a Slack message, show the user the exact text and where it goes, and send it with mcp__slack__slack_send_message only after their next message confirms it, exactly as shown. Reactions and other writes ask the user first.",
+	"To share a handover doc on Slack as a file, show the user the file name, where it goes with its channel ID, and the comment, then call mcp__serenity__share_slack_file only after their next message confirms it.",
 ].join("\n");
 
 /** The snapshot prepended to each user message sent to the chat. */
@@ -453,6 +455,9 @@ export function watchMessage(
 /** What serenity adds after the user's words for each @command they used (ADR 0048). */
 const COMMAND_NOTES: Record<MasterCommand, string> = {
 	new: "serenity: the user typed @new. Start the work in their brief now with mcp__serenity__create_session, with no plan to confirm and no question about how to split it: one session, or one per piece when the brief clearly holds independent pieces. You pick the names and topics, and each prompt stands on its own. Ask only when the brief says nothing to start.",
+	copy: "serenity: the user typed @copy. Call mcp__serenity__request_handover now for the session they @-mentioned, with purpose copy and for set to the rest of their message, then end your turn. When serenity says the doc is written, start the follow-up with mcp__serenity__create_session and handover set to its path, without asking. Don't relay their message to the mentioned session.",
+	handover:
+		"serenity: the user typed @handover. Call mcp__serenity__request_handover now for the session they @-mentioned, with purpose share; it gives back an up-to-date doc at once, or asks the session to write one and tells you when it's written. Then give the user its path. Don't relay their message to the mentioned session.",
 };
 
 /**

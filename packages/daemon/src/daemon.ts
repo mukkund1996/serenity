@@ -9,6 +9,7 @@ import {
 	type CleanupPlan,
 	type CreateSessionParams,
 	DependencyHealth,
+	handoversDir,
 	hookSettingsPath,
 	isHookKind,
 	isReservedName,
@@ -67,6 +68,7 @@ import { recoveryPlan } from "./recover";
 import { ReviewWatcher } from "./reviews";
 import { SlackWatcher } from "./slack";
 import { SlackAdvisor } from "./slack-advisor";
+import { uploadSlackFile } from "./slack-upload";
 import { Tmux } from "./tmux";
 
 export interface DaemonOptions {
@@ -215,6 +217,19 @@ export class Daemon {
 				reply: async (session, text) =>
 					this.tmux.sendText(await this.requireLivePane(session), text),
 				create: (params) => this.createSession(params),
+				handoversDir: (repo) => handoversDir(opts.home, repo),
+				shareSlackFile: (share) =>
+					uploadSlackFile(
+						{
+							runner,
+							model: (opts.models ?? config.models).summarizer,
+							cwd: join(opts.home, "workers"),
+							mcpConfig: JSON.stringify({
+								mcpServers: { [SLACK_SERVER]: this.slackMcp },
+							}),
+						},
+						share,
+					),
 				pluginDir: masterPluginPath(opts.home),
 				mcpConfig: (repo) => this.mcpConfig(repo),
 				slack: (repo) =>

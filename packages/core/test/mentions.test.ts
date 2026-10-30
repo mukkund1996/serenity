@@ -125,6 +125,8 @@ describe("matchMentions", () => {
 	test("an empty query lists every command, then every live name", () => {
 		expect(matchMentions(sessions, "")).toEqual([
 			"new",
+			"copy",
+			"handover",
 			"fix-login",
 			"login-page",
 			"api-auth",
@@ -176,6 +178,13 @@ describe("master commands (ADR 0048)", () => {
 	test("a command is never a session mention, even for a session so named", () => {
 		const legacy = makeSession({ id: "n", name: "new", status: "idle" });
 		expect(mentionedSessions("@new add tests", [legacy])).toEqual([]);
+	});
+
+	test("@copy and @handover are commands too (ADR 0049)", () => {
+		expect(masterCommands("@copy @api-auth add docs")).toEqual(["copy"]);
+		expect(masterCommands("@handover @api-auth")).toEqual(["handover"]);
+		expect(matchMentions([], "h")).toEqual(["handover"]);
+		expect(isReservedName("Copy")).toBe(true);
 	});
 
 	test("only commands have a hint", () => {

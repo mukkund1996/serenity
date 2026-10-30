@@ -143,8 +143,60 @@ export const MCP_TOOLS = [
 					type: "string",
 					description: "Topic to put it under; optional",
 				},
+				handover: {
+					type: "string",
+					description:
+						"For @copy: the handover doc path serenity gave you. serenity adds the doc to the prompt.",
+				},
 			},
 			required: ["name", "prompt"],
+		},
+	},
+	{
+		name: "request_handover",
+		description:
+			"For the user's @copy or @handover of a session: ask its agent to write a handover doc (goal, state, decisions, open questions, key files/branches/PRs, next steps). Returns at once; serenity messages you with the doc's path when the session's turn ends. With purpose share, an up-to-date doc is returned at once instead. Needs the user's latest message to say @copy or @handover and @-mention the session.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				session: { type: "string" },
+				purpose: {
+					type: "string",
+					enum: ["copy", "share"],
+					description:
+						"copy: start a follow-up session from it; share: give it to the user",
+				},
+				for: {
+					type: "string",
+					description:
+						"For copy: the follow-up the next steps are for, from the user's message",
+				},
+			},
+			required: ["session", "purpose"],
+		},
+	},
+	{
+		name: "share_slack_file",
+		description:
+			"Upload a handover doc serenity gave you to Slack as a file, shared in a channel, DM or thread. Only after your last reply showed the file name, the destination with its channel ID and the exact comment, and the user's next message confirmed it; otherwise it is refused.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				path: { type: "string", description: "The handover doc's path" },
+				channel_id: {
+					type: "string",
+					description: "Channel, DM or group DM ID: C…, D… or G…",
+				},
+				thread_ts: {
+					type: "string",
+					description: "Thread to share it in; optional",
+				},
+				comment: {
+					type: "string",
+					description: "The confirmed message to go with it; optional",
+				},
+			},
+			required: ["path", "channel_id"],
 		},
 	},
 	{

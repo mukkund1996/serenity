@@ -54,6 +54,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0046](0046-master-survives-crashes-hangs-and-restarts.md) | The master survives crashes, hangs and daemon restarts: an outbox per repo, a 5-minute watchdog, restart with `--resume` and re-send, its state in SQLite, tools that answer within 2 minutes | Accepted |
 | [0047](0047-finer-topics-moves-wait.md) | Finer topics: named for a feature or area, a new one for clearly distinct work; near-duplicate names join their topic; a topic move waits while the session works or the user types; `set_topic` stays immediate | Accepted |
 | [0048](0048-at-new-starts-sessions-from-a-brief.md) | `@new <brief>` starts sessions at once, the master choosing the split, names and prompts; command words are never session names and lead the `@` list | Accepted |
+| [0049](0049-copy-and-handover-docs.md) | `@copy @session` and `@handover @session`: the session writes a handover doc in its worktree, serenity copies it to its state; `@copy` starts a follow-up session carrying it, `@handover` gives its path, and it can go to Slack as a file once confirmed | Accepted |
 
 ## System at a glance
 

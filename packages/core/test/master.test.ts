@@ -441,4 +441,13 @@ describe("chatMessage", () => {
 		expect(body).toContain("no question about how to split it");
 		expect(chatMessage("S", "@New add rate limits")).not.toContain("serenity:");
 	});
+
+	test("@copy and @handover add their notes (ADR 0049)", () => {
+		expect(chatMessage("S", "@copy @api-auth add docs")).toContain(
+			"Call mcp__serenity__request_handover now for the session they @-mentioned, with purpose copy",
+		);
+		expect(chatMessage("S", "@handover @api-auth")).toContain(
+			"with purpose share",
+		);
+	});
 });

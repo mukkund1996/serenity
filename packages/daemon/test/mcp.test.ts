@@ -36,6 +36,8 @@ test("tools/list names serenity's three tools", async () => {
 		"session_status",
 		"watch_session",
 		"create_session",
+		"request_handover",
+		"share_slack_file",
 		"request_permission",
 	]);
 });

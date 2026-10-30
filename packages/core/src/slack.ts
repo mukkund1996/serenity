@@ -417,6 +417,62 @@ export function slackSendPrompt(item: SlackItem, text: string): string {
 	].join("\n");
 }
 
+/** Slack's two-step file upload (ADR 0049); serenity POSTs the bytes in between. */
+export const SLACK_UPLOAD_URL_TOOL = `mcp__${SLACK_SERVER}__slack_get_file_upload_url`;
+export const SLACK_COMPLETE_UPLOAD_TOOL = `mcp__${SLACK_SERVER}__slack_complete_file_upload`;
+
+export const SLACK_UPLOAD_URL_SCHEMA = {
+	type: "object",
+	properties: {
+		upload_url: { type: ["string", "null"] },
+		file_id: { type: ["string", "null"] },
+		problem: { type: ["string", "null"] },
+	},
+	required: ["upload_url", "file_id", "problem"],
+	additionalProperties: false,
+} as const;
+
+export function slackUploadUrlPrompt(filename: string, bytes: number): string {
+	return [
+		`Call ${SLACK_UPLOAD_URL_TOOL} once, with filename ${JSON.stringify(filename)} and content_length ${bytes}. Nothing else.`,
+		"Return upload_url and file_id exactly as the tool returned them, byte for byte: don't decode, encode or retype any part. If it failed, both null and the error in problem.",
+	].join("\n");
+}
+
+export const SLACK_COMPLETE_UPLOAD_SCHEMA = {
+	type: "object",
+	properties: {
+		shared: { type: "boolean" },
+		permalink: { type: ["string", "null"] },
+		problem: { type: ["string", "null"] },
+	},
+	required: ["shared", "permalink", "problem"],
+	additionalProperties: false,
+} as const;
+
+/** Where a file goes and what goes with it; the user confirmed all of it. */
+export interface SlackFileShare {
+	fileId: string;
+	channelId: string;
+	threadTs: string | null;
+	title: string;
+	comment: string | null;
+}
+
+export function slackCompleteUploadPrompt(share: SlackFileShare): string {
+	const args = [
+		`file_id ${JSON.stringify(share.fileId)}`,
+		`channel_id ${JSON.stringify(share.channelId)}`,
+		`title ${JSON.stringify(share.title)}`,
+		...(share.threadTs ? [`thread_ts ${JSON.stringify(share.threadTs)}`] : []),
+	];
+	return [
+		`Call ${SLACK_COMPLETE_UPLOAD_TOOL} once, with ${args.join(", ")}${share.comment ? ", and initial_comment set to the text between the markers, exactly as written: no changes, no additions." : ". No initial_comment."}`,
+		...(share.comment ? ["<<<", share.comment, ">>>"] : []),
+		"Return shared true and the file's link when the tool succeeded; otherwise shared false and the error in problem.",
+	].join("\n");
+}
+
 /** Quote markers and whitespace dropped, so a draft shown as a quote block matches what is sent. */
 function plain(text: string): string {
 	return text

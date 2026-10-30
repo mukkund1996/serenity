@@ -21,6 +21,8 @@ export const MENTION_LIST_MAX = 4;
  */
 export const MASTER_COMMANDS = {
 	new: "start sessions from a brief",
+	copy: "hand a session's work to a new session",
+	handover: "get a session's handover doc",
 } as const;
 
 export type MasterCommand = keyof typeof MASTER_COMMANDS;

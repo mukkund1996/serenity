@@ -197,6 +197,32 @@ export interface MasterWatch {
 	note: string;
 	/** A Slack message the user confirmed, to go out once the session finishes. */
 	slack: string | null;
+	/** A handover doc the session was asked to write (ADR 0049); absent on older watches. */
+	handover?: HandoverRequest | null;
+}
+
+/** Why the master asked for a handover: to start a follow-up session, or to give it to the user. */
+export type HandoverPurpose = "copy" | "share";
+
+export interface HandoverRequest {
+	purpose: HandoverPurpose;
+	/** The follow-up the doc's next steps are for, from the user's @copy. */
+	for: string | null;
+	/** When it was asked for; a doc written before is not this one. */
+	requestedAt: number;
+	/** Asked while it worked: the turn then running may end before it reads the request. */
+	queued: boolean;
+}
+
+/** A handover doc a session wrote, copied into serenity's state (ADR 0049). */
+export interface HandoverDoc {
+	sessionId: string;
+	sessionName: string;
+	/** The copy under serenity's home, which outlives the worktree. */
+	path: string;
+	at: number;
+	/** The session's last reply when it was copied; a newer reply makes the doc stale. */
+	reply: string | null;
 }
 
 /** A message waiting to reach the master's chat: the user's, or serenity's own. */
@@ -215,6 +241,8 @@ export interface MasterRecord {
 	released: string[];
 	/** Messages not yet answered, oldest first; the first is in flight while the chat thinks. */
 	outbox: MasterOutboxItem[];
+	/** The newest handover doc of each session (ADR 0049); absent on older records. */
+	handovers?: HandoverDoc[];
 }
 
 /** The master asking to use a tool outside its read-only set; shown at the top of NEEDS YOU. */
