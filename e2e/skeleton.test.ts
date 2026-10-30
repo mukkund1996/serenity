@@ -1019,32 +1019,37 @@ test(
 	STEP_TIMEOUT,
 );
 
+/** NEEDS YOU's item count, from the master's header. */
+const needCount = () =>
+	Number(screen().match(/(\d+) things? needs? you/)?.[1] ?? 0);
+
+const selectedRow = () =>
+	screen()
+		.split("\n")
+		.find((line) => line.includes("▸")) ?? "";
+
+/** Goes into the master and steps down NEEDS YOU to the item whose row shows `name`. */
+async function selectNeed(name: string): Promise<void> {
+	// c focuses the master without going in. Wait for that render before
+	// Enter: keys that arrive in one chunk all see the state before it.
+	keys("c");
+	await until(
+		() => screen().includes("┏━ ◆ master") && !selectedRow(),
+		"c to focus the master",
+	);
+	keys("Enter");
+	await waitFor(/▸/);
+	for (let i = 0; i < 15 && !selectedRow().includes(name); i++) {
+		keys("Down");
+		await Bun.sleep(150);
+	}
+	expect(selectedRow()).toContain(name);
+}
+
 test(
 	"x dismisses a Slack item for good; a newer message in its thread shows again",
 	async () => {
-		// NEEDS YOU may be long by now: count its items, and step to Dana's.
-		const needCount = () =>
-			Number(screen().match(/(\d+) things? needs? you/)?.[1] ?? 0);
-		const selectedRow = () =>
-			screen()
-				.split("\n")
-				.find((line) => line.includes("▸")) ?? "";
-		const selectDana = async () => {
-			// c focuses the master without going in. Wait for that render before
-			// Enter: keys that arrive in one chunk all see the state before it.
-			keys("c");
-			await until(
-				() => screen().includes("┏━ ◆ master") && !selectedRow(),
-				"c to focus the master",
-			);
-			keys("Enter");
-			await waitFor(/▸/);
-			for (let i = 0; i < 15 && !selectedRow().includes("Dana"); i++) {
-				keys("Down");
-				await Bun.sleep(150);
-			}
-			expect(selectedRow()).toContain("Dana");
-		};
+		const selectDana = () => selectNeed("Dana");
 		const before = needCount();
 		const now = Math.floor(Date.now() / 1000);
 		const first = `${now - 60}.000100`;
@@ -1077,6 +1082,47 @@ test(
 		expect(screen()).toContain("Say when the deploy goes out");
 		writeFileSync(slackFixture(), "[]");
 		await until(() => needCount() === before, "the item to clear");
+		keys("Escape");
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"Enter on a Slack item dismisses it as seen",
+	async () => {
+		const before = needCount();
+		const now = Math.floor(Date.now() / 1000);
+		writeFileSync(
+			slackFixture(),
+			JSON.stringify([
+				slackMessage(`${now}.000300`, `${now}.000300`, "Pick a release date"),
+			]),
+		);
+		await until(() => needCount() === before + 1, "the Slack item");
+		await selectNeed("Dana");
+		keys("Enter");
+		await waitFor(/dismissed Dana's message/);
+		expect(needCount()).toBe(before);
+		// Later reads keep it out.
+		await Bun.sleep(2500);
+		expect(needCount()).toBe(before);
+		expect(screen()).not.toContain("Pick a release date");
+		writeFileSync(slackFixture(), "[]");
+		keys("Escape");
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"Enter on an ended session in NEEDS YOU marks it seen; it stays on the map",
+	async () => {
+		const before = needCount();
+		await selectNeed("a-untrusted");
+		keys("Enter");
+		await waitFor(/a-untrusted seen/);
+		await until(() => needCount() === before - 1, "a-untrusted to leave");
+		// Only NEEDS YOU: its card is still on the map.
+		expect(screen()).toContain("a-untrusted");
 		keys("Escape");
 	},
 	STEP_TIMEOUT,

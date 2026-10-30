@@ -47,7 +47,7 @@ serenity runs on your existing Claude Code login and subscription.
 | **Worktrees** | New sessions get their own git worktree beside the repo, or reuse an existing branch. |
 | **Import** | Claude sessions you already run in tmux join the map with `I` and stay in their windows. |
 | **Pinned sessions** | `p` pins a session you reuse: it is never marked finished or cleaned up, and resumes with `claude --resume` when you attach after it ended. |
-| **Slack (optional)** | Mentions and DMs that need you to act, at most three, join NEEDS YOU. The master drafts a reply from your sessions and PRs; `y` posts it, `x` dismisses the item for good. |
+| **Slack (optional)** | Mentions and DMs that need you to act, at most three, join NEEDS YOU. The master proposes a follow-up from your sessions and PRs: a reply, a message to the session it is about, or a new session. `y` runs it, Enter marks it seen and opens it, `x` dismisses it. Messages you have written after on Slack drop out. |
 
 ## Install
 
@@ -121,7 +121,7 @@ serenity is keyboard-only. The footer shows the moves; `?` opens the full list.
 | Key | Action |
 |-----|--------|
 | `←` `↑` `↓` `→` / `WASD` | Move between nodes |
-| `Enter` | Attach to a session, or go into the master |
+| `Enter` | Attach to a session, or go into the master; on a NEEDS YOU item, mark it seen (a Slack item is also opened; a session waiting on you is attached instead) |
 | `i` | Send the focused session a quick message; on the master, open its chat input (`@` tags a session, `Shift+Enter` or `Ctrl+J` starts a new line, `Esc` closes it) |
 | `Ctrl+g` | Back to the map from inside a session |
 | `z` / `Z` / `Esc` | Zoom out to the map / zoom in / one level up |
@@ -155,7 +155,7 @@ Config lives in `~/.config/serenity/config.json`. Every field is optional.
 | `models` | Opus / Haiku / Sonnet | Models for the master's chat, summaries and suggestions |
 | `reviewers` | none | Who to suggest for review when CODEOWNERS names nobody |
 | `maxTopics` | `10` | How many topics the master groups sessions into |
-| `slack.repos` | none | Repos whose maps show Slack mentions and DMs that need you ([ADR 0023](docs/adr/0023-slack-for-the-master.md), [0024](docs/adr/0024-slack-reply-suggestions.md), [0031](docs/adr/0031-slack-joins-needs-you.md), [0034](docs/adr/0034-dismiss-slack-items.md)); run `serenity slack login` once |
+| `slack.repos` | none | Repos whose maps show Slack mentions and DMs that need you ([ADR 0023](docs/adr/0023-slack-for-the-master.md), [0024](docs/adr/0024-slack-reply-suggestions.md), [0031](docs/adr/0031-slack-joins-needs-you.md), [0034](docs/adr/0034-dismiss-slack-items.md), [0050](docs/adr/0050-needs-you-seen-and-explicit-actions.md)); run `serenity slack login` once |
 | `crashReports.enabled` | `false` | File daemon crashes as GitHub issues through your `gh`, scrubbed of paths, tokens and emails, one issue per crash signature ([ADR 0045](docs/adr/0045-daemon-supervisor-crash-reports-recovery.md)). Reports are always kept in `crash-reports/` in the state directory |
 | `crashReports.repo` | `mukkund1996/serenity` | Where crash issues go |
 

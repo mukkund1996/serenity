@@ -9,9 +9,6 @@ export const BRAND_COLOR = "#7fc77f";
  */
 export const QUEUE_COLOR: Color = "#ff875f";
 
-/** Marks a ◆ draft in NEEDS YOU that goes to Slack, not to a session (ADR 0040). */
-export const SLACK_COLOR: Color = "#36c5f0";
-
 /** The only three status glyphs (design handover, "Status language"). */
 export function glyph(
 	status: SessionStatus,

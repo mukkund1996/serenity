@@ -19,9 +19,20 @@ export function needLines(text: string, inner: number): string[] {
 	return wrap(text, inner - NEED_INDENT, 2);
 }
 
-/** A suggestion's label beside its chips: up to 2 lines. */
-export function suggestionLines(label: string, inner: number): string[] {
-	return wrap(label, inner - NEED_INDENT - 2 - CHIPS_W, 2);
+/**
+ * A suggestion's line beside its chips: up to 2 lines, or, on the selected
+ * item, all of it up to QUEUE_FULL_MAX lines (ADR 0050).
+ */
+export function suggestionLines(
+	label: string,
+	inner: number,
+	full = false,
+): string[] {
+	return wrap(
+		label,
+		inner - NEED_INDENT - 2 - CHIPS_W,
+		full ? QUEUE_FULL_MAX : 2,
+	);
 }
 
 /** How many queued replies fit; the rest are summarised as "+N more". */

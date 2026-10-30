@@ -5,12 +5,16 @@ import {
 	confirmedSlackSend,
 	parseSlackInbox,
 	parseSlackSuggestion,
+	relatedSessions,
 	SLACK_LOGIN_HINT,
 	type SlackItem,
 	slackContext,
 	slackInboxPrompt,
 	slackMessageKey,
+	slackReplyTarget,
 	slackSendPrompt,
+	slackSessionName,
+	slackSuggestionLine,
 	slackSuggestionPrompt,
 	slackTsMs,
 } from "../src/slack";
@@ -77,6 +81,28 @@ test("only mentions and DMs with something to do get in", () => {
 		],
 	});
 	expect(inbox?.items.map((i) => i.channelId).sort()).toEqual(["C3", "C4"]);
+});
+
+test("a message the user wrote after, where they saw it, means it was read", () => {
+	const inbox = parseSlackInbox({
+		access: "ok",
+		problem: null,
+		items: [
+			item({ channelId: "C1", lastOwnTs: "1730000100.0" }),
+			item({ channelId: "C2", lastOwnTs: "1729999000.0" }),
+			item({ channelId: "C3", lastOwnTs: null }),
+			item({ channelId: "C4", lastOwnTs: "1730000000.000100" }),
+		],
+	});
+	// Only a later message counts: an earlier one, none, or the same ts do not.
+	expect(inbox?.items.map((i) => i.channelId).sort()).toEqual([
+		"C2",
+		"C3",
+		"C4",
+	]);
+	expect(slackInboxPrompt(Date.UTC(2026, 9, 28))).toContain(
+		"lastOwnTs: the ts of the user's newest message where they would have seen this one",
+	);
 });
 
 test("the inbox prompt asks for mentions and DMs that need action, and few", () => {
@@ -157,21 +183,60 @@ describe("suggestions", () => {
 		).toBe(false);
 	});
 
-	test("the context names every session and who can be asked", () => {
+	test("the context names every session and who can be told", () => {
 		const text = slackContext([idle, working], []);
-		expect(text).toContain("api-auth [unsorted] idle (can be asked)");
+		expect(text).toContain("api-auth [unsorted] idle (can be told)");
 		expect(text).toContain("summary: Fixed the token refresh.");
 		expect(text).toContain("- billing [unsorted] working · branch");
-		expect(text).not.toContain("billing [unsorted] working (can be asked)");
+		expect(text).not.toContain("billing [unsorted] working (can be told)");
+		expect(text).not.toContain("The message names");
+	});
+
+	test("sessions a message names by name, branch or PR are pointed out", () => {
+		const pr = makeSession({
+			id: "s3",
+			name: "fix-login",
+			branch: "login-redirect",
+			pr: {
+				number: 42,
+				url: "https://github.com/o/r/pull/42",
+				title: "Fix login",
+				state: "OPEN",
+				isDraft: false,
+				checks: "passing",
+				reviewDecision: null,
+				reviewRequests: [],
+				reviewed: false,
+			} as never,
+		});
+		const about = (text: string) =>
+			relatedSessions({ ...slackItem, text, action: "Answer" }, [
+				idle,
+				{ ...working, branch: "billing" },
+				pr,
+			]).map((s) => s.name);
+		expect(about("is api-auth done?")).toEqual(["api-auth"]);
+		expect(about("what about #42")).toEqual(["fix-login"]);
+		expect(about("see https://github.com/o/r/pull/42 pls")).toEqual([
+			"fix-login",
+		]);
+		expect(about("the login-redirect branch is red")).toEqual(["fix-login"]);
+		// A name inside another word, or another PR number, is not a match.
+		expect(about("my-api-auth-v2 and #421")).toEqual([]);
+		expect(
+			slackContext([idle, pr], [], { ...slackItem, text: "#42 shipped?" }),
+		).toContain(
+			"The message names these sessions by name, branch or PR: fix-login.",
+		);
 	});
 
 	test("a name shared with an archived session means the live one", () => {
 		const archived = makeSession({ id: "old", status: "archived" });
 		const reply = {
 			kind: "reply",
-			label: 'Reply "yes"',
 			text: "yes",
 			session: "api-auth",
+			name: null,
 		};
 		expect(
 			parseSlackSuggestion(reply, slackItem, [archived, idle], false),
@@ -181,39 +246,72 @@ describe("suggestions", () => {
 		).toMatchObject({ sessionId: "s1" });
 	});
 
-	test("a reply or an ask to a free session; nothing else", () => {
+	test("a reply, a message to a free session, or a new session; nothing else", () => {
 		const reply = parseSlackSuggestion(
-			{ kind: "reply", label: 'Reply "yes"', text: "yes", session: "api-auth" },
+			{ kind: "reply", text: "yes", session: "api-auth", name: null },
 			slackItem,
 			[idle],
 			false,
 		);
 		expect(reply).toMatchObject({
 			kind: "reply",
+			action: "Reply in #eng thread",
 			sessionId: "s1",
 			text: "yes",
 		});
-		const ask = { kind: "ask", label: "Ask", text: "shipped?", session: "" };
+		const tell = { kind: "tell", text: "shipped?", session: "", name: null };
 		expect(
 			parseSlackSuggestion(
-				{ ...ask, session: "api-auth" },
+				{ ...tell, session: "api-auth" },
 				slackItem,
 				[idle],
 				false,
 			),
-		).toMatchObject({ kind: "ask", sessionId: "s1", status: "pending" });
+		).toMatchObject({
+			kind: "tell",
+			action: "Tell api-auth",
+			sessionId: "s1",
+			status: "pending",
+		});
+		// A working session cannot take a message.
 		expect(
 			parseSlackSuggestion(
-				{ ...ask, session: "billing" },
+				{ ...tell, session: "billing" },
 				slackItem,
 				[working],
+				false,
+			),
+		).toBeNull();
+		expect(
+			parseSlackSuggestion(
+				{
+					kind: "start",
+					text: "Fix the login redirect Ana reported.",
+					session: null,
+					name: "Fix Login Redirect!",
+				},
+				slackItem,
+				[],
+				false,
+			),
+		).toMatchObject({
+			kind: "start",
+			action: "Start new session fix-login-redirect",
+			name: "fix-login-redirect",
+			sessionId: null,
+		});
+		expect(
+			parseSlackSuggestion(
+				{ kind: "start", text: "brief", session: null, name: "!!" },
+				slackItem,
+				[],
 				false,
 			),
 		).toBeNull();
 		// After the session answered, only a reply is taken.
 		expect(
 			parseSlackSuggestion(
-				{ ...ask, session: "api-auth" },
+				{ ...tell, session: "api-auth" },
 				slackItem,
 				[idle],
 				true,
@@ -221,12 +319,58 @@ describe("suggestions", () => {
 		).toBeNull();
 		expect(
 			parseSlackSuggestion(
-				{ kind: "none", label: "x", text: "y", session: null },
+				{ kind: "start", text: "brief", session: null, name: "x" },
+				slackItem,
+				[],
+				true,
+			),
+		).toBeNull();
+		expect(
+			parseSlackSuggestion(
+				{ kind: "none", text: "y", session: null, name: null },
 				slackItem,
 				[],
 				false,
 			),
 		).toBeNull();
+	});
+
+	test("the action line says what y does, and where", () => {
+		const dm = { ...slackItem, reason: "dm" as const, channel: "Dana" };
+		expect(slackReplyTarget(slackItem)).toBe("Reply in #eng thread");
+		expect(slackReplyTarget(dm)).toBe("Reply to Dana in DM");
+		expect(slackReplyTarget({ ...dm, threadTs: "1.0" })).toBe(
+			"Reply in DM thread with Dana",
+		);
+		const g = {
+			itemId: slackItem.id,
+			kind: "tell" as const,
+			action: "Tell api-auth",
+			text: "did it ship?",
+			sessionId: "s1",
+			name: null,
+			status: "pending" as const,
+		};
+		expect(slackSuggestionLine(g)).toBe("Tell api-auth: did it ship?");
+		expect(
+			slackSuggestionLine({ ...g, status: "asked", action: "Told api-auth" }),
+		).toBe("Told api-auth");
+		expect(slackSuggestionLine({ ...g, status: "sending" })).toBe(
+			"Sending to Slack…",
+		);
+		expect(slackSessionName("  Fix: the Login  ")).toBe("fix-the-login");
+		expect(slackSessionName(null)).toBeNull();
+	});
+
+	test("a DM's own message is answered in the DM, anything else in its thread", () => {
+		const dm = { ...slackItem, reason: "dm" as const };
+		expect(slackSendPrompt(dm, "ok")).toContain("not in a thread");
+		expect(slackSendPrompt({ ...dm, threadTs: "1.0" }, "ok")).toContain(
+			"thread with ts 1.0",
+		);
+		expect(slackSendPrompt(slackItem, "ok")).toContain(
+			"Post a reply in the Slack thread",
+		);
 	});
 
 	test("the follow-up prompt carries the session's answer", () => {
@@ -236,7 +380,8 @@ describe("suggestions", () => {
 			answer: "Yes, in #42.",
 		});
 		expect(prompt).toContain("It answered: Yes, in #42.");
-		expect(prompt).not.toContain("- ask:");
+		expect(prompt).not.toContain("- tell:");
+		expect(prompt).not.toContain("- start:");
 		expect(slackSendPrompt(slackItem, "merged")).toContain("<<<\nmerged\n>>>");
 	});
 });

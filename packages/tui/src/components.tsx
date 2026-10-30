@@ -11,7 +11,13 @@ import type {
 	SlackSuggestion,
 	Suggestion,
 } from "@serenity/core";
-import { commandHint, prLine } from "@serenity/core";
+import {
+	actionLine,
+	commandHint,
+	prLine,
+	slackSuggestionLine,
+	suggestionAction,
+} from "@serenity/core";
 import { Box, Text } from "ink";
 import { type ReactNode, useEffect, useState } from "react";
 import { type InputRow, inputRows, PROMPT_W } from "./master-input";
@@ -26,15 +32,7 @@ import {
 	suggestionLines,
 } from "./master-layout";
 import { CURSOR, type Field, fieldWindow } from "./text-input";
-import {
-	age,
-	askLine,
-	BRAND_COLOR,
-	cardText,
-	glyph,
-	nameColor,
-	SLACK_COLOR,
-} from "./theme";
+import { age, askLine, BRAND_COLOR, cardText, glyph, nameColor } from "./theme";
 
 const ink = (color: Color | undefined) =>
 	color && color !== "default" ? color : undefined;
@@ -315,7 +313,10 @@ export function Selector({ on }: { on: boolean }) {
 	return <Text color="whiteBright">{on ? "▸ " : "  "}</Text>;
 }
 
-/** One NEEDS YOU item (design): glyph and name, what it needs, the ◆ suggestion. */
+/**
+ * One NEEDS YOU item (design): glyph and name, what it needs, and the ◆
+ * suggestion as what y does to whom, in full while selected (ADR 0050).
+ */
 function NeedItem({
 	session,
 	suggestion,
@@ -334,7 +335,13 @@ function NeedItem({
 	first: boolean;
 }) {
 	const g = glyph(session.status);
-	const label = suggestion ? suggestionLines(suggestion.label, inner) : [];
+	const label = suggestion
+		? suggestionLines(
+				actionLine(suggestionAction(suggestion, session)),
+				inner,
+				selected,
+			)
+		: [];
 	return (
 		<Box flexDirection="column" marginTop={first ? 0 : 1}>
 			<Text wrap="truncate">
@@ -553,7 +560,8 @@ function ReviewSection({
 
 /**
  * A Slack mention or DM in NEEDS YOU (ADR 0031): who wrote and where, its
- * age, what the user has to do, and the ◆ suggestion (ADR 0024).
+ * age, what the user has to do, and the ◆ suggestion as what y does
+ * (ADR 0024, 0050), in full while selected.
  */
 function SlackNeedItem({
 	item,
@@ -598,6 +606,7 @@ function SlackNeedItem({
 					suggestion={suggestion}
 					reply={selected ? reply : null}
 					inner={inner}
+					full={selected}
 				/>
 			) : null}
 		</Box>
@@ -609,10 +618,13 @@ function SlackSuggestionLine({
 	suggestion,
 	reply,
 	inner,
+	full,
 }: {
 	suggestion: SlackSuggestion;
 	reply: Field | null;
 	inner: number;
+	/** All of its text, not the first two lines. */
+	full: boolean;
 }) {
 	if (reply !== null)
 		return (
@@ -622,20 +634,28 @@ function SlackSuggestionLine({
 		);
 	const pending = suggestion.status === "pending";
 	return (
-		<Box paddingLeft={NEED_INDENT} justifyContent="space-between">
-			<Text wrap="truncate" color={pending ? undefined : "gray"}>
-				<Text color="magenta">◆ </Text>
-				<Text color={SLACK_COLOR}>slack </Text>
-				{suggestion.status === "sending"
-					? "Sending to Slack…"
-					: suggestion.label}
-			</Text>
-			{pending ? (
-				<Box flexShrink={0} marginLeft={1}>
-					<Chips keys="yen" />
-				</Box>
-			) : null}
-		</Box>
+		<>
+			{suggestionLines(slackSuggestionLine(suggestion), inner, full).map(
+				(line, i) => (
+					<Box
+						// biome-ignore lint/suspicious/noArrayIndexKey: lines are positional
+						key={i}
+						paddingLeft={NEED_INDENT}
+						justifyContent="space-between"
+					>
+						<Text wrap="truncate" color={pending ? undefined : "gray"}>
+							<Text color="magenta">{i ? "  " : "◆ "}</Text>
+							{line}
+						</Text>
+						{i === 0 && pending ? (
+							<Box flexShrink={0} marginLeft={1}>
+								<Chips keys="yen" />
+							</Box>
+						) : null}
+					</Box>
+				),
+			)}
+		</>
 	);
 }
 

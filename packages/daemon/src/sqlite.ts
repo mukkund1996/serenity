@@ -82,6 +82,7 @@ const SESSION_DEFAULTS: Pick<
 	| "claudePid"
 	| "pinned"
 	| "exitNote"
+	| "dismissedAt"
 	| "subagents"
 	| "topicHeld"
 > = {
@@ -95,6 +96,7 @@ const SESSION_DEFAULTS: Pick<
 	claudePid: null,
 	pinned: false,
 	exitNote: null,
+	dismissedAt: null,
 	subagents: [],
 	topicHeld: null,
 };
