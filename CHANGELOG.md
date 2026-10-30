@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.7.0](https://github.com/mukkund1996/serenity/compare/v0.6.0...v0.7.0) (2026-10-30)
+
+
+### Features
+
+* a card pulses when the master messages it, the master when the session answers ([#38](https://github.com/mukkund1996/serenity/issues/38)) ([fe92360](https://github.com/mukkund1996/serenity/commit/fe92360b8ca88739b62d6d3dbf519893bf00c0b5))
+* a supervisor restarts the daemon, crashes become deduped issues, state survives a restart ([#46](https://github.com/mukkund1996/serenity/issues/46)) ([82b2776](https://github.com/mukkund1996/serenity/commit/82b27761f3f90b7f7e7ab7ed621ccc24735a2fe7))
+* an [@session](https://github.com/session) message is relayed to the session; the master never looks into it ([#37](https://github.com/mukkund1996/serenity/issues/37)) ([4a601df](https://github.com/mukkund1996/serenity/commit/4a601df215f86b6e5b65b8f1f64238c09043e84c))
+* claude restarts in its pane when it exits, resuming its conversation (ADR 0044) ([#44](https://github.com/mukkund1996/serenity/issues/44)) ([2321967](https://github.com/mukkund1996/serenity/commit/2321967d112c4817182dfe870415a014f5c975c2))
+* dependency calls retry with backoff; the map reconnects on its own; lasting failures show in the header ([#45](https://github.com/mukkund1996/serenity/issues/45)) ([96cf9c1](https://github.com/mukkund1996/serenity/commit/96cf9c1d6cbb7a13408681b56a3e0d358728c966))
+* finer topics, and a topic move waits while a session works or the user types (ADR 0047) ([#48](https://github.com/mukkund1996/serenity/issues/48)) ([71a2afd](https://github.com/mukkund1996/serenity/commit/71a2afd223c826efabaf5ef6034b2fc87ef768f9))
+* i opens the master input and it stays open; [@session](https://github.com/session) acts on a session at once ([#36](https://github.com/mukkund1996/serenity/issues/36)) ([730862b](https://github.com/mukkund1996/serenity/commit/730862bc255aa925939f358835c0e05318cfaa14))
+* Shift+Enter starts a new line in the master input; Enter still sends ([#39](https://github.com/mukkund1996/serenity/issues/39)) ([0831fbb](https://github.com/mukkund1996/serenity/commit/0831fbb028baf705e71bf249a6036d9e4017a7ab))
+* Slack is read every minute, and within 15 s of opening a map ([#34](https://github.com/mukkund1996/serenity/issues/34)) ([86debf8](https://github.com/mukkund1996/serenity/commit/86debf890101ec93ae8c955df3252256ed86c45b))
+* Slack joins NEEDS YOU, only mentions and DMs that need an action ([#29](https://github.com/mukkund1996/serenity/issues/29)) ([8ca8f2e](https://github.com/mukkund1996/serenity/commit/8ca8f2e5233cf58ddec5c64841a48eb635a92ea1))
+* the master gets a skill, runs in auto mode, and sends Slack messages once confirmed in the chat ([#26](https://github.com/mukkund1996/serenity/issues/26)) ([f264c32](https://github.com/mukkund1996/serenity/commit/f264c32da3249dcf328b2200ece67331f5ee1e8e))
+* the master reads session status on demand and watches sessions; hook status is checked against Claude's own ([#30](https://github.com/mukkund1996/serenity/issues/30)) ([7a8b47f](https://github.com/mukkund1996/serenity/commit/7a8b47f49a5fcddb1b79d5f7131f0561116a71f6))
+* the master sends replies the user asked for with send_reply ([#33](https://github.com/mukkund1996/serenity/issues/33)) ([18d6142](https://github.com/mukkund1996/serenity/commit/18d61426b1fe0a251d6dd630e9651b2ffd1e2c9c))
+* the master shows four messages; PgUp PgDn scroll its conversation ([#41](https://github.com/mukkund1996/serenity/issues/41)) ([72a8d30](https://github.com/mukkund1996/serenity/commit/72a8d30ab6841868e66505350e8e31d61ba6c583))
+* the master starts sessions from a brief with create_session ([#31](https://github.com/mukkund1996/serenity/issues/31)) ([bb3fd5b](https://github.com/mukkund1996/serenity/commit/bb3fd5b76998981e1b70855da8de1469ddbe3f65))
+* the master survives crashes, hangs and daemon restarts (ADR 0046) ([fe6677b](https://github.com/mukkund1996/serenity/commit/fe6677ba6df7122640c3706f0a4d8d08217592ce))
+* the master's queue holds the replies it wants to send, apart from NEEDS YOU ([#40](https://github.com/mukkund1996/serenity/issues/40)) ([bd1a07a](https://github.com/mukkund1996/serenity/commit/bd1a07ac0efe92b1f42e76cb1adc2ae54d4cc639))
+* three master messages, an eased pulse, and text fields that edit at a cursor ([#42](https://github.com/mukkund1996/serenity/issues/42)) ([8d40319](https://github.com/mukkund1996/serenity/commit/8d403196a4bc26a5bbab32247b6775ab6682eb33))
+* x dismisses a Slack item from NEEDS YOU, for good, by message ([#32](https://github.com/mukkund1996/serenity/issues/32)) ([3a38d93](https://github.com/mukkund1996/serenity/commit/3a38d9309030380f276a7258da420e1370296d84))
+
+
+### Bug Fixes
+
+* a session name means the live session, not an archived one that shares it ([#35](https://github.com/mukkund1996/serenity/issues/35)) ([6296d55](https://github.com/mukkund1996/serenity/commit/6296d55bbb27bfe1e175e2385696eba82b41c920))
+* Ctrl+g gets back to the map after a daemon restart, and never falls through to claude after /clear ([#47](https://github.com/mukkund1996/serenity/issues/47)) ([3382895](https://github.com/mukkund1996/serenity/commit/3382895f830da0b7583a4f4cb32e7b302641527d))
+
 ## [0.6.0](https://github.com/mukkund1996/serenity/compare/v0.5.0...v0.6.0) (2026-10-27)
 
 
