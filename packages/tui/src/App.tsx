@@ -1,5 +1,6 @@
 import { basename } from "node:path";
 import {
+	actionLine,
 	type CleanupPlan,
 	type CreateSessionParams,
 	completeMention,
@@ -15,7 +16,10 @@ import {
 	needsYou,
 	type Ping,
 	type Session,
+	type SlackItem,
 	type Suggestion,
+	slackSuggestionLine,
+	suggestionAction,
 	type TopicGroup,
 	topicOf,
 	UNSORTED,
@@ -316,6 +320,25 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const slackItems = slack?.items ?? [];
 	const slackSuggestionFor = (itemId: string | undefined) =>
 		slack?.suggestions.find((g) => g.itemId === itemId) ?? null;
+	/** A NEEDS YOU session's ◆ line: what y does, in full while selected (ADR 0050). */
+	const needActionLines = (s: Session) => {
+		const g = needSuggestionFor(s.id);
+		return g
+			? suggestionLines(
+					actionLine(suggestionAction(g, s)),
+					masterInner,
+					onMaster && inside && element === s.id,
+				)
+			: [];
+	};
+	/** Rows of a Slack item's ◆ line; its reply input (e) takes one. */
+	const slackActionRows = (itemId: string) => {
+		const g = slackSuggestionFor(itemId);
+		if (!g) return 0;
+		const on = onMaster && inside && element === `${SLACK_NEED}${itemId}`;
+		if (on && replyText !== null) return 1;
+		return suggestionLines(slackSuggestionLine(g), masterInner, on).length;
+	};
 	const conversation = state?.conversation ?? [];
 	const chatEndAt = conversation.findIndex((m) => m.id === chatEnd);
 	// Planned with the raw selection: only its place in NEEDS YOU matters here.
@@ -333,17 +356,13 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				rows:
 					1 +
 					needLines(askLine(s), masterInner).length +
-					suggestionLines(needSuggestionFor(s.id)?.label ?? "", masterInner)
-						.length +
+					needActionLines(s).length +
 					(onMaster && element === s.id && replyText !== null ? 1 : 0),
 			})),
 			...slackItems.map((m) => ({
 				id: `${SLACK_NEED}${m.id}`,
-				// Its reply input takes the suggestion's row.
 				rows:
-					1 +
-					needLines(m.action, masterInner).length +
-					(slackSuggestionFor(m.id) ? 1 : 0),
+					1 + needLines(m.action, masterInner).length + slackActionRows(m.id),
 			})),
 		],
 		queue: queue.map(({ suggestion }) => ({
@@ -421,7 +440,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	/** The selected reply in the master's queue: y e n act on it, Enter shows it in full. */
 	const queued =
 		(onMaster && queue.find((q) => queueId(q.suggestion) === selected)) || null;
-	/** The selected Slack item in NEEDS YOU: y e n act on its suggestion, Enter or o opens it, x dismisses it. */
+	/** The selected Slack item in NEEDS YOU: y e n act on its suggestion, o opens it, x dismisses it, Enter dismisses and opens it. */
 	const slackItem =
 		(onMaster && slackItems.find((m) => `${SLACK_NEED}${m.id}` === selected)) ||
 		null;
@@ -467,7 +486,9 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 						? {
 								kind: "session",
 								session: focused,
-								suggestion: focusedSuggestion?.label ?? null,
+								suggestion: focusedSuggestion
+									? actionLine(suggestionAction(focusedSuggestion, focused))
+									: null,
 								reply,
 							}
 						: null;
@@ -661,12 +682,33 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		);
 	};
 
-	/** Enter on a card attaches it; inside the master it acts on the selected element. */
+	/** x, or Enter (which also opens it), on a Slack item: gone from NEEDS YOU for good (ADR 0034, 0050). */
+	const dismissSlack = (item: SlackItem, open: boolean) => {
+		if (open && item.permalink) openUrl(item.permalink);
+		call("slack.dismiss", { channelId: item.channelId, ts: item.ts }).then(
+			() => setNotice(`dismissed ${item.author}'s message`),
+			fail,
+		);
+	};
+
+	/**
+	 * Enter on a card attaches it; inside the master it acts on the selected
+	 * element. A NEEDS YOU item is a notification seen (ADR 0050): a Slack
+	 * item is dismissed and opened, a session dismissed, unless it waits on
+	 * the user: then Enter attaches, to answer it.
+	 */
 	const activate = () => {
 		if (!onMaster) return card ? attach(card) : undefined;
 		if (selected === MASTER_INPUT) return setMasterText("");
+		if (slackItem) return dismissSlack(slackItem, true);
 		if (selectedLink) return openUrl(selectedLink);
-		if (focused) attach(focused);
+		if (!focused) return;
+		if (focused.status === "waiting") return attach(focused);
+		call("session.dismiss", { id: focused.id }).then(
+			() =>
+				setNotice(`${focused.name} seen; back in NEEDS YOU when it changes`),
+			fail,
+		);
 	};
 
 	const openConfirm = async (session: Session, suggestionId: string | null) => {
@@ -738,12 +780,18 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		sent.catch(fail);
 	};
 
-	/** y on a Slack suggestion: post the reply, or type the question to its session. */
+	/** y on a Slack suggestion: post the reply, tell its session, or start a new one. */
 	const acceptSlack = (itemId: string, text?: string) => {
-		const ask = slackSuggestionFor(itemId)?.kind === "ask";
+		const g = slackSuggestionFor(itemId);
 		call("slack.accept", { repo, itemId, ...(text ? { text } : {}) }).then(
 			() =>
-				setNotice(ask ? "asked; its answer becomes a reply" : "sent to Slack"),
+				setNotice(
+					g?.kind === "tell"
+						? "told; its answer becomes a reply"
+						: g?.kind === "start"
+							? `started ${g.name}; its answer becomes a reply`
+							: "sent to Slack",
+				),
 			fail,
 		);
 	};
@@ -1012,14 +1060,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			}
 
 			// x dismisses a Slack item for good (ADR 0034).
-			if (slackItem && input === "x")
-				return void call("slack.dismiss", {
-					channelId: slackItem.channelId,
-					ts: slackItem.ts,
-				}).then(
-					() => setNotice(`dismissed ${slackItem.author}'s message`),
-					fail,
-				);
+			if (slackItem && input === "x") return dismissSlack(slackItem, false);
 			// y e n on a Slack item act on its suggestion (ADR 0024).
 			if (slackItem && ["y", "e", "n"].includes(input)) {
 				if (slackSuggestion?.status !== "pending") return;

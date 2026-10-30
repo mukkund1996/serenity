@@ -33,6 +33,7 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
 		watched: false,
 		pinned: false,
 		exitNote: null,
+		dismissedAt: null,
 		createdAt: 1,
 		updatedAt: 1,
 		...overrides,

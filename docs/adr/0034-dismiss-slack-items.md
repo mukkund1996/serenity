@@ -1,6 +1,6 @@
 # 0034 · `x` dismisses a Slack item from NEEDS YOU, for good, by message
 
-**Status:** Accepted · 2026-10-28 · Amends 0031
+**Status:** Accepted · 2026-10-28 · Amends 0031 · Amended by [0050](0050-needs-you-seen-and-explicit-actions.md): Enter dismisses too, and opens the message
 
 ## Context
 ADR 0031 keeps a Slack mention or DM in NEEDS YOU until the inbox worker no longer finds that it needs an action. The triage is the model's judgement, so an item the user has dealt with elsewhere (in person, in another thread) or does not mean to act on can stay for days, taking one of the three places. There was no way to say "not this one".

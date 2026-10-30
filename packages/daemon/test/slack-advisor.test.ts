@@ -43,6 +43,7 @@ let storage: Storage;
 let runner: FakeRunner;
 let advisor: SlackAdvisor;
 let typed: Array<[string, string]>;
+let started: Array<[string, string]>;
 let refreshes: number;
 let session: Session;
 
@@ -52,6 +53,7 @@ beforeEach(() => {
 	storage = createMemoryStorage();
 	runner = new FakeRunner();
 	typed = [];
+	started = [];
 	refreshes = 0;
 	session = makeSession({
 		id: "s1",
@@ -73,6 +75,18 @@ beforeEach(() => {
 		sendText: async (s, text) => {
 			typed.push([s.name, text]);
 		},
+		startSession: async (repo, name, brief) => {
+			started.push([name, brief]);
+			const fresh = makeSession({
+				id: "s9",
+				repo,
+				name,
+				status: "working",
+				lastAssistantMessage: null,
+			});
+			storage.sessions.put(fresh);
+			return fresh;
+		},
 		refreshInbox: () => refreshes++,
 		broadcast: () => {},
 		log: () => {},
@@ -82,7 +96,6 @@ beforeEach(() => {
 test("a new item gets a reply suggestion; y posts exactly that text", async () => {
 	runner.answers.push({
 		kind: "reply",
-		label: 'Reply "yes, in #42"',
 		text: "yes, in #42",
 		session: "api-auth",
 	});
@@ -93,6 +106,7 @@ test("a new item gets a reply suggestion; y posts exactly that text", async () =
 	]);
 	expect(runner.calls[0]?.prompt).toContain("did the token fix ship?");
 	expect(runner.calls[0]?.prompt).toContain("api-auth [unsorted] idle");
+	expect(advisor.list(REPO)[0]?.action).toBe("Reply in #eng thread");
 	expect(runner.calls[0]?.allowedTools).not.toContain(SLACK_SEND_TOOL);
 
 	// A second read with the same item does not ask the model again.
@@ -117,7 +131,6 @@ test("a new item gets a reply suggestion; y posts exactly that text", async () =
 test("a failed send keeps the suggestion to try again", async () => {
 	runner.answers.push({
 		kind: "reply",
-		label: "Reply",
 		text: "yes",
 		session: null,
 	});
@@ -130,10 +143,9 @@ test("a failed send keeps the suggestion to try again", async () => {
 	expect(advisor.list(REPO)[0]?.status).toBe("pending");
 });
 
-test("an ask types the question; the session's answer becomes a reply", async () => {
+test("a tell types the message; the session's answer becomes a reply", async () => {
 	runner.answers.push({
-		kind: "ask",
-		label: "Ask api-auth if the fix shipped",
+		kind: "tell",
 		text: "Did the token fix ship? Answer in one line.",
 		session: "api-auth",
 	});
@@ -145,12 +157,11 @@ test("an ask types the question; the session's answer becomes a reply", async ()
 	]);
 	expect(advisor.list(REPO)[0]).toMatchObject({
 		status: "asked",
-		label: "Asked api-auth; waiting for its answer",
+		action: "Told api-auth; waiting for its answer",
 	});
 
 	runner.answers.push({
 		kind: "reply",
-		label: 'Reply "shipped in #42"',
 		text: "shipped in #42",
 		session: "api-auth",
 	});
@@ -166,6 +177,7 @@ test("an ask types the question; the session's answer becomes a reply", async ()
 	expect(runner.calls[1]?.prompt).toContain(
 		"It answered: Yes: merged in #42 this morning.",
 	);
+	expect(runner.calls[1]?.prompt).not.toContain("- tell:");
 	expect(advisor.list(REPO)[0]).toMatchObject({
 		kind: "reply",
 		status: "pending",
@@ -173,10 +185,55 @@ test("an ask types the question; the session's answer becomes a reply", async ()
 	});
 });
 
+test("a start begins a session with the brief; its first answer becomes a reply", async () => {
+	runner.answers.push({
+		kind: "start",
+		text: "Fix the token refresh Ana reported in #eng.",
+		session: null,
+		name: "fix-token-refresh",
+	});
+	advisor.onInbox(REPO, [item]);
+	await settle();
+	expect(advisor.list(REPO)[0]).toMatchObject({
+		kind: "start",
+		action: "Start new session fix-token-refresh",
+		name: "fix-token-refresh",
+	});
+	await advisor.accept(REPO, item.id);
+	expect(started).toEqual([
+		["fix-token-refresh", "Fix the token refresh Ana reported in #eng."],
+	]);
+	expect(typed).toEqual([]);
+	expect(advisor.list(REPO)[0]).toMatchObject({
+		status: "asked",
+		sessionId: "s9",
+		action: "Started fix-token-refresh; waiting for its answer",
+	});
+
+	runner.answers.push({
+		kind: "reply",
+		text: "fixed in #43",
+		session: "fix-token-refresh",
+		name: null,
+	});
+	const fresh = storage.sessions.get("s9") as Session;
+	advisor.onSessionChanged({
+		...fresh,
+		status: "idle",
+		lastAssistantMessage: "Fixed in #43.",
+	});
+	await settle();
+	expect(runner.calls[1]?.prompt).toContain("It answered: Fixed in #43.");
+	expect(advisor.list(REPO)[0]).toMatchObject({
+		kind: "reply",
+		status: "pending",
+		text: "fixed in #43",
+	});
+});
+
 test("n declines until someone writes in the thread again", async () => {
 	runner.answers.push({
 		kind: "reply",
-		label: "Reply",
 		text: "yes",
 		session: null,
 	});
@@ -187,7 +244,7 @@ test("n declines until someone writes in the thread again", async () => {
 	advisor.onInbox(REPO, [item]);
 	await settle();
 	expect(runner.calls).toHaveLength(1);
-	runner.answers.push({ kind: "none", label: "", text: null, session: null });
+	runner.answers.push({ kind: "none", text: null, session: null, name: null });
 	advisor.onInbox(REPO, [{ ...item, ts: "200.0", text: "any news?" }]);
 	await settle();
 	expect(runner.calls).toHaveLength(2);
@@ -196,7 +253,6 @@ test("n declines until someone writes in the thread again", async () => {
 test("an item that left the inbox loses its suggestion", async () => {
 	runner.answers.push({
 		kind: "reply",
-		label: "Reply",
 		text: "yes",
 		session: null,
 	});

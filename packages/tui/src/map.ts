@@ -7,20 +7,14 @@ import {
 	type SlackItem,
 	type SlackSuggestion,
 	type Style,
+	slackSuggestionLine,
 	type TopicGroup,
 	truncate,
 	wrap,
 } from "@serenity/core";
 import { inputRows, PROMPT_W } from "./master-input";
 import { CURSOR, CURSOR_CELL, drawField, type Field } from "./text-input";
-import {
-	age,
-	askLine,
-	glyph,
-	nameColor,
-	QUEUE_COLOR,
-	SLACK_COLOR,
-} from "./theme";
+import { age, askLine, glyph, nameColor, QUEUE_COLOR } from "./theme";
 import {
 	type CardBox,
 	type CardElement,
@@ -518,16 +512,10 @@ function drawMaster(
 			const pending = suggestion.status === "pending";
 			const chips = pending ? " y e n" : "";
 			const d = canvas.text(ix + 2, body + 2, "◆ ", { fg: "magenta" });
-			const c = canvas.text(d, body + 2, "slack ", { fg: SLACK_COLOR });
 			canvas.text(
-				c,
+				d,
 				body + 2,
-				truncate(
-					suggestion.status === "sending"
-						? "Sending to Slack…"
-						: suggestion.label,
-					iw - 10 - chips.length,
-				),
+				truncate(slackSuggestionLine(suggestion), iw - 4 - chips.length),
 				pending ? {} : DIM,
 			);
 			if (chips) canvas.text(ix + iw - chips.length, body + 2, chips, DIM);

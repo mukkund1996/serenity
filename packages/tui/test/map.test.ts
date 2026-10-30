@@ -273,15 +273,17 @@ test("a selected Slack item shows in the master box, like any NEEDS YOU item", (
 				suggestion: {
 					itemId: "C1:1",
 					kind: "reply",
-					label: 'Reply "merged in #42"',
+					action: "Reply in #eng thread",
 					text: "merged in #42",
 					sessionId: null,
+					name: null,
 					status: "pending",
 				},
 			},
 		},
 	}).canvas.toString();
-	expect(suggested).toMatch(/◆ slack Reply "merged in #42" +y e n/);
+	// It says what y does and where: the verb, the target, the text.
+	expect(suggested).toMatch(/◆ Reply in #eng thread: merged in #… +y e n/);
 	const asked = draw({
 		master: {
 			focused: true,
@@ -289,16 +291,17 @@ test("a selected Slack item shows in the master box, like any NEEDS YOU item", (
 				...slack,
 				suggestion: {
 					itemId: "C1:1",
-					kind: "ask",
-					label: "Asked api-auth; waiting for its answer",
+					kind: "tell",
+					action: "Told api-auth; waiting for its answer",
 					text: "did it ship?",
 					sessionId: "s1",
+					name: null,
 					status: "asked",
 				},
 			},
 		},
 	}).canvas.toString();
-	expect(asked).toContain("◆ slack Asked api-auth; waiting for");
+	expect(asked).toContain("◆ Told api-auth; waiting for its answer");
 	expect(asked).not.toContain("y e n");
 });
 

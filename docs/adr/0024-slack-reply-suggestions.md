@@ -1,6 +1,6 @@
 # 0024 · Slack suggestions: replies from what serenity knows, or ask a session first
 
-**Status:** Accepted · 2026-10-27
+**Status:** Accepted · 2026-10-27 · Amended by [0050](0050-needs-you-seen-and-explicit-actions.md): `tell` replaces `ask`, and `start` begins a new session
 
 ## Context
 ADR 0023 shows the Slack threads and mentions waiting on the user. The answer to many of them is already on the map: a session's summary, its PR and checks, its branch, or something an agent knows but has not said. Typing that into Slack is the user's chore. Sometimes no card shows the answer, but an agent that did the work could give it if asked.

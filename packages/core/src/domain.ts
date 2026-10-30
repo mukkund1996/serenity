@@ -88,6 +88,12 @@ export interface Session {
 	 * was restarted, or, on an ended session, why it was not.
 	 */
 	exitNote: string | null;
+	/**
+	 * When the user dismissed it from NEEDS YOU with Enter (ADR 0050): it
+	 * stays out until its status changes or a newer suggestion comes. A
+	 * session waiting on the user is never dismissed. Null otherwise.
+	 */
+	dismissedAt: number | null;
 	createdAt: number;
 	updatedAt: number;
 }

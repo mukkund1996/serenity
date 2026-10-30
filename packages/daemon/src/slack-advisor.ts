@@ -29,6 +29,8 @@ export interface AdvisorHost {
 	reviews(repo: string): ReviewRequest[];
 	/** Types text into a session's agent, as a reply does. */
 	sendText(session: Session, text: string): Promise<void>;
+	/** Starts a new worktree session with the brief as its first prompt, as N does. */
+	startSession(repo: string, name: string, brief: string): Promise<Session>;
 	/** Reads Slack again, so an answered item leaves the inbox. */
 	refreshInbox(): void;
 	broadcast(repo: string): void;
@@ -39,7 +41,7 @@ export interface AdvisorHost {
 interface Entry {
 	suggestion: SlackSuggestion;
 	ts: string;
-	/** For an asked session: the question, and its last reply when asked. */
+	/** For a told or started session: what it was sent, and its last reply then. */
 	asked?: { question: string; before: string | null };
 }
 
@@ -47,12 +49,13 @@ interface Entry {
 const SUGGEST_TIMEOUT_MS = 180_000;
 
 /**
- * The master's suggestions for Slack (ADR 0024). For each item waiting on
- * the user, Sonnet reads the thread and, from what serenity knows (sessions,
- * archived ones too, their PRs, review requests), proposes a reply or a
- * question for a session. An asked session's next answer brings a reply.
- * Nothing runs until the user presses y. Kept in memory: a restart
- * suggests again from the next read.
+ * The master's suggestions for Slack (ADR 0024, 0050). For each item waiting
+ * on the user, Sonnet reads the thread and, from what serenity knows
+ * (sessions, archived ones too, their PRs, review requests), proposes a
+ * reply, a message to the session the item is about, or a new session. A
+ * told or started session's next answer brings a reply. Nothing runs until
+ * the user presses y. Kept in memory: a restart suggests again from the
+ * next read.
  */
 export class SlackAdvisor {
 	/** repo → item id → its suggestion. */
@@ -91,7 +94,7 @@ export class SlackAdvisor {
 				void this.suggest(repo, item, null);
 	}
 
-	/** An asked session replied: turn its answer into a reply. */
+	/** A told or started session replied: turn its answer into a reply. */
 	onSessionChanged(session: Session): void {
 		const entries = this.repos.get(session.repo);
 		if (!entries) return;
@@ -139,7 +142,7 @@ export class SlackAdvisor {
 			const raw = await this.host.runner.runJson({
 				prompt: slackSuggestionPrompt(
 					item,
-					slackContext(sessions, this.host.reviews(repo)),
+					slackContext(sessions, this.host.reviews(repo), item),
 					answer,
 				),
 				model: this.host.model,
@@ -165,7 +168,10 @@ export class SlackAdvisor {
 		}
 	}
 
-	/** y: post the reply, or type the question to the session. `text` is the user's edit (e). */
+	/**
+	 * y: post the reply, type the message to the session, or start the new
+	 * session with the brief. `text` is the user's edit (e).
+	 */
 	async accept(repo: string, itemId: string, text?: string): Promise<void> {
 		const entry = this.repos.get(repo)?.get(itemId);
 		const item = this.items.get(repo)?.find((i) => i.id === itemId);
@@ -175,7 +181,7 @@ export class SlackAdvisor {
 		if (!body) throw new Error("nothing to send");
 		const { suggestion } = entry;
 
-		if (suggestion.kind === "ask") {
+		if (suggestion.kind === "tell") {
 			const session = suggestion.sessionId
 				? this.host.storage.sessions.get(suggestion.sessionId)
 				: null;
@@ -185,7 +191,25 @@ export class SlackAdvisor {
 			entry.suggestion = {
 				...suggestion,
 				text: body,
-				label: `Asked ${session.name}; waiting for its answer`,
+				action: `Told ${session.name}; waiting for its answer`,
+				status: "asked",
+			};
+			this.host.broadcast(repo);
+			return;
+		}
+
+		if (suggestion.kind === "start") {
+			const session = await this.host.startSession(
+				repo,
+				suggestion.name ?? "slack-follow-up",
+				body,
+			);
+			entry.asked = { question: body, before: null };
+			entry.suggestion = {
+				...suggestion,
+				text: body,
+				sessionId: session.id,
+				action: `Started ${session.name}; waiting for its answer`,
 				status: "asked",
 			};
 			this.host.broadcast(repo);

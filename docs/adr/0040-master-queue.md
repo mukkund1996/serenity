@@ -1,6 +1,6 @@
 # 0040 · The master's queue: replies it wants to send wait in their own section, not NEEDS YOU
 
-**Status:** Accepted · 2026-10-29 · Amends 0031, 0035
+**Status:** Accepted · 2026-10-29 · Amends 0031, 0035 · Amended by [0050](0050-needs-you-seen-and-explicit-actions.md): the `slack` tag gives way to the ◆ verb
 
 ## Context
 A reply the master's chat drafts for a session (`suggest` kind `reply`, or a `send_reply` the user had not confirmed, 0035) waited in NEEDS YOU as the session's ◆ suggestion. NEEDS YOU is for what sessions and people need from the user; these are the master's own outgoing messages. Mixed in, they made an idle session look like it needed the user, took one of the five NEEDS YOU places, and showed only a 60-character label of a message that can run to paragraphs.

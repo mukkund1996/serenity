@@ -93,6 +93,12 @@ export interface Methods {
 	/** Topics have no rename: only the master manages them (ADR 0012). */
 	"session.rename": { params: { id: string; name: string }; result: Session };
 	"session.watch": { params: { id: string; watched: boolean }; result: null };
+	/**
+	 * Enter on a session in NEEDS YOU (ADR 0050): seen. A watched, finished
+	 * one loses its watch; it stays out of NEEDS YOU until its status changes.
+	 * Refused for a session waiting on the user.
+	 */
+	"session.dismiss": { params: { id: string }; result: null };
 	"session.pin": { params: { id: string; pinned: boolean }; result: null };
 	"session.cleanupPlan": { params: { id: string }; result: CleanupPlan };
 	"session.cleanup": { params: { id: string }; result: null };

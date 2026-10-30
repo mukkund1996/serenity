@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
+	actionLine,
 	archivedTopics,
 	groupTopics,
 	isQueued,
 	masterQueue,
 	needsYou,
 	PINNED,
+	suggestionAction,
 	UNSORTED,
 } from "../src/attention";
 import { makeSession, makeSuggestion } from "../test-support";
@@ -27,6 +29,54 @@ describe("needsYou", () => {
 			makeSession({ id: "kept", status: "dead", pinned: true }),
 		]);
 		expect(list).toEqual([]);
+	});
+
+	test("a dismissed session stays out until a newer suggestion; a waiting one never leaves", () => {
+		const dead = makeSession({ id: "dead", status: "dead", dismissedAt: 10 });
+		const wait = makeSession({
+			id: "wait",
+			status: "waiting",
+			dismissedAt: 10,
+		});
+		expect(needsYou([dead, wait]).map((s) => s.id)).toEqual(["wait"]);
+		const old = makeSuggestion({ sessionId: "dead", createdAt: 5 });
+		expect(needsYou([dead], [old])).toEqual([]);
+		const newer = makeSuggestion({ sessionId: "dead", createdAt: 11 });
+		expect(needsYou([dead], [newer]).map((s) => s.id)).toEqual(["dead"]);
+		// A queued reply has its own section, so it does not bring it back.
+		const queued = makeSuggestion({
+			sessionId: "dead",
+			source: "chat",
+			createdAt: 11,
+		});
+		expect(needsYou([dead], [queued])).toEqual([]);
+	});
+});
+
+describe("suggestionAction", () => {
+	const session = { name: "api-auth" };
+	test("says what y does to which session, and with what", () => {
+		const line = (g: Parameters<typeof suggestionAction>[0]) =>
+			actionLine(suggestionAction(g, session));
+		expect(line({ kind: "reply", label: 'Reply "yes"', text: "yes" })).toBe(
+			"Tell api-auth: yes",
+		);
+		expect(
+			line({ kind: "approve", label: "Approve: terraform plan", text: null }),
+		).toBe("Approve in api-auth: terraform plan");
+		expect(line({ kind: "approve", label: "Approve", text: null })).toBe(
+			"Approve in api-auth",
+		);
+		expect(
+			line({ kind: "cleanup", label: "Clean up the worktree", text: null }),
+		).toBe("Clean up api-auth: the worktree");
+		expect(
+			line({
+				kind: "review",
+				label: "Request review from @alice",
+				text: "alice",
+			}),
+		).toBe("Request review on api-auth: @alice");
 	});
 });
 

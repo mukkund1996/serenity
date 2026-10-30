@@ -281,6 +281,14 @@ export class Daemon {
 			reviews: (repo) => this.reviews.state(repo).reviewRequests,
 			sendText: async (session, text) =>
 				this.tmux.sendText(await this.requireLivePane(session), text),
+			startSession: (repo, name, brief) =>
+				this.createSession({
+					repo,
+					name,
+					cwd: repo,
+					mode: "worktree",
+					prompt: brief,
+				}),
 			refreshInbox: () => void this.slack.refresh(),
 			broadcast: (repo) => this.broadcast(repo),
 			log: this.log,
@@ -508,6 +516,8 @@ export class Daemon {
 	private update(session: Session, patch: Partial<Session>): Session {
 		const now = this.now();
 		const next = { ...session, ...patch, updatedAt: now };
+		// A dismissal from NEEDS YOU lasts until the session's status changes (ADR 0050).
+		if (next.status !== session.status) next.dismissedAt = null;
 		const { waitingSince, ended } = waitChange(session, next, now);
 		next.waitingSince = waitingSince;
 		this.opts.storage.transaction(() => {
@@ -588,6 +598,21 @@ export class Daemon {
 		"session.watch": ({ id, watched }) => {
 			const session = this.requireSession(id);
 			this.change(session, { watched });
+			this.broadcast(session.repo);
+			return null;
+		},
+
+		"session.dismiss": ({ id }) => {
+			const session = this.requireSession(id);
+			if (session.status === "waiting")
+				throw new RpcError(
+					RpcErrorCode.InvalidParams,
+					`${session.name} is waiting on you; attach to answer it`,
+				);
+			this.update(session, {
+				dismissedAt: this.now(),
+				...(session.status === "done" ? { watched: false } : {}),
+			});
 			this.broadcast(session.repo);
 			return null;
 		},
@@ -1150,6 +1175,7 @@ export class Daemon {
 			ask: null,
 			waitingOn: null,
 			exitNote: null,
+			dismissedAt: null,
 		});
 		this.watchStartup(session.id);
 		this.log(`resumed ${session.name} in ${session.cwd} (pane ${pane})`);
@@ -1339,6 +1365,7 @@ export class Daemon {
 			watched: false,
 			pinned: false,
 			exitNote: null,
+			dismissedAt: null,
 			createdAt: at,
 			updatedAt: at,
 		};

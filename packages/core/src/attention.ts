@@ -52,19 +52,29 @@ export function masterQueue(
 }
 
 /**
+ * Whether the user dismissed a session from NEEDS YOU with Enter (ADR 0050)
+ * and nothing new has come since: a waiting session always shows, and so
+ * does one with a suggestion newer than the dismissal.
+ */
+function dismissed(s: Session, suggestions: Suggestion[]): boolean {
+	const at = s.dismissedAt;
+	if (at === null || s.status === "waiting") return false;
+	return !suggestions.some((g) => g.sessionId === s.id && g.createdAt > at);
+}
+
+/**
  * The master's NEEDS YOU list: watched-and-finished, then waiting, then dead,
  * then anything else with a pending suggestion. Queued replies don't count;
- * they have their own section.
+ * they have their own section. Dismissed sessions are left out.
  */
 export function needsYou(
 	sessions: Session[],
 	suggestions: Suggestion[] = [],
 ): Session[] {
-	const suggested = new Set(
-		suggestions.filter((g) => !isQueued(g)).map((g) => g.sessionId),
-	);
+	const open = suggestions.filter((g) => !isQueued(g));
+	const suggested = new Set(open.map((g) => g.sessionId));
 	return sessions
-		.filter((s) => needRank(s, suggested) >= 0)
+		.filter((s) => needRank(s, suggested) >= 0 && !dismissed(s, open))
 		.sort(
 			(a, b) =>
 				needRank(a, suggested) - needRank(b, suggested) ||
@@ -140,4 +150,40 @@ export function archivedTopics(
 			sessions: list.sort((a, b) => b.updatedAt - a.updatedAt),
 		}))
 		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * What y on a session's suggestion does, as a verb and its target, and the
+ * text or detail that goes with it (ADR 0050): "Tell api-auth" and the reply,
+ * "Approve in api-auth" and the prompt.
+ */
+export function suggestionAction(
+	g: Pick<Suggestion, "kind" | "label" | "text">,
+	session: Pick<Session, "name">,
+): { action: string; text: string | null } {
+	const rest = (prefix: RegExp) => g.label.replace(prefix, "").trim() || null;
+	switch (g.kind) {
+		case "reply":
+			return { action: `Tell ${session.name}`, text: g.text };
+		case "approve":
+			return {
+				action: `Approve in ${session.name}`,
+				text: rest(/^approve\b:?/i),
+			};
+		case "cleanup":
+			return {
+				action: `Clean up ${session.name}`,
+				text: rest(/^clean(\s|-)?up\b:?/i),
+			};
+		case "review":
+			return {
+				action: `Request review on ${session.name}`,
+				text: g.text ? `@${g.text.replace(/^@/, "")}` : null,
+			};
+	}
+}
+
+/** The action line as one string, e.g. "Tell api-auth: yes, set it to 15m". */
+export function actionLine(a: { action: string; text: string | null }): string {
+	return a.text ? `${a.action}: ${a.text}` : a.action;
 }
