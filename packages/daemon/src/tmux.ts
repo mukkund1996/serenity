@@ -17,6 +17,8 @@ const IDEMPOTENT = new Set([
 	"rename-window",
 	"bind-key",
 	"set-option",
+	"list-keys",
+	"list-panes",
 ]);
 
 /**
@@ -257,29 +259,33 @@ export class Tmux {
 	 * master input (ADR 0038); other panes get it unchanged.
 	 * Agent panes carry the @serenity_session option, the map pane @serenity_map.
 	 * Ctrl+m and Shift+Enter differ from Enter only when the terminal sends
-	 * extended keys.
+	 * extended keys. A terminal sending extended keys may report Ctrl+g with
+	 * Caps Lock on as Ctrl+G, which tmux keeps apart, so both cases are bound
+	 * (ADR 0051).
 	 */
 	async bindSessionKeys(detachCommand: string): Promise<void> {
-		await this.cmd([
-			"bind-key",
-			"-n",
-			"C-g",
-			"if-shell",
-			"-F",
-			"#{@serenity_session}",
-			`run-shell -b "${detachCommand} #{pane_id}"`,
-			"send-keys C-g",
-		]);
-		await this.cmd([
-			"bind-key",
-			"-n",
-			"C-m",
-			"if-shell",
-			"-F",
-			"#{@serenity_session}",
-			`run-shell -b "${detachCommand} #{pane_id} master"`,
-			`if-shell -F "#{@serenity_map}" "send-keys Escape '${CTRL_M_CSI_U}'" "send-keys C-m"`,
-		]);
+		for (const key of ["C-g", "C-G"])
+			await this.cmd([
+				"bind-key",
+				"-n",
+				key,
+				"if-shell",
+				"-F",
+				"#{@serenity_session}",
+				`run-shell -b "${detachCommand} #{pane_id}"`,
+				`send-keys ${key}`,
+			]);
+		for (const key of ["C-m", "C-M"])
+			await this.cmd([
+				"bind-key",
+				"-n",
+				key,
+				"if-shell",
+				"-F",
+				"#{@serenity_session}",
+				`run-shell -b "${detachCommand} #{pane_id} master"`,
+				`if-shell -F "#{@serenity_map}" "send-keys Escape '${CTRL_M_CSI_U}'" "send-keys ${key}"`,
+			]);
 		await this.cmd([
 			"bind-key",
 			"-n",
@@ -290,6 +296,45 @@ export class Tmux {
 			`send-keys Escape '${SHIFT_ENTER_CSI_U}'`,
 			"send-keys S-Enter",
 		]);
+	}
+
+	/**
+	 * Whether the root table still holds the bindings bindSessionKeys makes
+	 * for `detachCommand`; something else (a config reload, another program)
+	 * may have replaced or removed them.
+	 */
+	async sessionKeysBound(detachCommand: string): Promise<boolean> {
+		const lines = (await this.cmd(["list-keys", "-T", "root"])).split("\n");
+		const bound = (key: string, text: string) =>
+			lines.some(
+				(line) =>
+					line.split(/\s+/)[3] === key &&
+					line.includes(text) &&
+					line.includes(`send-keys ${key}`),
+			);
+		return (
+			["C-g", "C-G", "C-m", "C-M"].every((key) => bound(key, detachCommand)) &&
+			bound("S-Enter", "@serenity_map")
+		);
+	}
+
+	/** Every pane: its id, its @serenity_session marker ("" if none) and the command it started. */
+	async listPanes(): Promise<
+		{ pane: string; session: string; command: string }[]
+	> {
+		const out = await this.cmd([
+			"list-panes",
+			"-a",
+			"-F",
+			"#{pane_id}\t#{@serenity_session}\t#{pane_start_command}",
+		]);
+		return out
+			.split("\n")
+			.filter(Boolean)
+			.map((line) => {
+				const [pane = "", session = "", ...command] = line.split("\t");
+				return { pane, session, command: command.join("\t") };
+			});
 	}
 
 	/** Presses Ctrl+m in `pane` as a CSI u key, as the binding does in the map pane. */

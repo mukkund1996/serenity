@@ -10,6 +10,8 @@
  *                       the key "1" (or any line) → PostToolUse, then Stop
  *   "crash"           → exit 3 with no hook, like a crash
  *   "exit"            → SessionEnd, then exit
+ *   Ctrl+g            → "opened $EDITOR", as Claude Code opens the editor;
+ *                       serenity's tmux binding should never let it through
  *   In a folder whose name ends in "-untrusted" it first asks to trust the
  *   folder and fires no hooks until the answer is "y"; a resumed session
  *   does not ask again.
@@ -316,6 +318,8 @@ async function interactive(): Promise<void> {
 				onLine(done);
 			} else if (ch === "\u0003") {
 				process.exit(130);
+			} else if (ch === "\u0007") {
+				process.stdout.write("opened $EDITOR\r\n> ");
 			} else {
 				line += ch;
 			}

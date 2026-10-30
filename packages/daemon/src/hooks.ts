@@ -34,6 +34,9 @@ export function hookSettings(selfCommand: string[]): object {
 	};
 }
 
+/** The `$0` of an agent pane's wrapper shell, which marks a pane as serenity's in its start command. */
+export const AGENT_WRAPPER = "serenity-agent";
+
 /**
  * The command an agent pane runs: claude under a tiny `sh` parent that tells
  * the daemon when claude exits, for any reason (crash, refused folder trust),
@@ -52,7 +55,7 @@ export function agentCommand(
 		"sh",
 		"-c",
 		`"$@"; ${notify} "$?"`,
-		"serenity-agent",
+		AGENT_WRAPPER,
 		...claude,
 		"--settings",
 		settingsPath,

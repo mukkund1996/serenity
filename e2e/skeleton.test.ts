@@ -217,6 +217,7 @@ beforeAll(() => {
 		SERENITY_SELF: JSON.stringify([process.execPath, MAIN]),
 		SERENITY_STARTUP_GRACE_MS: "300",
 		SERENITY_RESPAWN_BASE_MS: "100",
+		SERENITY_TMUX_CHECK_MS: "300",
 		SERENITY_WORKER_DEBOUNCE_MS: "100",
 		SERENITY_GH_BIN: FAKE_GH,
 		SERENITY_FAKE_GH_DIR: ghDir(),
@@ -396,6 +397,119 @@ test(
 			15_000,
 		);
 		await waitFor(/zoom: topics/);
+	},
+	STEP_TIMEOUT,
+);
+
+/**
+ * A real tmux client of the test server, inside a pane of a second server,
+ * so typed bytes go through tmux's key bindings as a terminal's do
+ * (send-keys bypasses them). Returns a function that types hex bytes.
+ */
+function withClient(): { typeHex: (hex: string) => void; close: () => void } {
+	const outer = `${SOCKET}-client`;
+	const run = (...args: string[]) =>
+		spawnSync("tmux", ["-L", outer, "-f", "/dev/null", ...args]);
+	run(
+		"new-session",
+		"-d",
+		"-x",
+		"200",
+		"-y",
+		"50",
+		// No "=" before the session name: zsh, as the pane's shell, expands it.
+		`env -u TMUX TERM=xterm-256color tmux -L ${SOCKET} attach -t serenity-demo`,
+	);
+	return {
+		typeHex: (hex) => run("send-keys", "-H", ...hex.split(" ")),
+		close: () => run("kill-server"),
+	};
+}
+
+/** Attaches the session, types `hex` and waits for it to park; claude must not have got Ctrl+g. */
+async function attachAndPress(
+	typeHex: (hex: string) => void,
+	hex: string,
+): Promise<void> {
+	keys("Enter");
+	await until(
+		() => panesInMap().length === 2,
+		"the agent pane to join the map window",
+	);
+	const agentPane = panesInMap()[1] as string;
+	typeHex(hex);
+	await until(
+		() => panesInMap().length === 1,
+		"the typed key to park the agent pane",
+	);
+	expect(screen(agentPane)).not.toContain("opened $EDITOR");
+	await waitFor(/zoom: topics/);
+}
+
+test(
+	"Ctrl+g typed in an attached session goes back to the map, also with Caps Lock on; claude never gets it",
+	async () => {
+		const client = withClient();
+		try {
+			await until(
+				() => tmux("list-clients").includes("serenity-demo"),
+				"the client to attach",
+			);
+			// Plain Ctrl+g, then Ctrl+g with Caps Lock as a terminal reports it
+			// under extended keys (xterm modifyOtherKeys): Ctrl+G.
+			await attachAndPress(client.typeHex, "07");
+			await attachAndPress(client.typeHex, "1b 5b 32 37 3b 35 3b 37 31 7e");
+		} finally {
+			client.close();
+		}
+	},
+	STEP_TIMEOUT,
+);
+
+test(
+	"the daemon sets a pane's marker and the Ctrl+g binding again after something else removed them",
+	async () => {
+		const client = withClient();
+		try {
+			await until(
+				() => tmux("list-clients").includes("serenity-demo"),
+				"the client to attach",
+			);
+			keys("Enter");
+			await until(
+				() => panesInMap().length === 2,
+				"the agent pane to join the map window",
+			);
+			const agentPane = panesInMap()[1] as string;
+			const marker = () =>
+				tmux(
+					"display-message",
+					"-p",
+					"-t",
+					agentPane,
+					"#{@serenity_session}",
+				).trim();
+			const id = marker();
+			expect(id).not.toBe("");
+			tmux("set-option", "-p", "-u", "-t", agentPane, "@serenity_session");
+			tmux("unbind-key", "-n", "C-g");
+			await until(() => marker() === id, "the marker to be set again");
+			await until(
+				() => tmux("list-keys", "-T", "root").includes("send-keys C-g"),
+				"Ctrl+g to be bound again",
+			);
+			client.typeHex("07");
+			await until(
+				() => panesInMap().length === 1,
+				"Ctrl+g to park the agent pane",
+			);
+			expect(screen(agentPane)).not.toContain("opened $EDITOR");
+			const log = readFileSync(join(dir, "home", "daemon.log"), "utf8");
+			expect(log).toContain("had lost its @serenity_session marker");
+			expect(log).toContain("bindings were missing or changed");
+		} finally {
+			client.close();
+		}
 	},
 	STEP_TIMEOUT,
 );

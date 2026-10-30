@@ -57,7 +57,12 @@ import {
 	removeWorktree,
 	siblingWorktreePath,
 } from "./git";
-import { agentCommand, shellQuote, writeHookSettings } from "./hooks";
+import {
+	AGENT_WRAPPER,
+	agentCommand,
+	shellQuote,
+	writeHookSettings,
+} from "./hooks";
 import {
 	type MasterModels,
 	MasterSupervisor,
@@ -101,6 +106,8 @@ export interface DaemonOptions {
 	reviewPollMs?: number;
 	/** The first restart's delay after claude exits; SERENITY_RESPAWN_BASE_MS overrides it (ADR 0044). */
 	respawnBaseMs?: number;
+	/** How often the panes' markers and the key bindings are checked; SERENITY_TMUX_CHECK_MS overrides it (ADR 0051). */
+	tmuxCheckMs?: number;
 	/** Repos whose map shows Slack; defaults to config (ADR 0023). */
 	slackRepos?: string[];
 	/** How often Slack is read while such a map is open; SERENITY_SLACK_POLL_MS overrides it. */
@@ -121,6 +128,11 @@ const DEFAULT_WORKER_DEBOUNCE_MS = 1500;
 const DEFAULT_REVIEW_POLL_MS = 5 * 60_000;
 /** Neither do Slack messages. Each read is a model call, but a read already in flight is never doubled, so a slow one only skips ticks. */
 const DEFAULT_SLACK_POLL_MS = 60_000;
+/**
+ * Ctrl+g depends on a pane option and a root binding that anything else on
+ * the tmux server can change; they are checked this often (ADR 0051).
+ */
+const DEFAULT_TMUX_CHECK_MS = 5000;
 /** Messages of the master conversation sent to clients: the four shown and what PgUp scrolls back to (ADR 0041). */
 const CONVERSATION_SHOWN = 50;
 
@@ -157,6 +169,12 @@ export class Daemon {
 	/** session id → when its claude was restarted, within RESPAWN_WINDOW_MS (ADR 0044). */
 	private readonly respawns = new Map<string, number[]>();
 	private readonly timers = new Set<ReturnType<typeof setTimeout>>();
+	private readonly tmuxCheckMs: number;
+	private tmuxCheck: ReturnType<typeof setInterval> | null = null;
+	/** Set once a rebind did not show up in list-keys, so the check stops instead of rebinding forever. */
+	private keysUncheckable = false;
+	/** A check still waiting on tmux; the next one is skipped. */
+	private checkingTmux = false;
 	private readonly master: MasterSupervisor;
 	private readonly gh: Gh;
 	private readonly prs: PrWatcher;
@@ -189,6 +207,9 @@ export class Daemon {
 		this.respawnBaseMs =
 			opts.respawnBaseMs ??
 			envNumber("SERENITY_RESPAWN_BASE_MS", RESPAWN_BASE_MS);
+		this.tmuxCheckMs =
+			opts.tmuxCheckMs ??
+			envNumber("SERENITY_TMUX_CHECK_MS", DEFAULT_TMUX_CHECK_MS);
 		this.log =
 			opts.log ??
 			((line) => console.log(`${new Date().toISOString()} ${line}`));
@@ -348,6 +369,9 @@ export class Daemon {
 		});
 		this.observer.start();
 		this.master.start();
+		void this.keepTmux();
+		this.tmuxCheck = setInterval(() => void this.keepTmux(), this.tmuxCheckMs);
+		this.tmuxCheck.unref?.();
 		this.log(`serenityd ${BUILD_ID} listening on ${path} (pid ${process.pid})`);
 	}
 
@@ -415,6 +439,7 @@ export class Daemon {
 	async stop(): Promise<void> {
 		this.unhearDependencies();
 		for (const timer of this.timers) clearTimeout(timer);
+		if (this.tmuxCheck) clearInterval(this.tmuxCheck);
 		this.master.stop();
 		this.prs.stop();
 		this.reviews.stop();
@@ -575,9 +600,7 @@ export class Daemon {
 						?.sessionId
 				: id
 					? this.requireSession(id).id
-					: this.opts.storage.sessions
-							.listAll()
-							.find((s) => s.tmuxPane === pane)?.id;
+					: this.sessionInPane(pane)?.id;
 			if (sessionId) await this.detach(sessionId, master);
 			return null;
 		},
@@ -817,6 +840,96 @@ export class Daemon {
 		if (process.env.SERENITY_TMUX_SOCKET)
 			env.push(`SERENITY_TMUX_SOCKET=${process.env.SERENITY_TMUX_SOCKET}`);
 		return ["env", ...env, ...this.self, "detach"].map(shellQuote).join(" ");
+	}
+
+	/**
+	 * The session whose pane this is. Pane ids start again at %0 when the tmux
+	 * server restarts, so a live session wins over ended ones that had the
+	 * same id, and a later one over an earlier one.
+	 */
+	private sessionInPane(pane: string | undefined): Session | undefined {
+		const live = (s: Session) => s.status !== "dead" && s.status !== "archived";
+		return this.opts.storage.sessions
+			.listAll()
+			.filter((s) => pane && s.tmuxPane === pane)
+			.sort(
+				(a, b) =>
+					Number(live(b)) - Number(live(a)) || b.updatedAt - a.updatedAt,
+			)[0];
+	}
+
+	/**
+	 * Puts back what Ctrl+g depends on when something outside serenity
+	 * removed it (ADR 0051): each live session's pane marker and the root key
+	 * bindings. Each repair is logged. A pane is only marked again while it
+	 * still runs that session's claude, since pane ids are reused after a
+	 * tmux server restart.
+	 */
+	private async keepTmux(): Promise<void> {
+		if (this.checkingTmux) return;
+		this.checkingTmux = true;
+		try {
+			await this.checkTmux();
+		} finally {
+			this.checkingTmux = false;
+		}
+	}
+
+	private async checkTmux(): Promise<void> {
+		const storage = this.opts.storage;
+		const live = storage.sessions
+			.listAll()
+			.filter(
+				(s) => s.tmuxPane && s.status !== "dead" && s.status !== "archived",
+			);
+		if (!live.length && !this.mapPanes.size) return;
+		try {
+			const panes = new Map(
+				(await this.tmux.listPanes()).map((p) => [p.pane, p]),
+			);
+			const claudes = new Map(
+				this.observer.processes().map((p) => [p.pid, p.pane]),
+			);
+			for (const session of live) {
+				const pane = panes.get(session.tmuxPane as string);
+				if (!pane || pane.session === session.id) continue;
+				const ours =
+					session.tracking === "hooks"
+						? pane.command.includes(AGENT_WRAPPER)
+						: !!session.claudePid &&
+							claudes.get(session.claudePid) === pane.pane;
+				// Read again: it may have ended or moved while tmux answered.
+				const now = storage.sessions.get(session.id);
+				if (
+					!ours ||
+					!now ||
+					now.tmuxPane !== pane.pane ||
+					now.status === "dead" ||
+					now.status === "archived"
+				)
+					continue;
+				await this.tmux.setPaneOption(pane.pane, "@serenity_session", now.id);
+				this.log(
+					`${now.name}: pane ${pane.pane} had lost its @serenity_session marker${pane.session ? ` (it was ${pane.session})` : ""}; set it again`,
+				);
+			}
+			const command = this.detachCommand();
+			if (this.keysUncheckable || (await this.tmux.sessionKeysBound(command)))
+				return;
+			await this.tmux.bindSessionKeys(command);
+			if (await this.tmux.sessionKeysBound(command))
+				this.log(
+					"the Ctrl+g / Ctrl+m bindings were missing or changed; bound them again",
+				);
+			else {
+				this.keysUncheckable = true;
+				this.log(
+					"cannot confirm the Ctrl+g / Ctrl+m bindings; no longer checking them",
+				);
+			}
+		} catch {
+			// tmux failing shows in the dependency health (ADR 0043).
+		}
 	}
 
 	/**
