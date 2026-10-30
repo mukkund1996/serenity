@@ -29,13 +29,22 @@ export function claudeConfigDir(env: NodeJS.ProcessEnv = process.env): string {
 	return env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
 }
 
+/** Handover docs copied out of session worktrees (ADR 0049), one folder per repo. */
+export const handoversDir = (home: string, repo: string) =>
+	join(home, "handovers", repoSlug(repo));
+
 export const doctorMarkerPath = (home: string) => join(home, ".doctor-ok");
 
-/** tmux session that hosts the map and parks the agents of one repo. */
-export function tmuxSessionName(repo: string): string {
+/** A repo's folder name as a slug, e.g. for its tmux session. */
+function repoSlug(repo: string): string {
 	const slug = basename(repo)
 		.toLowerCase()
 		.replace(/[^a-z0-9_-]+/g, "-")
 		.replace(/^-+|-+$/g, "");
-	return `serenity-${slug || "repo"}`;
+	return slug || "repo";
+}
+
+/** tmux session that hosts the map and parks the agents of one repo. */
+export function tmuxSessionName(repo: string): string {
+	return `serenity-${repoSlug(repo)}`;
 }

@@ -1,15 +1,34 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
+import { basename, dirname, join } from "node:path";
 import {
 	applySummary,
 	type CreateSessionParams,
 	capTopic,
 	chatMessage,
 	chatSnapshot,
+	confirmedFileShare,
 	confirmedReply,
 	confirmedSlackSend,
 	findSessionByName,
+	freshHandover,
+	HANDOVER_DIR,
+	type HandoverDoc,
+	type HandoverPurpose,
+	handoverDraftPath,
+	handoverFileName,
+	handoverMissingMessage,
+	handoverPrompt,
+	handoverReadyMessage,
+	handoverRequest,
 	MASTER_SLACK_PROMPT,
 	MASTER_SYSTEM_PROMPT,
 	type MasterOutboxItem,
@@ -18,6 +37,7 @@ import {
 	type MasterState,
 	type MasterToolResult,
 	masterCommands,
+	mentionedSessions,
 	mentionsSession,
 	NEW_UNSTARTED,
 	needsSuggestion,
@@ -66,6 +86,10 @@ export interface MasterHost {
 	reply(session: Session, text: string): Promise<void>;
 	/** Starts a new session, as N on the map does. */
 	create(params: CreateSessionParams): Promise<Session>;
+	/** Where a repo's handover docs are copied to (ADR 0049). */
+	handoversDir(repo: string): string;
+	/** Uploads a file to Slack and shares it as confirmed; returns its link (ADR 0049). */
+	shareSlackFile(share: SlackFileUpload): Promise<string | null>;
 	/** `--plugin-dir` for the chat: the plugin with the master's skill (writeMasterPlugin). */
 	pluginDir: string;
 	/** `--mcp-config` JSON for a repo's chat; its server is `serenity mcp <repo>`. */
@@ -80,6 +104,14 @@ export interface MasterHost {
 	debounceMs: number;
 }
 
+/** A file the chat shares on Slack once the user confirmed where, and with what comment. */
+export interface SlackFileUpload {
+	path: string;
+	channelId: string;
+	threadTs: string | null;
+	comment: string | null;
+}
+
 /** How long the master's permission request waits for the user before it is denied. */
 const PERMISSION_TIMEOUT_MS = 10 * 60_000;
 
@@ -89,6 +121,10 @@ export const CHAT_HANG_MS = 5 * 60_000;
 export const CHAT_RESTART_BACKOFF_MS = [1_000, 5_000, 30_000];
 /** How long one of serenity's tools may run before the chat is told it timed out. */
 export const TOOL_TIMEOUT_MS = 2 * 60_000;
+/** A Slack upload takes two model calls and a POST. */
+const SLOW_TOOL_TIMEOUT_MS: Record<string, number> = {
+	share_slack_file: 6 * 60_000,
+};
 
 interface Chat {
 	process: ChatProcess;
@@ -292,7 +328,66 @@ export class MasterSupervisor {
 		if (watch.slack && finished) record.released.push(watch.slack);
 		this.save(session.repo);
 		this.host.log(`watch on ${session.name} fired (${session.status})`);
+		if (watch.handover && finished) {
+			const doc = this.collectHandover(session, watch.handover.requestedAt);
+			// The turn it was in ended before it read the request: wait for the next.
+			if (!doc && watch.handover.queued) {
+				record.watches = [
+					...record.watches,
+					{ ...watch, handover: { ...watch.handover, queued: false } },
+				];
+				this.save(session.repo);
+				return;
+			}
+			this.tell(
+				session.repo,
+				doc
+					? handoverReadyMessage(
+							session,
+							doc.path,
+							watch.handover.purpose,
+							watch.handover.for,
+						)
+					: handoverMissingMessage(session),
+			);
+			return;
+		}
 		this.tell(session.repo, watchMessage(session, watch.note, !!watch.slack));
+	}
+
+	/**
+	 * Copies the doc a session wrote since `since` into serenity's home, where
+	 * it outlives the worktree (ADR 0049); null when it wrote none.
+	 */
+	private collectHandover(session: Session, since: number): HandoverDoc | null {
+		const draft = handoverDraftPath(session);
+		try {
+			if (!existsSync(draft) || statSync(draft).mtimeMs < since) return null;
+			const at = this.host.now();
+			const dir = this.host.handoversDir(session.repo);
+			mkdirSync(dir, { recursive: true });
+			const path = join(dir, handoverFileName(session, at));
+			copyFileSync(draft, path);
+			const doc: HandoverDoc = {
+				sessionId: session.id,
+				sessionName: session.name,
+				path,
+				at,
+				reply: session.lastAssistantMessage,
+			};
+			const record = this.record(session.repo);
+			record.handovers = [
+				...(record.handovers ?? []).filter((d) => d.sessionId !== session.id),
+				doc,
+			];
+			this.save(session.repo);
+			this.host.log(`copied ${session.name}'s handover to ${path}`);
+			return doc;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			this.host.log(`handover of ${session.name} not copied: ${message}`);
+			return null;
+		}
 	}
 
 	private record(repo: string): MasterRecord {
@@ -730,14 +825,15 @@ export class MasterSupervisor {
 			return this.requestPermission(repo, args);
 		this.toolCalls.set(repo, (this.toolCalls.get(repo) ?? 0) + 1);
 		let timer: ReturnType<typeof setTimeout> | undefined;
+		const limit = SLOW_TOOL_TIMEOUT_MS[name] ?? TOOL_TIMEOUT_MS;
 		const timeout = new Promise<MasterToolResult>((resolve) => {
 			timer = setTimeout(
 				() =>
 					resolve({
-						text: `${name} did not finish within ${TOOL_TIMEOUT_MS / 60_000} minutes; serenity stopped waiting, but it may still complete. Check session_status before calling it again.`,
+						text: `${name} did not finish within ${limit / 60_000} minutes; serenity stopped waiting, but it may still complete. Check session_status before calling it again.`,
 						isError: true,
 					}),
-				TOOL_TIMEOUT_MS,
+				limit,
 			);
 		});
 		try {
@@ -760,6 +856,7 @@ export class MasterSupervisor {
 		if (name === "session_status" && !args.session)
 			return { text: this.snapshot(repo) };
 		if (name === "create_session") return this.createSession(repo, args);
+		if (name === "share_slack_file") return this.shareSlackFile(repo, args);
 		const session = findSessionByName(
 			this.host.storage.sessions.listByRepo(repo),
 			args.session,
@@ -821,6 +918,9 @@ export class MasterSupervisor {
 		}
 
 		if (name === "send_reply") return this.sendReply(repo, session, args);
+
+		if (name === "request_handover")
+			return this.requestHandover(repo, session, args);
 
 		if (name === "suggest") {
 			const kind = args.kind as SuggestionKind;
@@ -967,10 +1067,24 @@ export class MasterSupervisor {
 		args: Record<string, unknown>,
 	): Promise<MasterToolResult> {
 		const name = typeof args.name === "string" ? args.name.trim() : "";
-		const prompt = typeof args.prompt === "string" ? args.prompt.trim() : "";
+		let prompt = typeof args.prompt === "string" ? args.prompt.trim() : "";
 		if (!name) return { text: "Give the session a name.", isError: true };
 		if (!prompt)
 			return { text: "Give the session its first prompt.", isError: true };
+		if (typeof args.handover === "string" && args.handover.trim()) {
+			// Only a doc serenity copied, so no other file reaches a new agent this way.
+			const doc = this.handoverAt(repo, args.handover.trim());
+			if (!doc)
+				return {
+					text: `${args.handover} is not a handover doc serenity copied. Use the path serenity gave you.`,
+					isError: true,
+				};
+			prompt = handoverPrompt(
+				prompt,
+				doc.sessionName,
+				readFileSync(doc.path, "utf8"),
+			);
+		}
 		let topic: string | null = null;
 		if (args.topic !== undefined && args.topic !== "") {
 			topic = normalizeTopic(args.topic);
@@ -1004,6 +1118,150 @@ export class MasterSupervisor {
 		this.host.broadcast(repo);
 		return {
 			text: `Started ${session.name} on branch ${session.branch}${topic ? ` under ${topic}` : ""}. It shows in your snapshot from now on.`,
+		};
+	}
+
+	/** The handover doc serenity copied to this path, if it still exists. */
+	private handoverAt(repo: string, path: string): HandoverDoc | null {
+		const doc = this.record(repo).handovers?.find((d) => d.path === path);
+		return doc && existsSync(doc.path) ? doc : null;
+	}
+
+	/**
+	 * The chat's request_handover (ADR 0049), for the user's @copy or
+	 * @handover of this session: asks its agent to write a handover doc in
+	 * its worktree and watches it, so serenity copies the doc when its turn
+	 * ends. An up-to-date doc is given back at once for @handover.
+	 */
+	private async requestHandover(
+		repo: string,
+		session: Session,
+		args: Record<string, unknown>,
+	): Promise<MasterToolResult> {
+		const purpose: HandoverPurpose = args.purpose === "copy" ? "copy" : "share";
+		const last = this.host.storage.conversation.listRecent(repo, 1).at(-1);
+		const command = purpose === "copy" ? "copy" : "handover";
+		// The user's own @command and @session are the go-ahead to type into it, as a mention is (0036).
+		if (
+			last?.from !== "you" ||
+			!masterCommands(last.text).includes(command) ||
+			!mentionedSessions(
+				last.text,
+				this.host.storage.sessions.listByRepo(repo),
+			).some((s) => s.id === session.id)
+		)
+			return {
+				text: `request_handover needs the user's latest message to say @${command} @${session.name}. Tell them to use it.`,
+				isError: true,
+			};
+		const follow =
+			typeof args.for === "string" && args.for.trim() ? args.for.trim() : null;
+		const existing = this.record(repo).handovers?.find(
+			(d) => d.sessionId === session.id,
+		);
+		if (
+			purpose === "share" &&
+			freshHandover(existing, session) &&
+			existsSync(existing.path)
+		)
+			return {
+				text: `${session.name}'s handover doc is up to date: ${existing.path}. It has done nothing since it was written; give the user the path.`,
+			};
+		const problem = chatSuggestionProblem(
+			session,
+			"reply",
+			"Write a handover doc",
+			"handover",
+		);
+		if (problem) return { text: problem, isError: true };
+		// Its own folder, which git ignores and an old doc does not linger in.
+		const draft = handoverDraftPath(session);
+		mkdirSync(dirname(draft), { recursive: true });
+		writeFileSync(join(session.cwd, HANDOVER_DIR, ".gitignore"), "*\n");
+		rmSync(draft, { force: true });
+		const requestedAt = this.host.now();
+		try {
+			await this.host.reply(session, handoverRequest(session, follow));
+		} catch (error) {
+			return {
+				text: error instanceof Error ? error.message : String(error),
+				isError: true,
+			};
+		}
+		const record = this.record(repo);
+		record.watches = [
+			...record.watches.filter((w) => w.sessionId !== session.id),
+			{
+				sessionId: session.id,
+				note: `copy its handover doc (${purpose})`,
+				slack: null,
+				handover: {
+					purpose,
+					for: follow,
+					requestedAt,
+					queued: session.status === "working",
+				},
+			},
+		];
+		this.save(repo);
+		this.supersede(session.id);
+		this.ping(repo, session.id, "session");
+		this.host.log(`asked ${session.name} for a handover (${purpose})`);
+		return {
+			text: `Asked ${session.name} to write its handover doc${session.status === "working" ? "; it is working and reads it when this turn ends" : ""}. serenity messages you with the path when its turn ends. Tell the user and end your turn now; don't wait or poll.`,
+		};
+	}
+
+	/**
+	 * The chat's share_slack_file (ADR 0049): a handover doc uploaded to
+	 * Slack as a file, only once the user confirmed the file, the channel
+	 * and the comment in the chat, as a Slack message needs (0030).
+	 */
+	private async shareSlackFile(
+		repo: string,
+		args: Record<string, unknown>,
+	): Promise<MasterToolResult> {
+		if (!this.host.slack(repo))
+			return { text: "Slack is off for this repo.", isError: true };
+		const str = (v: unknown) =>
+			typeof v === "string" && v.trim() ? v.trim() : null;
+		const path = str(args.path);
+		const channelId = str(args.channel_id);
+		const threadTs = str(args.thread_ts);
+		const comment = str(args.comment);
+		if (!path || !channelId)
+			return { text: "Give the path and the channel_id.", isError: true };
+		if (!/^[CDG][A-Z0-9]+$/.test(channelId))
+			return {
+				text: "channel_id must be a channel, DM or group DM ID (C…, D…, G…), not a name or user ID. Look it up with the Slack tools.",
+				isError: true,
+			};
+		const doc = this.handoverAt(repo, path);
+		if (!doc)
+			return {
+				text: `${path} is not a handover doc serenity copied; only those can be shared.`,
+				isError: true,
+			};
+		if (
+			!confirmedFileShare(this.host.storage.conversation.listRecent(repo, 2), {
+				path,
+				channelId,
+				comment,
+			})
+		)
+			return {
+				text: `Not shared: show the user the file (${basename(path)}), where it goes with its channel ID (${channelId}) and the exact comment, ask "Share it?", and call again once they confirm.`,
+				isError: true,
+			};
+		const link = await this.host.shareSlackFile({
+			path,
+			channelId,
+			threadTs,
+			comment,
+		});
+		this.host.log(`master shared ${basename(path)} on Slack for ${repo}`);
+		return {
+			text: `Shared ${basename(path)} in ${channelId}${link ? `: ${link}` : ""}.`,
 		};
 	}
 

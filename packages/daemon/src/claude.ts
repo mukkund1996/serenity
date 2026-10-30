@@ -74,6 +74,8 @@ const CHAT_ALLOWED = [
 	"mcp__serenity__session_status",
 	"mcp__serenity__watch_session",
 	"mcp__serenity__create_session",
+	"mcp__serenity__request_handover",
+	"mcp__serenity__share_slack_file",
 ].join(",");
 export const PERMISSION_TOOL = "mcp__serenity__request_permission";
 /** Posting to Slack always reaches PERMISSION_TOOL, never the auto-mode classifier (ADR 0030). */

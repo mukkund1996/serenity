@@ -1,5 +1,15 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
 import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
 	type CreateSessionParams,
 	createMemoryStorage,
 	type Session,
@@ -17,6 +27,7 @@ import {
 	CHAT_RESTART_BACKOFF_MS,
 	type MasterHost,
 	MasterSupervisor,
+	type SlackFileUpload,
 	TOOL_TIMEOUT_MS,
 } from "../src/master";
 
@@ -83,9 +94,16 @@ let killed: string[];
 let opened: string[];
 let created: CreateSessionParams[];
 let replies: Array<{ name: string; text: string }>;
+let shared: SlackFileUpload[];
+/** A temp dir per test: session worktrees and the handovers folder. */
+let tmp: string;
+let handovers: string;
 
 beforeEach(() => {
 	replies = [];
+	shared = [];
+	tmp = mkdtempSync(join(tmpdir(), "srmaster-"));
+	handovers = join(tmp, "handovers");
 	killed = [];
 	opened = [];
 	created = [];
@@ -121,6 +139,11 @@ beforeEach(() => {
 				branch: params.name,
 			});
 		},
+		handoversDir: () => handovers,
+		shareSlackFile: async (share) => {
+			shared.push(share);
+			return "https://slack.test/file";
+		},
 		pluginDir: "/tmp/master-plugin",
 		mcpConfig: () => "{}",
 		slack: () => null,
@@ -131,6 +154,8 @@ beforeEach(() => {
 	};
 	master = new MasterSupervisor(host, runner);
 });
+
+afterEach(() => rmSync(tmp, { recursive: true, force: true }));
 
 describe("summaries", () => {
 	test("a reply triggers a Haiku summary that sets summary, topic and status", async () => {
@@ -1440,5 +1465,205 @@ describe("robustness (ADR 0046)", () => {
 		expect(
 			await master.handleTool(REPO, "open_session", { session: "api" }),
 		).toEqual({ text: "open_session failed: tmux is gone", isError: true });
+	});
+});
+
+describe("handovers (ADR 0049)", () => {
+	const say = (from: "you" | "master", text: string) =>
+		storage.conversation.append({ repo: REPO, from, text, at: ++now });
+	/** A live session whose worktree is a real folder. */
+	const worktree = (name: string, patch: Partial<Session> = {}) => {
+		const cwd = join(tmp, name);
+		mkdirSync(cwd, { recursive: true });
+		return put({ id: name, name, cwd, status: "idle", ...patch });
+	};
+	const draftOf = (s: Session) => join(s.cwd, ".serenity", "handover.md");
+	/** The agent writes its doc in the turn the request started, which then ends. */
+	const writes = (s: Session, doc: string, reply = "Wrote it.") => {
+		change(s.id, { status: "working" });
+		writeFileSync(draftOf(s), doc);
+		change(s.id, { status: "idle", lastAssistantMessage: reply });
+	};
+	const ask = (session: string, purpose: "copy" | "share", extra = {}) =>
+		master.handleTool(REPO, "request_handover", {
+			session,
+			purpose,
+			...extra,
+		});
+
+	test("needs the user's @copy or @handover with an @mention of that session", async () => {
+		worktree("api-auth");
+		worktree("web");
+		say("you", "get a handover from api-auth");
+		expect((await ask("api-auth", "share")).isError).toBe(true);
+		say("you", "@handover @web");
+		expect((await ask("api-auth", "share")).isError).toBe(true);
+		say("you", "@handover @api-auth");
+		expect((await ask("api-auth", "copy")).isError).toBe(true);
+		expect(replies).toEqual([]);
+	});
+
+	test("@copy asks the agent for a doc in its worktree, copies it at turn end, and create_session carries it", async () => {
+		const s = worktree("api-auth");
+		say("you", "@copy @api-auth add the docs page");
+		const out = await ask("api-auth", "copy", { for: "add the docs page" });
+		expect(out.isError).toBeFalsy();
+		expect(replies).toHaveLength(1);
+		expect(replies[0]?.name).toBe("api-auth");
+		expect(replies[0]?.text).toContain(draftOf(s));
+		expect(replies[0]?.text).toContain(
+			"The next steps are for this follow-up: add the docs page",
+		);
+		// git ignores serenity's folder in the worktree.
+		expect(readFileSync(join(s.cwd, ".serenity", ".gitignore"), "utf8")).toBe(
+			"*\n",
+		);
+
+		writes(s, "# Goal\nRotate tokens.");
+		expect(runner.sent).toHaveLength(1);
+		const told = runner.sent[0] as string;
+		expect(told).toContain("serenity: api-auth wrote its handover doc:");
+		expect(told).toContain("call mcp__serenity__create_session now");
+		expect(told).toContain("add the docs page");
+		const path = /handover doc: (\S+)/.exec(told)?.[1] as string;
+		expect(path.startsWith(handovers)).toBe(true);
+		expect(readFileSync(path, "utf8")).toBe("# Goal\nRotate tokens.");
+
+		const started = await master.handleTool(REPO, "create_session", {
+			name: "docs-page",
+			prompt: "Add the docs page.",
+			handover: path,
+		});
+		expect(started.isError).toBeFalsy();
+		expect(created[0]?.prompt).toBe(
+			"Add the docs page.\n\nHandover from session api-auth, which worked on this before you:\n\n<handover>\n# Goal\nRotate tokens.\n</handover>",
+		);
+	});
+
+	test("create_session takes only a doc serenity copied", async () => {
+		const other = join(tmp, "secrets.md");
+		writeFileSync(other, "nope");
+		const out = await master.handleTool(REPO, "create_session", {
+			name: "docs-page",
+			prompt: "Add the docs page.",
+			handover: other,
+		});
+		expect(out.isError).toBe(true);
+		expect(created).toEqual([]);
+	});
+
+	test("a turn that wrote no doc, or an old one, is reported as missing", async () => {
+		const s = worktree("api-auth");
+		mkdirSync(join(s.cwd, ".serenity"));
+		writeFileSync(draftOf(s), "old doc");
+		say("you", "@handover @api-auth");
+		await ask("api-auth", "share");
+		// The old doc is removed so it cannot pass for the new one.
+		expect(existsSync(draftOf(s))).toBe(false);
+		change(s.id, { status: "working" });
+		change(s.id, { status: "idle", lastAssistantMessage: "Can't." });
+		expect(runner.sent[0]).toContain("finished its turn without writing");
+		expect(existsSync(handovers)).toBe(false);
+	});
+
+	test("asked while working, the turn it was in may end first; the next one brings the doc", async () => {
+		const s = worktree("api-auth", { status: "working" });
+		say("you", "@handover @api-auth");
+		const out = await ask("api-auth", "share");
+		expect(out.text).toContain("it is working");
+		change(s.id, { status: "idle", lastAssistantMessage: "Old task done." });
+		expect(runner.sent).toEqual([]);
+		writes(s, "# Goal");
+		expect(runner.sent[0]).toContain("api-auth wrote its handover doc");
+		expect(runner.sent[0]).toContain("For the user's @handover");
+	});
+
+	test("@handover gives back an up-to-date doc at once, and asks again once the session moved on", async () => {
+		const s = worktree("api-auth");
+		say("you", "@handover @api-auth");
+		await ask("api-auth", "share");
+		writes(s, "# Goal");
+		const path = /handover doc: (\S+)/.exec(runner.sent[0] as string)?.[1];
+		say("you", "@handover @api-auth");
+		const again = await ask("api-auth", "share");
+		expect(again.text).toContain(`up to date: ${path}`);
+		expect(replies).toHaveLength(1);
+
+		change(s.id, { status: "working" });
+		change(s.id, { status: "idle", lastAssistantMessage: "Fixed a bug." });
+		await ask("api-auth", "share");
+		expect(replies).toHaveLength(2);
+	});
+
+	test("refuses a session that cannot take input", async () => {
+		worktree("api-auth", { status: "waiting", waitingOn: "permission" });
+		say("you", "@handover @api-auth");
+		expect((await ask("api-auth", "share")).isError).toBe(true);
+		expect(replies).toEqual([]);
+	});
+
+	describe("share_slack_file", () => {
+		let path: string;
+		beforeEach(async () => {
+			host.slack = () => ({ items: [], error: null, checkedAt: 1 });
+			const s = worktree("api-auth");
+			say("you", "@handover @api-auth");
+			await ask("api-auth", "share");
+			writes(s, "# Goal");
+			path = /handover doc: (\S+)/.exec(
+				runner.sent[0] as string,
+			)?.[1] as string;
+		});
+		const share = (extra: Record<string, unknown> = {}) =>
+			master.handleTool(REPO, "share_slack_file", {
+				path,
+				channel_id: "C0ENG",
+				comment: "handover for api-auth",
+				...extra,
+			});
+		const confirm = (draft: string) => {
+			say("master", draft);
+			say("you", "yes");
+		};
+
+		test("shares once the user confirmed the file, channel ID and comment", async () => {
+			const name = path.split("/").at(-1);
+			confirm(
+				`Share ${name} to #eng (C0ENG) with:\n\n> handover for api-auth\n\nShare it?`,
+			);
+			const out = await share();
+			expect(out.isError).toBeFalsy();
+			expect(out.text).toContain("https://slack.test/file");
+			expect(shared).toEqual([
+				{
+					path,
+					channelId: "C0ENG",
+					threadTs: null,
+					comment: "handover for api-auth",
+				},
+			]);
+		});
+
+		test("is refused without the confirmation, or when the draft showed something else", async () => {
+			expect((await share()).isError).toBe(true);
+			const name = path.split("/").at(-1);
+			confirm(`Share ${name} to #eng (C0OTHER) with: handover for api-auth`);
+			expect((await share()).isError).toBe(true);
+			confirm(`Share ${name} to #eng (C0ENG) with: something else`);
+			expect((await share()).isError).toBe(true);
+			expect(shared).toEqual([]);
+		});
+
+		test("takes only a handover doc, a channel ID, and Slack on", async () => {
+			const name = path.split("/").at(-1);
+			confirm(`Share ${name} to #eng (C0ENG) with: handover for api-auth`);
+			expect((await share({ channel_id: "#eng" })).isError).toBe(true);
+			expect((await share({ path: join(tmp, name as string) })).isError).toBe(
+				true,
+			);
+			host.slack = () => null;
+			expect((await share()).isError).toBe(true);
+			expect(shared).toEqual([]);
+		});
 	});
 });

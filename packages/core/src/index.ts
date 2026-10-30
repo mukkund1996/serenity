@@ -3,6 +3,7 @@ export * from "./canvas";
 export * from "./config";
 export * from "./daemon-client";
 export * from "./domain";
+export * from "./handover";
 export * from "./health";
 export * from "./master";
 export * from "./mentions";
