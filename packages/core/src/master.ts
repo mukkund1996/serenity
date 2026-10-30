@@ -1,5 +1,6 @@
 import { PINNED, topicOf } from "./attention";
 import type { Session, Suggestion, SuggestionKind } from "./domain";
+import { type MasterCommand, masterCommands } from "./mentions";
 import { prStatus } from "./pr";
 import type { SlackItem } from "./slack";
 
@@ -326,7 +327,7 @@ export const MASTER_SYSTEM_PROMPT = [
 	"To propose an action the user did not ask for, call mcp__serenity__suggest with the session name, kind (reply, approve, cleanup or review), a short label and, for replies, the text. Nothing runs until the user presses y.",
 	"Call mcp__serenity__set_topic only when the user asks to move a session.",
 	"Call mcp__serenity__open_session when the user asks to open, show or go to a session; it opens beside their map.",
-	"Call mcp__serenity__create_session when the user asks to start new work: one call per session, each with a self-contained first prompt, since the new agent sees nothing of this chat.",
+	"Call mcp__serenity__create_session when the user asks to start new work: one call per session, each with a self-contained first prompt, since the new agent sees nothing of this chat. A message with @new (a command, not a session) means start it now, without asking how to split it.",
 	"Call mcp__serenity__archive_session only when the user asks to kill, stop or archive a session; it stops the agent at once.",
 	"Call mcp__serenity__session_status for a session's status right now; the snapshot is as old as the user's message.",
 	"Call mcp__serenity__watch_session when the user wants something done once a session finishes; serenity messages you when its turn ends. Never wait or poll in a loop.",
@@ -449,6 +450,20 @@ export function watchMessage(
 	].join("\n");
 }
 
+/** What serenity adds after the user's words for each @command they used (ADR 0048). */
+const COMMAND_NOTES: Record<MasterCommand, string> = {
+	new: "serenity: the user typed @new. Start the work in their brief now with mcp__serenity__create_session, with no plan to confirm and no question about how to split it: one session, or one per piece when the brief clearly holds independent pieces. You pick the names and topics, and each prompt stands on its own. Ask only when the brief says nothing to start.",
+};
+
+/**
+ * Sent when a turn answering @new ended with no session started (ADR 0048).
+ * From serenity, so it confirms nothing.
+ */
+export const NEW_UNSTARTED =
+	"serenity: the user's @new asked you to start sessions at once, and you started none. Call mcp__serenity__create_session now for the brief in their last message, without asking how to split it. If it truly names no work to start, say so in one sentence instead.";
+
+/** The user's message as the chat gets it: the snapshot, their words, and a note per @command. */
 export function chatMessage(snapshot: string, text: string): string {
-	return `${snapshot}\n\nUser: ${text}`;
+	const notes = masterCommands(text).map((c) => COMMAND_NOTES[c]);
+	return [`${snapshot}\n\nUser: ${text}`, ...notes].join("\n\n");
 }

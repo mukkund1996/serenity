@@ -3,6 +3,7 @@ import { needsYou } from "../src/attention";
 import {
 	applySummary,
 	capTopic,
+	chatMessage,
 	chatSnapshot,
 	heldTopic,
 	MASTER_SLACK_PROMPT,
@@ -422,5 +423,22 @@ describe("the chat's prompts", () => {
 		expect(MASTER_SLACK_PROMPT).toContain(
 			"unless the message @-mentions a session",
 		);
+	});
+});
+
+describe("chatMessage", () => {
+	test("is the snapshot and the user's words", () => {
+		expect(chatMessage("Sessions: none yet.", "hi")).toBe(
+			"Sessions: none yet.\n\nUser: hi",
+		);
+	});
+
+	test("@new adds serenity's note to start sessions now (ADR 0048)", () => {
+		const body = chatMessage("Sessions: none yet.", "@new add rate limits");
+		expect(body).toStartWith(
+			"Sessions: none yet.\n\nUser: @new add rate limits\n\nserenity: the user typed @new.",
+		);
+		expect(body).toContain("no question about how to split it");
+		expect(chatMessage("S", "@New add rate limits")).not.toContain("serenity:");
 	});
 });

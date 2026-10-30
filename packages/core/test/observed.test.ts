@@ -305,4 +305,9 @@ describe("adoptedName", () => {
 		);
 		expect(adoptedName([null], new Set())).toBe("session");
 	});
+
+	test("never takes a master command word (ADR 0048)", () => {
+		expect(adoptedName(["New"], new Set())).toBe("new-2");
+		expect(adoptedName(["new"], new Set(["new-2"]))).toBe("new-3");
+	});
 });

@@ -41,7 +41,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0033](0033-master-starts-sessions-from-a-brief.md) | The master starts sessions from a brief with `create_session` | Accepted |
 | [0034](0034-dismiss-slack-items.md) | `x` dismisses a Slack item from NEEDS YOU for good, by message; a newer message in its thread shows again | Accepted |
 | [0035](0035-master-sends-replies-the-user-asked-for.md) | The master sends replies the user asked for with `send_reply` | Accepted |
-| [0036](0036-master-input-i-and-session-mentions.md) | `i` opens the master chat input and it stays open; `@session` tells the master to act on that session at once | Amended by 0037 |
+| [0036](0036-master-input-i-and-session-mentions.md) | `i` opens the master chat input and it stays open; `@session` tells the master to act on that session at once | Amended by 0037, 0048 |
 | [0037](0037-mentions-relay-to-the-session.md) | An `@session` message is relayed to the session, questions answered by it; the master never looks into it | Accepted |
 | [0038](0038-shift-enter-new-line-in-master-input.md) | Shift+Enter starts a new line in the master input (Alt+Enter, Ctrl+J as fallbacks); Enter sends | Accepted |
 | [0039](0039-pulse-on-master-session-messages.md) | A card pulses magenta when the master messages it, the master when the session answers; `RepoState.pings` | Amended by 0042 |
@@ -53,6 +53,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0045](0045-daemon-supervisor-crash-reports-recovery.md) | A supervisor restarts the daemon, crashes become deduped GitHub issues, and state survives a restart | Accepted |
 | [0046](0046-master-survives-crashes-hangs-and-restarts.md) | The master survives crashes, hangs and daemon restarts: an outbox per repo, a 5-minute watchdog, restart with `--resume` and re-send, its state in SQLite, tools that answer within 2 minutes | Accepted |
 | [0047](0047-finer-topics-moves-wait.md) | Finer topics: named for a feature or area, a new one for clearly distinct work; near-duplicate names join their topic; a topic move waits while the session works or the user types; `set_topic` stays immediate | Accepted |
+| [0048](0048-at-new-starts-sessions-from-a-brief.md) | `@new <brief>` starts sessions at once, the master choosing the split, names and prompts; command words are never session names and lead the `@` list | Accepted |
 
 ## System at a glance
 

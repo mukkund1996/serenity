@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { MasterMessage } from "../src/domain";
 import {
+	commandHint,
 	completeMention,
+	isReservedName,
+	masterCommands,
 	matchMentions,
 	mentionDraft,
 	mentionedSessions,
@@ -119,8 +122,9 @@ describe("matchMentions", () => {
 		expect(matchMentions(sessions, "auth")).toEqual(["Auth-docs", "api-auth"]);
 	});
 
-	test("an empty query lists every live name", () => {
+	test("an empty query lists every command, then every live name", () => {
 		expect(matchMentions(sessions, "")).toEqual([
+			"new",
 			"fix-login",
 			"login-page",
 			"api-auth",
@@ -136,6 +140,48 @@ describe("matchMentions", () => {
 
 	test("is empty when nothing matches", () => {
 		expect(matchMentions(sessions, "zzz")).toEqual([]);
+	});
+
+	test("commands come first, by prefix only, and a session named like one never shows", () => {
+		const news = makeSession({ id: "7", name: "newsletter", status: "idle" });
+		const clash = makeSession({ id: "8", name: "New", status: "idle" });
+		expect(matchMentions([...sessions, news, clash], "ne")).toEqual([
+			"new",
+			"newsletter",
+		]);
+		expect(matchMentions(sessions, "ew")).toEqual([]);
+	});
+});
+
+describe("master commands (ADR 0048)", () => {
+	test("finds each command once, in order, with punctuation after it", () => {
+		expect(masterCommands("@new: add tests, then @new again")).toEqual(["new"]);
+		expect(masterCommands("(@new) split the auth work")).toEqual(["new"]);
+	});
+
+	test("is exact and lowercase, and not glued to a word", () => {
+		expect(masterCommands("@New add tests")).toEqual([]);
+		expect(masterCommands("@newer add tests")).toEqual([]);
+		expect(masterCommands("me@new.dev")).toEqual([]);
+		expect(masterCommands("new add tests")).toEqual([]);
+	});
+
+	test("command words are reserved in any case", () => {
+		expect(isReservedName("new")).toBe(true);
+		expect(isReservedName("NEW")).toBe(true);
+		expect(isReservedName("new-2")).toBe(false);
+		expect(isReservedName("constructor")).toBe(false);
+	});
+
+	test("a command is never a session mention, even for a session so named", () => {
+		const legacy = makeSession({ id: "n", name: "new", status: "idle" });
+		expect(mentionedSessions("@new add tests", [legacy])).toEqual([]);
+	});
+
+	test("only commands have a hint", () => {
+		expect(commandHint("new")).toBe("start sessions from a brief");
+		expect(commandHint("api-auth")).toBeNull();
+		expect(commandHint("toString")).toBeNull();
 	});
 });
 
