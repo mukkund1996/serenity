@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.0](https://github.com/mukkund1996/serenity/compare/v0.7.0...v0.8.0) (2026-10-30)
+
+
+### Features
+
+* [@copy](https://github.com/copy) and [@handover](https://github.com/handover) hand a session's work over through a handover doc, shareable on Slack as a file (ADR 0049) ([#52](https://github.com/mukkund1996/serenity/issues/52)) ([d7e8535](https://github.com/mukkund1996/serenity/commit/d7e8535a9c5c593dd3b3a84a4534be3bdb76b4be))
+* [@new](https://github.com/new) starts sessions from a brief at once, and command words are never session names (ADR 0048) ([#50](https://github.com/mukkund1996/serenity/issues/50)) ([ba088a3](https://github.com/mukkund1996/serenity/commit/ba088a33faf8e928e52cba2aff58980dd5fd6349))
+* Enter marks NEEDS YOU items seen, ◆ says what y does to whom, Slack follow-ups tell a session or start one (ADR 0050) ([#53](https://github.com/mukkund1996/serenity/issues/53)) ([e39dd33](https://github.com/mukkund1996/serenity/commit/e39dd33873bf92c369f153760bb9550f1a2e7cba))
+
+
+### Bug Fixes
+
+* Ctrl+g in an agent pane always reaches serenity, never claude's editor (ADR 0051) ([#54](https://github.com/mukkund1996/serenity/issues/54)) ([1380414](https://github.com/mukkund1996/serenity/commit/13804142f160f863b96172d9998339ffdbd1a6ab))
+
 ## [0.7.0](https://github.com/mukkund1996/serenity/compare/v0.6.0...v0.7.0) (2026-10-30)
 
 
