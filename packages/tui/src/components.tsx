@@ -11,7 +11,7 @@ import type {
 	SlackSuggestion,
 	Suggestion,
 } from "@serenity/core";
-import { prLine } from "@serenity/core";
+import { commandHint, prLine } from "@serenity/core";
 import { Box, Text } from "ink";
 import { type ReactNode, useEffect, useState } from "react";
 import { type InputRow, inputRows, PROMPT_W } from "./master-input";
@@ -247,6 +247,9 @@ function MasterInput({
 					bold={i === mentions.selected}
 				>
 					{i === mentions.selected ? "▸ " : "  "}@{name}
+					{commandHint(name) ? (
+						<Text color="gray"> {commandHint(name)}</Text>
+					) : null}
 				</Text>
 			))}
 			<Box

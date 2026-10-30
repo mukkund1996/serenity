@@ -17,7 +17,9 @@ import {
 	type MasterRecord,
 	type MasterState,
 	type MasterToolResult,
+	masterCommands,
 	mentionsSession,
+	NEW_UNSTARTED,
 	needsSuggestion,
 	normalizeTopic,
 	PINNED,
@@ -137,6 +139,8 @@ export class MasterSupervisor {
 	private readonly running = new Map<string, number>();
 	private readonly errors = new Map<string, string>();
 	private readonly chats = new Map<string, Chat>();
+	/** Repos whose current turn started a session, for @new's check (ADR 0048). */
+	private readonly created = new Set<string>();
 	/** repo → what outlives the daemon: chat session, watches, released Slack, outbox (ADR 0046). */
 	private readonly records = new Map<string, MasterRecord>();
 	private readonly restarts = new Map<string, Restart>();
@@ -528,6 +532,8 @@ export class MasterSupervisor {
 		const retry = this.restarts.get(repo)?.attempts
 			? "serenity: your process restarted while answering the message below, so it is sent again. Tools you called for it may already have run: check session_status before calling one again.\n\n"
 			: "";
+		// A session started before a restart still counts for the resent message.
+		if (!retry) this.created.delete(repo);
 		chat.thinking = true;
 		chat.reply = [];
 		this.arm(repo, chat);
@@ -634,8 +640,18 @@ export class MasterSupervisor {
 		chat.reply = [];
 		if (chat.thinking) {
 			chat.thinking = false;
-			this.record(repo).outbox.shift();
+			const answered = this.record(repo).outbox.shift();
 			this.save(repo);
+			// @new means sessions start in this turn; a turn that asked instead is told once.
+			if (
+				!isError &&
+				answered?.from === "you" &&
+				masterCommands(answered.text).includes("new") &&
+				!this.created.has(repo)
+			) {
+				this.host.log(`master answered @new without a session for ${repo}`);
+				this.tell(repo, NEW_UNSTARTED);
+			}
 		}
 		this.restarts.delete(repo);
 		if (isError) this.errors.set(repo, `master: ${resultText.slice(0, 120)}`);
@@ -978,6 +994,7 @@ export class MasterSupervisor {
 			mode: "worktree",
 			prompt,
 		});
+		this.created.add(repo);
 		if (topic)
 			this.host.update(session, {
 				topic,

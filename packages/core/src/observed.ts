@@ -1,4 +1,5 @@
 import type { Session } from "./domain";
+import { isReservedName } from "./mentions";
 import { oneLine, REPLY_MAX } from "./status";
 
 /**
@@ -270,6 +271,8 @@ export function adoptedName(
 		.filter((s) => !AUTOMATIC_NAME.test(s));
 	const base = slugs[0] ?? "session";
 	let name = base;
-	for (let n = 2; taken.has(name); n++) name = `${base}-${n}`;
+	// A command word (@new) is never a session name: it becomes new-2.
+	for (let n = 2; taken.has(name) || isReservedName(name); n++)
+		name = `${base}-${n}`;
 	return name;
 }

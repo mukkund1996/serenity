@@ -644,6 +644,59 @@ describe("chat", () => {
 		expect(storage.sessions.get("new-api-auth")?.topic).toBe("auth");
 	});
 
+	describe("@new (ADR 0048)", () => {
+		const done = (text = "ok") =>
+			runner.emit({ type: "result", isError: false, text });
+
+		test("the user's @new reaches the chat with serenity's note to start now", () => {
+			master.message(REPO, "@new add rate limits to the API");
+			expect(runner.sent[0]).toContain(
+				"User: @new add rate limits to the API\n\nserenity: the user typed @new.",
+			);
+		});
+
+		test("a turn that started a session is not told again", async () => {
+			master.message(REPO, "@new add rate limits");
+			await master.handleTool(REPO, "create_session", {
+				name: "rate-limits",
+				prompt: "Add rate limits.",
+			});
+			done("Started rate-limits.");
+			expect(runner.sent).toHaveLength(1);
+			expect(master.state(REPO).status).toBe("idle");
+		});
+
+		test("a turn that asked instead is told once to start them", () => {
+			master.message(REPO, "@new add rate limits");
+			done("One session or two?");
+			expect(runner.sent).toHaveLength(2);
+			expect(runner.sent[1]).toContain("you started none");
+			done("Started them.");
+			expect(runner.sent).toHaveLength(2);
+		});
+
+		test("without @new, or after a failed turn, nothing is added", () => {
+			master.message(REPO, "add rate limits");
+			expect(runner.sent[0]).not.toContain("serenity:");
+			done("One session or two?");
+			master.message(REPO, "@new add rate limits");
+			runner.emit({ type: "result", isError: true, text: "overloaded" });
+			expect(runner.sent).toHaveLength(2);
+		});
+
+		test("a session started in the previous turn does not count", async () => {
+			master.message(REPO, "start api-auth");
+			await master.handleTool(REPO, "create_session", {
+				name: "api-auth",
+				prompt: "Rotate refresh tokens.",
+			});
+			done();
+			master.message(REPO, "@new add rate limits");
+			done("Which part first?");
+			expect(runner.sent.at(-1)).toContain("you started none");
+		});
+	});
+
 	test("create_session needs a name and a prompt, and keeps to the topic cap", async () => {
 		const noPrompt = await master.handleTool(REPO, "create_session", {
 			name: "api-auth",

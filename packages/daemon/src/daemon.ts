@@ -11,6 +11,7 @@ import {
 	DependencyHealth,
 	hookSettingsPath,
 	isHookKind,
+	isReservedName,
 	loadConfig,
 	type Method,
 	masterPluginPath,
@@ -1223,6 +1224,11 @@ export class Daemon {
 				"name: letters, digits, . _ - (max 40)",
 			);
 		}
+		if (isReservedName(name))
+			throw new RpcError(
+				RpcErrorCode.InvalidParams,
+				`${name} is reserved for @${name.toLowerCase()} in the master; pick another name`,
+			);
 		const clash = this.opts.storage.sessions.listByRepo(repo).find(
 			(s) =>
 				s.id !== self &&

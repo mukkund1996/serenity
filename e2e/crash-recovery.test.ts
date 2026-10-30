@@ -146,6 +146,14 @@ test(
 				{ repo, name: "api", cwd: repo, mode: "worktree" },
 				{ timeoutMs: 10_000 },
 			);
+			// A master command word is never a session name (ADR 0048).
+			await expect(
+				peer.request(
+					"session.create",
+					{ repo, name: "New", cwd: repo, mode: "worktree" },
+					{ timeoutMs: 10_000 },
+				),
+			).rejects.toThrow("New is reserved for @new");
 			await peer.request("usage.report", {
 				rateLimits: { five_hour: { used_percentage: 42, resets_at: 2e9 } },
 			});
