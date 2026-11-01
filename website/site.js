@@ -413,6 +413,56 @@ function render(st) {
 	};
 }
 
+// ---- GoatCounter events (no cookies; count.js loads async and may be blocked) ----
+function gcEvent(path, title) {
+	try {
+		window.goatcounter?.count?.({ path, title, event: true });
+	} catch {}
+}
+
+// ---- GitHub stars on the install section's Star button ----
+// Fetched from the browser and cached for an hour (the API allows 60 calls an hour
+// per IP). The count's slot has a fixed width and shows ↗ until (or unless) it loads, and
+// while there are fewer than 10 stars: a tiny count reads worse than none.
+const starLink = document.querySelector("[data-stars]");
+if (starLink) {
+	const KEY = "srn-stars";
+	const show = (n) => {
+		if (typeof n !== "number" || !(n >= 10)) return;
+		const text =
+			n < 1000
+				? String(n)
+				: n < 10000
+					? `${(Math.floor(n / 100) / 10).toString()}k`
+					: `${Math.floor(n / 1000)}k`;
+		starLink.querySelector(".srn-star-n").textContent = text;
+		starLink.setAttribute(
+			"aria-label",
+			`Star serenity on GitHub (${n.toLocaleString("en")} stars)`,
+		);
+	};
+	let cached = null;
+	try {
+		cached = JSON.parse(localStorage.getItem(KEY) || "null");
+	} catch {}
+	if (cached) show(cached.n);
+	if (!cached || Date.now() - cached.t > 3600e3) {
+		fetch("https://api.github.com/repos/mukkund1996/serenity", {
+			headers: { Accept: "application/vnd.github+json" },
+		})
+			.then((r) => (r.ok ? r.json() : null))
+			.then((repo) => {
+				const n = repo?.stargazers_count;
+				if (typeof n !== "number") return;
+				show(n);
+				try {
+					localStorage.setItem(KEY, JSON.stringify({ n, t: Date.now() }));
+				} catch {}
+			})
+			.catch(() => {});
+	}
+}
+
 // ---- copy buttons ----
 const commands = {
 	quick:
@@ -424,6 +474,7 @@ let copyTimer = 0;
 for (const btn of document.querySelectorAll("[data-copy]")) {
 	const label = btn.getAttribute("aria-label");
 	btn.addEventListener("click", () => {
+		gcEvent(`install-copy-${btn.dataset.copy}`, "Copied the install command");
 		const done = () => {
 			for (const other of document.querySelectorAll("[data-copy].is-copied")) {
 				other.classList.remove("is-copied");

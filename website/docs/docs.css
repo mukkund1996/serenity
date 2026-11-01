@@ -129,6 +129,44 @@ td a:hover {
 	color: var(--accent);
 	letter-spacing: 0.1em;
 }
+/* Star on GitHub: same as the main page's nav button */
+.d-nav .d-star {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 30px;
+	padding: 0 10px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	box-sizing: border-box;
+	color: var(--heading);
+	white-space: nowrap;
+}
+.d-star svg {
+	flex: none;
+	color: var(--accent);
+}
+.d-nav .d-star:hover,
+.d-nav .d-star:focus-visible {
+	border-color: var(--accent);
+	color: #ffffff;
+}
+/* "on GitHub" and the pill's version only where the bar has room for them; on phones the
+   button drops its border to fit */
+@media (max-width: 899px) {
+	.d-star .d-gh,
+	.d-pill .d-ver {
+		display: none;
+	}
+}
+@media (max-width: 639px) {
+	.d-nav .d-star {
+		gap: 4px;
+		height: auto;
+		padding: 0;
+		border: 0;
+	}
+}
 
 /* ---- layout: sidebar + article ---- */
 .d-wrap {
@@ -545,11 +583,10 @@ kbd {
 		white-space: normal;
 	}
 }
-/* narrow screens: drop Home and the pill's version (BETA stays) so Docs, Why and GitHub fit
-   beside the logo; on the narrowest phones Why moves to the footer only */
+/* narrow screens: drop Home (the pill's version is already gone below 900px) so Docs, Why and
+   Star fit beside the logo; on the narrowest phones Why moves to the footer only */
 @media (max-width: 639px) {
-	.d-nav .d-wide,
-	.d-pill .d-ver {
+	.d-nav .d-wide {
 		display: none;
 	}
 }

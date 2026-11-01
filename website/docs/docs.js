@@ -1,5 +1,6 @@
-// Shared script for every page under website/docs/: copy buttons on command blocks,
-// the sidebar marking the section in view, and the phone menu closing after a pick.
+// Shared script for every page under website/docs/: copy buttons on command blocks (each copy
+// counted as a GoatCounter event), the sidebar marking the section in view, and the phone menu
+// closing after a pick.
 
 let copyTimer = 0;
 for (const btn of document.querySelectorAll(".d-copy")) {
@@ -11,6 +12,14 @@ for (const btn of document.querySelectorAll(".d-copy")) {
 			.map((n) => n.textContent)
 			.join("")
 			.trim();
+		// a GoatCounter event (no cookies); count.js loads async and may be blocked
+		try {
+			window.goatcounter?.count?.({
+				path: `docs-copy: ${text.slice(0, 60)}`,
+				title: "Copied a command in the docs",
+				event: true,
+			});
+		} catch {}
 		const done = () => {
 			for (const other of document.querySelectorAll(".d-copy.is-copied")) {
 				other.classList.remove("is-copied");

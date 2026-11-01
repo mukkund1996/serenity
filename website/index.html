@@ -68,11 +68,21 @@ a:hover{color:#ffffff}
 @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}.srn-cur,.srn-pulse,.srn-busy,.srn-bob{animation:none}.srn-at-node{transition:none}#srn-tour{transition:none}}
 /* phones: drop the Install nav link so logo, Docs, GitHub and the version pill fit on one line */
 @media (max-width: 639px){.srn-wide{display:none}}
-/* narrow phones: the pill keeps BETA and drops the version, so Docs never touches the logo */
-@media (max-width: 479px){.srn-ver{display:none}}
+/* phones: the pill keeps BETA and drops the version, so Docs never touches the logo */
+@media (max-width: 639px){.srn-ver{display:none}}
 /* the narrowest phones: Why leaves the nav (the teaser and footer still link it) */
 @media (max-width: 439px){.srn-mid{display:none}}
+/* Star on GitHub: the nav's small button and the install section's big one (count filled by site.js) */
+.srn-star{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid #3a3f47;border-radius:6px;box-sizing:border-box;color:#e8eaee;white-space:nowrap}
+.srn-star svg{flex:none;color:#7fc77f}
+.srn-star:hover,.srn-star:focus-visible{border-color:#7fc77f;color:#ffffff}
+/* below 900px the nav button says just Star; on phones it drops its border to fit beside Docs and the pill */
+@media (max-width: 899px){.srn-gh{display:none}}
+@media (max-width: 639px){nav .srn-star{gap:4px;height:auto;padding:0;border:0}}
+.srn-star-n{min-width:4ch;margin-left:6px;padding-left:12px;border-left:1px solid #3a3f47;font:500 14px/1 'Inter',system-ui,sans-serif;font-variant-numeric:tabular-nums;color:#7fc77f;text-align:center}
 </style>
+<!-- privacy-friendly page counts: no cookies, no personal data (goatcounter.com) -->
+<script data-goatcounter="https://getserenity.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
 <div id="top" style="background: #0d0f12; color: #d0d4da; font-family: 'Inter', system-ui, -apple-system, sans-serif; font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased">
@@ -90,7 +100,7 @@ a:hover{color:#ffffff}
 <a href="#install" style="color: #d0d4da" class="srn-wide">Install</a>
 <a href="docs/" style="color: #d0d4da">Docs</a>
 <a href="why/" style="color: #d0d4da" class="srn-mid">Why</a>
-<a href="https://github.com/mukkund1996/serenity" style="color: #d0d4da">GitHub</a>
+<a href="https://github.com/mukkund1996/serenity" class="srn-star" aria-label="Star serenity on GitHub" data-goatcounter-click="star-landing-nav" data-goatcounter-title="Star on GitHub"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.5L12 17.3l-5.9 3.2 1.3-6.5L2.5 9.4l6.6-.8z"/></svg>Star<span class="srn-gh">on GitHub</span></a>
 <span title="serenity is in beta" style="display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border: 1px solid #3a3f47; border-radius: 999px; font: 500 11px/1 'JetBrains Mono', Menlo, monospace; letter-spacing: .04em; color: #858c97; white-space: nowrap"><span style="color: #7fc77f; letter-spacing: .1em">BETA</span><span class="srn-ver">__SERENITY_VERSION__</span></span>
 </nav>
 </div>
@@ -513,7 +523,7 @@ a:hover{color:#ffffff}
 </li>
 </ol>
 <div style="margin-top: 56px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px 28px">
-<a href="https://github.com/mukkund1996/serenity" style="display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 20px; border: 1px solid #7fc77f; border-radius: 6px; color: #e8eaee; font-weight: 500; box-sizing: border-box">View the source on GitHub <span aria-hidden="true" style="color: #7fc77f">↗</span></a>
+<a href="https://github.com/mukkund1996/serenity" class="srn-star" data-stars aria-label="Star serenity on GitHub" data-goatcounter-click="star-landing-install" data-goatcounter-title="Star on GitHub" style="gap: 10px; height: auto; min-height: 44px; padding: 0 16px 0 20px; border-color: #7fc77f; font-weight: 500"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.5L12 17.3l-5.9 3.2 1.3-6.5L2.5 9.4l6.6-.8z"/></svg>Star serenity on GitHub<span class="srn-star-n" aria-hidden="true">↗</span></a>
 </div>
 </section>
 
@@ -529,6 +539,7 @@ a:hover{color:#ffffff}
 </div>
 <p style="flex-basis: 100%; margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: #b5bac2"><span style="color: #7fc77f; font: 500 11px/1 'JetBrains Mono', Menlo, monospace; letter-spacing: .1em; margin-right: 8px">BETA</span>serenity is still in development: expect rough edges and changes between releases.</p>
 <p style="flex-basis: 100%; margin: 0; font-size: 12px; line-height: 1.6; color: #858c97">serenity is an independent open-source project, not affiliated with or endorsed by Anthropic, Slack or Microsoft. Product names are trademarks of their respective owners.</p>
+<p style="flex-basis: 100%; margin: 0; font-size: 12px; line-height: 1.6; color: #858c97">Visits are counted with <a href="https://www.goatcounter.com" style="color: #b5bac2; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #3a3f47">GoatCounter</a>: no cookies, no personal data.</p>
 </div>
 </footer>
 

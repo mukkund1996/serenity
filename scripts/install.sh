@@ -162,3 +162,4 @@ case ":$USER_PATH:" in
 esac
 has gh && ! gh auth status >/dev/null 2>&1 && warn "log in to GitHub for PR status: gh auth login"
 say "Done. Run serenity inside any git repo."
+printf '\033[32m★\033[0m Enjoying serenity? Star it: https://github.com/%s\n' "$REPO"
