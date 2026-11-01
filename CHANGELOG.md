@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.8.0](https://github.com/mukkund1996/serenity/compare/v0.7.0...v0.8.0) (2026-11-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* Ctrl+q now leaves a session for the map (was Ctrl+g) and Ctrl+w focuses the master from every view (was Ctrl+m). Ctrl+g opens claude's $EDITOR again in agent panes. Ctrl+w no longer deletes a word in claude's prompt or serenity's text fields; use Option+Backspace.
+
+### Features
+
+* [@copy](https://github.com/copy) and [@handover](https://github.com/handover) hand a session's work over through a handover doc, shareable on Slack as a file (ADR 0049) ([#52](https://github.com/mukkund1996/serenity/issues/52)) ([d7e8535](https://github.com/mukkund1996/serenity/commit/d7e8535a9c5c593dd3b3a84a4534be3bdb76b4be))
+* [@new](https://github.com/new) starts sessions from a brief at once, and command words are never session names (ADR 0048) ([#50](https://github.com/mukkund1996/serenity/issues/50)) ([ba088a3](https://github.com/mukkund1996/serenity/commit/ba088a33faf8e928e52cba2aff58980dd5fd6349))
+* colour @ mentions where they resolve: sessions blue, [@new](https://github.com/new) green, [@copy](https://github.com/copy) and [@handover](https://github.com/handover) yellow (ADR 0052) ([#58](https://github.com/mukkund1996/serenity/issues/58)) ([06f4490](https://github.com/mukkund1996/serenity/commit/06f4490e00251c94bad919abc73cebd6149bc907))
+* Ctrl+q back to the map, Ctrl+w to the master (ADR 0053) ([#59](https://github.com/mukkund1996/serenity/issues/59)) ([a39d2b6](https://github.com/mukkund1996/serenity/commit/a39d2b65f8907997848c9381e662f90bd555209f))
+* Enter marks NEEDS YOU items seen, ◆ says what y does to whom, Slack follow-ups tell a session or start one (ADR 0050) ([#53](https://github.com/mukkund1996/serenity/issues/53)) ([e39dd33](https://github.com/mukkund1996/serenity/commit/e39dd33873bf92c369f153760bb9550f1a2e7cba))
+* **website:** story autoplay, @ features in Clarity, "Why I built this", and a docs page ([#57](https://github.com/mukkund1996/serenity/issues/57)) ([77320c7](https://github.com/mukkund1996/serenity/commit/77320c702b8aa09564d31141fb377138e691919c))
+
+
+### Bug Fixes
+
+* **install:** four installer bugs found by a new clean-machine smoke test ([#61](https://github.com/mukkund1996/serenity/issues/61)) ([3693fe6](https://github.com/mukkund1996/serenity/commit/3693fe6c127e19ffdf1c8047448611dc955f5c88))
+
 ## [0.7.0](https://github.com/mukkund1996/serenity/compare/v0.6.0...v0.7.0) (2026-10-30)
 
 

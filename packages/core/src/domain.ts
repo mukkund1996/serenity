@@ -2,7 +2,7 @@ import type { DependencyIssue } from "./health";
 import type { GithubState, PrInfo } from "./pr";
 import type { SlackState } from "./slack";
 
-export const VERSION = "0.7.0"; // x-release-please-version
+export const VERSION = "0.8.0"; // x-release-please-version
 
 /** Set by scripts/build.ts: the commit and time of a compiled build. */
 declare const SERENITY_BUILD: string | undefined;
