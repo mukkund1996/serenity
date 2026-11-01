@@ -412,6 +412,27 @@ kbd {
 	color: var(--muted);
 }
 
+/* a GIF recorded from the TUI (scripts/demo/docs) */
+.d-gif {
+	margin: 4px 0 20px;
+}
+.d-gif-link {
+	display: block;
+}
+.d-gif img {
+	display: block;
+	width: 100%;
+	height: auto;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--bg);
+}
+.d-gif figcaption {
+	margin-top: 8px;
+	font-size: 14px;
+	color: var(--muted);
+}
+
 .d-next {
 	display: flex;
 	flex-wrap: wrap;
@@ -501,6 +522,16 @@ kbd {
 	}
 	.d-foot-in {
 		padding: 28px 16px;
+	}
+}
+/* Too narrow to read 104 terminal columns: keep them legible and scroll sideways. */
+@media (max-width: 599px) {
+	.d-gif-link {
+		overflow-x: auto;
+	}
+	.d-gif img {
+		width: 640px;
+		max-width: none;
 	}
 }
 @media (max-width: 479px) {

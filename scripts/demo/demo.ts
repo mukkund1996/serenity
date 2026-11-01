@@ -1,12 +1,14 @@
 #!/usr/bin/env bun
 /**
- * Drives the README demo (see scripts/demo/README.md): a throwaway world with
+ * Drives the demos (see scripts/demo/README.md): a throwaway world with
  * a git repo, fake claude (agent.ts), fake gh and a fake Slack inbox, all in
  * a private tmux server, so a recording shows the real TUI but nothing real.
  *
  *   bun scripts/demo/demo.ts start   set up the world, start the map and the
  *                                    sessions, and wait until they are working
- *   bun scripts/demo/demo.ts play    run the timeline in scenario.ts
+ *   bun scripts/demo/demo.ts play [name]
+ *                                    run a timeline in scenario.ts (default
+ *                                    readme; the docs GIFs have their own)
  *   bun scripts/demo/demo.ts attach  attach this terminal to the map
  *   bun scripts/demo/demo.ts stop    stop serenity and delete the world
  */
@@ -27,7 +29,13 @@ import {
 	type Session,
 	tmuxSessionName,
 } from "../../packages/core/src/index";
-import { type DemoSlackItem, REPO, SESSIONS, TIMELINE } from "./scenario";
+import {
+	type DemoSlackItem,
+	LATER_SESSIONS,
+	REPO,
+	SESSIONS,
+	TIMELINES,
+} from "./scenario";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const MAIN = join(ROOT, "packages/cli/src/main.ts");
@@ -112,7 +120,7 @@ function stop(): void {
 	spawnSync("tmux", ["-L", SOCKET, "kill-server"]);
 	rmSync(WORLD, { recursive: true, force: true });
 	// Worktrees live beside the repo.
-	for (const s of SESSIONS)
+	for (const s of [...SESSIONS, ...LATER_SESSIONS])
 		rmSync(join(WORLD, "work", `${REPO}-${s.name}`), {
 			recursive: true,
 			force: true,
@@ -234,10 +242,12 @@ async function start(): Promise<void> {
 	console.log("demo: ready");
 }
 
-async function play(): Promise<void> {
+async function play(name = "readme"): Promise<void> {
+	const timeline = TIMELINES[name];
+	if (!timeline) throw new Error(`demo: no timeline named ${name}`);
 	const began = Date.now();
 	const slack: object[] = [];
-	for (const event of TIMELINE) {
+	for (const event of timeline) {
 		const wait = began + event.at - Date.now();
 		if (wait > 0) await Bun.sleep(wait);
 		if (event.kind === "permission")
@@ -269,12 +279,14 @@ function slackMessage(item: DemoSlackItem, index: number) {
 
 const command = process.argv[2];
 if (command === "start") await start();
-else if (command === "play") await play();
+else if (command === "play") await play(process.argv[3]);
 else if (command === "attach")
 	spawnSync("tmux", ["-L", SOCKET, "attach", "-t", MAP], { stdio: "inherit" });
 else if (command === "stop") stop();
 else {
-	console.error("usage: bun scripts/demo/demo.ts start|play|attach|stop");
+	console.error(
+		"usage: bun scripts/demo/demo.ts start|play [name]|attach|stop",
+	);
 	process.exit(2);
 }
 process.exit(0);

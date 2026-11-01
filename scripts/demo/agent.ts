@@ -18,11 +18,20 @@
  * scenario, suggestions for waiting sessions, the Slack inbox from the JSON
  * file at SERENITY_FAKE_SLACK, and the scenario's Slack follow-ups.
  *
- * `-p --input-format stream-json` (the master chat): replies "Heard: <text>".
+ * `-p --input-format stream-json` (the master chat): the scenario's CHAT turn
+ * for the message, calling its serenity tools through the daemon as the real
+ * master does over MCP; "Heard: <text>" for anything else.
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { SESSIONS, sessionIn, TIMELINE } from "./scenario";
+import { connectDaemon } from "../../packages/core/src/index";
+import {
+	CHAT,
+	LATER_SESSIONS,
+	SESSIONS,
+	sessionIn,
+	TIMELINE,
+} from "./scenario";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => {
@@ -116,11 +125,24 @@ function answer(prompt: string, schema: string): unknown {
 async function chat(): Promise<void> {
 	const sessionId = `demo-chat-${process.pid}`;
 	emit({ type: "system", subtype: "init", session_id: sessionId });
+	const home = process.env.SERENITY_HOME;
+	const daemon = home ? await connectDaemon(home) : null;
 	for await (const raw of console) {
 		if (!raw.trim()) continue;
 		const message = JSON.parse(raw) as { message: { content: string } };
-		const text = message.message.content.split("User: ").pop()?.trim() ?? "";
-		const reply = `Heard: ${text}`;
+		const body = message.message.content;
+		// The user's words sit after "User: ", before any notes from serenity.
+		const user = body.match(/\nUser: ([\s\S]*?)(?:\n\nserenity: |$)/)?.[1];
+		const turn = CHAT.find((t) => t.when.test(user?.trim() ?? body));
+		// A moment of thinking, as the real chat takes.
+		await Bun.sleep(1_200);
+		for (const tool of turn?.tools ?? [])
+			await daemon?.request("master.tool", {
+				repo: process.cwd(),
+				name: tool.name,
+				args: tool.args,
+			});
+		const reply = turn?.reply ?? `Heard: ${user?.trim() ?? body}`;
 		emit({
 			type: "assistant",
 			session_id: sessionId,
@@ -144,7 +166,9 @@ async function interactive(): Promise<void> {
 		? JSON.parse(readFileSync(settingsPath, "utf8"))
 		: { hooks: {} };
 	const sessionId = flag("--resume") ?? `demo-${process.pid}`;
-	const scripted = SESSIONS.find((s) => process.cwd().endsWith(`-${s.name}`));
+	const scripted = [...SESSIONS, ...LATER_SESSIONS].find((s) =>
+		process.cwd().endsWith(`-${s.name}`),
+	);
 	const name = scripted?.name;
 
 	const fire = (event: string, extra: Record<string, unknown> = {}) => {

@@ -123,6 +123,10 @@
 <li><strong>Topics</strong>: every session as a card, with its summary and its PR.</li>
 <li><strong>Session</strong>: the real Claude Code pane, untouched.</li>
 </ul>
+<figure class="d-gif">
+<a class="d-gif-link" href="media/map.gif" aria-label="Open the map GIF full size"><img src="media/map.gif" width="1000" height="530" loading="lazy" decoding="async" alt="serenity's map: the master in the centre with topic bubbles around it (ci, orders db, checkout, search), each listing its sessions. The focus moves from topic to topic, then Z zooms in to cards showing each session's summary and PR, and Esc goes back to the map."></a>
+<figcaption>Moving between topics on the map, <kbd>Z</kbd> into the topics, <kbd>Esc</kbd> back out.</figcaption>
+</figure>
 <p><kbd>z</kbd> zooms out to the map, <kbd>Z</kbd> zooms in to the topics, and <kbd>Esc</kbd> goes up one level. Move with the arrow keys or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>; <kbd>[</kbd> <kbd>]</kbd> step between topics, <kbd>c</kbd> centres on the master and <kbd>/</kbd> searches session names, topics and branches as you type.</p>
 <p>The master picks the topics for you and keeps them to a handful (ten by default). Each session shows its status, reported by Claude Code's hooks:</p>
 <div class="d-table"><table>
@@ -140,6 +144,10 @@
 <section id="sessions">
 <h2><a href="#sessions">Sessions</a></h2>
 <p>Each session is a real <code>claude</code> process in its own tmux pane, usually in its own git worktree.</p>
+<figure class="d-gif">
+<a class="d-gif-link" href="media/sessions.gif" aria-label="Open the sessions GIF full size"><img src="media/sessions.gif" width="1000" height="530" loading="lazy" decoding="async" alt="Searching for cart-badge with /, pressing Enter to open its Claude Code pane beside the master's notes on it, asking it whether the badge updates live, then Ctrl+q back to the map, where cart-badge's card shows its answer."></a>
+<figcaption><kbd>Enter</kbd> into a session's pane, <kbd>Ctrl</kbd>+<kbd>q</kbd> back to the map.</figcaption>
+</figure>
 <h3>Start one</h3>
 <p><kbd>N</kbd> opens the New session form: a name, a first prompt, and either a <strong>new worktree</strong> or an <strong>existing branch</strong>. A new worktree is created beside the repo, at <code>&lt;parent&gt;/&lt;repo&gt;-&lt;name&gt;</code>, on a new branch named after the session off the default branch. You can also ask the master to start sessions for you (see <a href="#mentions"><code>@new</code></a>).</p>
 <p><kbd>I</kbd> imports Claude sessions you already run in tmux. They join the map and stay in their windows.</p>
@@ -160,6 +168,10 @@
 <section id="needs-you">
 <h2><a href="#needs-you">NEEDS YOU</a></h2>
 <p>NEEDS YOU is the one list of what is waiting on you, and the yellow <strong>N need you</strong> chip at the top counts it. It holds sessions waiting on an answer or a permission prompt, the master's suggestions, and, if you set up Slack, up to three mentions and DMs that need you to act.</p>
+<figure class="d-gif">
+<a class="d-gif-link" href="media/needs-you.gif" aria-label="Open the needs you GIF full size"><img src="media/needs-you.gif" width="1000" height="530" loading="lazy" decoding="async" alt="NEEDS YOU in the master lists three items: db-migration wants to run bun run db:migrate, price-filter asks whether URL prices are euros or cents, and Priya mentions you in #release. Each has a ◆ line saying what y does. y approves the migration, y tells price-filter cents, and on the Slack item Enter marks it seen and x dismisses it, until nothing needs you."></a>
+<figcaption><kbd>y</kbd> runs the ◆ line; on a Slack item <kbd>Enter</kbd> marks it seen and <kbd>x</kbd> dismisses it.</figcaption>
+</figure>
 <p>Each item carries a ◆ line that says exactly what <kbd>y</kbd> will do and to whom, for example <code>Tell api-auth: …</code>, <code>Reply in #eng thread: …</code> or <code>Start new session fix-login: …</code>.</p>
 <div class="d-table"><table>
 <thead><tr><th>KEY</th><th>ON A NEEDS YOU ITEM</th></tr></thead>
@@ -184,6 +196,10 @@
 <li><strong>Opus</strong> is the chat: it can see and steer every session, start new ones from a brief, and talk to any session you tag.</li>
 </ul>
 <p>The master proposes; nothing runs until you approve it. The exceptions are the ones you ask for in so many words: starting sessions from a brief, and messaging a session you <code>@</code>-mention.</p>
+<figure class="d-gif">
+<a class="d-gif-link" href="media/master.gif" aria-label="Open the master GIF full size"><img src="media/master.gif" width="1000" height="530" loading="lazy" decoding="async" alt="Ctrl+w focuses the master and i opens its input. Asked what's waiting on me, the master answers that db-migration wants to run a migration it would approve, and that it suggested cents for price-filter's question; both suggestions wait in NEEDS YOU for y."></a>
+<figcaption>Asking the master what's waiting; its suggestions wait in NEEDS YOU for <kbd>y</kbd>.</figcaption>
+</figure>
 <h3>Talking to it</h3>
 <p><kbd>Ctrl</kbd>+<kbd>w</kbd> focuses the master from anywhere. <kbd>i</kbd> on the master opens its chat input, which stays open after you send. <kbd>Shift</kbd>+<kbd>Enter</kbd> or <kbd>Ctrl</kbd>+<kbd>J</kbd> starts a new line, <kbd>Esc</kbd> closes it, and <kbd>PgUp</kbd> <kbd>PgDn</kbd> scroll the conversation.</p>
 </section>
@@ -192,6 +208,10 @@
 <section id="mentions">
 <h2><a href="#mentions">@ mentions</a></h2>
 <p>In the master's input, <kbd>@</kbd> opens a list that completes as you type: the commands first, each with a hint, then the live sessions of the repo. <kbd>↑</kbd> <kbd>↓</kbd> move, <kbd>Tab</kbd> or <kbd>Enter</kbd> complete, <kbd>Esc</kbd> closes the list. Names are exact and case-sensitive, which is why the list completes whole names.</p>
+<figure class="d-gif">
+<a class="d-gif-link" href="media/mentions.gif" aria-label="Open the mentions GIF full size"><img src="media/mentions.gif" width="1000" height="530" loading="lazy" decoding="async" alt="Typing @ in the master's input lists @new, @copy, @handover and the sessions. Typing ca and Tab completes @cart-badge in blue; the master asks cart-badge and relays its answer. @new, in green, starts a wishlist session that appears under checkout, and @copy, in yellow, is typed with @checkout-retry."></a>
+<figcaption>Session mentions turn blue, <code>@new</code> green, <code>@copy</code> and <code>@handover</code> yellow.</figcaption>
+</figure>
 
 <h3><code>@session</code>: talk to a session</h3>
 <p>A message that tags a session goes to that session at once, lightly reworded to stand on its own. The master doesn't investigate it itself: the session's own agent does the looking. If you asked a question, the master watches the session and condenses its answer for you when it replies.</p>

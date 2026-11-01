@@ -1,8 +1,9 @@
 /**
- * The README demo's made-up world: one repo, a handful of sessions and a
- * couple of Slack messages. Every name, channel and message here is fiction,
- * so a recording leaks nothing real. `agent.ts` (the fake claude) and
- * `demo.ts` (the driver) both read it.
+ * The demos' made-up world (the README GIF and the docs page's GIFs): one
+ * repo, a handful of sessions, a couple of Slack messages and the master's
+ * scripted chat. Every name, channel and message here is fiction, so a
+ * recording leaks nothing real. `agent.ts` (the fake claude) and `demo.ts`
+ * (the driver) both read it.
  */
 
 export const REPO = "acme-shop";
@@ -36,6 +37,8 @@ export const SESSIONS: DemoSession[] = [
 		topic: "checkout",
 		brief: "Show the item count on the cart icon",
 		progress: "Cart badge renders the count; wiring it to live updates.",
+		answer:
+			"Not yet: the count updates on page load; live updates land in my next commit.",
 	},
 	{
 		name: "db-migration",
@@ -68,6 +71,16 @@ export const SESSIONS: DemoSession[] = [
 	},
 ];
 
+/** Sessions the master starts on camera (`@new` in the mentions GIF), not by `demo.ts start`. */
+export const LATER_SESSIONS: DemoSession[] = [
+	{
+		name: "wishlist",
+		topic: "checkout",
+		brief: "Add a wishlist page: a heart on each product saves it to the list",
+		progress: "",
+	},
+];
+
 /** What happens during the recording, in order, `at` ms after it starts. */
 export type DemoEvent =
 	| { at: number; kind: "permission"; session: string; command: string }
@@ -92,6 +105,7 @@ export interface DemoSlackItem {
 		  };
 }
 
+/** The README GIF's timeline. */
 export const TIMELINE: DemoEvent[] = [
 	{
 		at: 3_000,
@@ -140,8 +154,92 @@ export const TIMELINE: DemoEvent[] = [
 	},
 ];
 
+const [migrate, slackMention, priceQuestion] = TIMELINE as [
+	DemoEvent,
+	DemoEvent,
+	DemoEvent,
+];
+
+/**
+ * Each GIF's timeline, by the name `demo.ts play <name>` takes. The docs
+ * GIFs (website/docs/media) start once these have played, so NEEDS YOU is
+ * already full when the recording shows.
+ */
+export const TIMELINES: Record<string, DemoEvent[]> = {
+	readme: TIMELINE,
+	map: [],
+	sessions: [],
+	"needs-you": [
+		{ ...migrate, at: 0 },
+		{ ...priceQuestion, at: 400 },
+		{ ...slackMention, at: 800 },
+	],
+	master: [
+		{ ...migrate, at: 0 },
+		{ ...priceQuestion, at: 400 },
+	],
+	mentions: [],
+};
+
+/** A turn of the master's scripted chat (the mentions and master GIFs). */
+export interface DemoChatTurn {
+	/** Matches the user's words, or the whole message when serenity sends it. */
+	when: RegExp;
+	/** The serenity tools it calls first, as the real master does over MCP. */
+	tools?: { name: string; args: Record<string, unknown> }[];
+	reply: string;
+}
+
+export const CHAT: DemoChatTurn[] = [
+	{
+		when: /waiting on me|needs? me/i,
+		reply:
+			"Two: db-migration wants to run bun run db:migrate, just the new orders index, so I'd approve it. price-filter asks euros or cents; I suggested cents.",
+	},
+	{
+		when: /^@cart-badge\b/,
+		tools: [
+			{
+				name: "send_reply",
+				args: {
+					session: "cart-badge",
+					text: "Does the cart badge update live yet? Answer in one line.",
+				},
+			},
+			{
+				name: "watch_session",
+				args: {
+					session: "cart-badge",
+					note: "Relay its answer to the user in one line.",
+				},
+			},
+		],
+		reply: "Asked cart-badge; I'll relay its answer.",
+	},
+	{
+		when: /cart-badge[\s\S]*live updates land/,
+		reply:
+			"cart-badge: not live yet. The count updates on page load; live updates land in its next commit.",
+	},
+	{
+		when: /^@new\b.*wishlist/,
+		tools: [
+			{
+				name: "create_session",
+				args: {
+					name: "wishlist",
+					topic: "checkout",
+					prompt:
+						"Add a wishlist page: a heart on each product saves it to the list",
+				},
+			},
+		],
+		reply: "Started wishlist under checkout.",
+	},
+];
+
 /** The session a worker prompt is about, from its "Session: <name>" line. */
 export function sessionIn(prompt: string): DemoSession | undefined {
 	const name = prompt.match(/^Session: (\S+)/m)?.[1];
-	return SESSIONS.find((s) => s.name === name);
+	return [...SESSIONS, ...LATER_SESSIONS].find((s) => s.name === name);
 }
