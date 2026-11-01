@@ -30,4 +30,15 @@ describe("text helpers", () => {
 		]);
 		expect(wrap("short", 9, 2)).toEqual(["short"]);
 	});
+
+	test("wrap breaks a word longer than the line", () => {
+		const lines = wrap(
+			"doc is at /a/very/long/path/to/handover.md. Done",
+			10,
+			3,
+		);
+		expect(lines).toEqual(["doc is at", "/a/very/lo", "ng/path/t…"]);
+		for (const line of lines) expect([...line].length).toBeLessThanOrEqual(10);
+		expect(wrap("abcdefghij klm", 4, 5)).toEqual(["abcd", "efgh", "ij", "klm"]);
+	});
 });

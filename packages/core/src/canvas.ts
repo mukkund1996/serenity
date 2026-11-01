@@ -164,9 +164,24 @@ export function truncate(text: string, width: number): string {
 	return `${chars.slice(0, width - 1).join("")}…`;
 }
 
-/** Greedy word wrap into at most `maxLines` lines; the last line is truncated. */
+/**
+ * Greedy word wrap into at most `maxLines` lines; the last line is truncated.
+ * A word longer than the line (a path, a URL) is broken across lines, as
+ * Ink's wrap="wrap" does, so no line is ever wider than `width`.
+ */
 export function wrap(text: string, width: number, maxLines: number): string[] {
-	const words = text.split(/\s+/).filter(Boolean);
+	if (width < 1 || maxLines < 1) return [];
+	const words = text
+		.split(/\s+/)
+		.filter(Boolean)
+		.flatMap((word) => {
+			const chars = [...word];
+			if (chars.length <= width) return [word];
+			const parts: string[] = [];
+			for (let at = 0; at < chars.length; at += width)
+				parts.push(chars.slice(at, at + width).join(""));
+			return parts;
+		});
 	const lines: string[] = [];
 	let line = "";
 	for (let i = 0; i < words.length; i++) {
