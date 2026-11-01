@@ -33,7 +33,7 @@ Release binaries are built for glibc only, so Alpine (musl) isn't supported.
 
 ## macOS, and all of it in CI
 
-macOS can't run in Docker. `.github/workflows/install-smoke.yml` runs `check.sh` on GitHub's Apple Silicon (`macos-latest`) and Intel (`macos-15-intel`) runners, with both methods, alongside the Linux matrix. Those runners aren't fully clean: Homebrew, git and gh are already there. To cover a new Mac, the `script-nobrew` case uninstalls Homebrew first, so the installer has to install it.
+macOS can't run in Docker. `.github/workflows/install-smoke.yml` runs `check.sh` on GitHub's Apple Silicon (`macos-latest`) and Intel (`macos-15-intel`) runners, with both methods, alongside the Linux matrix. Those runners aren't fully clean: Homebrew, git and gh are already there. To cover a new Mac, the `script-nobrew` case uninstalls Homebrew first, so the installer has to install it. That case runs on Apple Silicon only, because Homebrew no longer installs on Intel Macs.
 
 The workflow runs on:
 - manual dispatch;

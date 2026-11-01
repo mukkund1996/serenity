@@ -74,6 +74,10 @@ jobs:
         os: [macos-latest, macos-15-intel]
         # script-nobrew: the runner's Homebrew removed first, as on a new Mac.
         method: [script, script-nobrew, brew]
+        exclude:
+          # Homebrew no longer installs on Intel Macs; there the installer can
+          # only tell the user to get tmux elsewhere.
+          - { os: macos-15-intel, method: script-nobrew }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
