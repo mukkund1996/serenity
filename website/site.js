@@ -43,16 +43,22 @@ function apply() {
 	}
 }
 
-function tick() {
-	raf = 0;
+// how far the track scrolls while the stage is pinned, and where that starts on the page
+function trackSpan() {
 	const r = track.getBoundingClientRect();
+	return {
+		top: r.top + window.scrollY,
+		span: Math.max(1, r.height - stage.offsetHeight),
+	};
+}
+
+// draw the story at scroll progress p, skipping changes smaller than eps
+function paint(p, eps) {
 	const sh = stage.offsetHeight;
 	const sw = stage.offsetWidth;
-	const span = Math.max(1, r.height - sh);
-	const p = Math.min(1, Math.max(0, -r.top / span));
 	// lay out for the part of the stage that is actually on screen
 	const vis = Math.min(sh, window.innerHeight || sh);
-	if (Math.abs(p - state.p) > 0.0003 || sw !== state.vw || vis !== state.vh) {
+	if (Math.abs(p - state.p) > eps || sw !== state.vw || vis !== state.vh) {
 		state.p = p;
 		state.vw = sw;
 		state.vh = vis;
@@ -60,42 +66,52 @@ function tick() {
 	}
 }
 
+function tick() {
+	raf = 0;
+	const { top, span } = trackSpan();
+	// the threshold (about 2px of scroll) also keeps the autoplay's exact frames: its
+	// scrollTo lands on a whole (device) pixel, less than that from the progress it painted
+	paint(Math.min(1, Math.max(0, (window.scrollY - top) / span)), 0.0003);
+}
+
 function onScroll() {
 	if (!raf) raf = requestAnimationFrame(tick);
 }
 
+// pAll runs the whole scroll; the window story (p) uses the first 60%, the word pairs the rest.
+// Pauses: at each [point, length] the story holds still for that much scroll before the next
+// animation. The scroll story ends at serenity centre stage (pAll 0.6), then rests briefly;
+// the later node pull-out / word-pair act is skipped (its code stays inert past 0.6).
+// The autoplay below paces itself on the same table.
+const HOLDS = [
+	[0.03, 0.03],
+	[0.048, 0.03],
+	[0.096, 0.025],
+	[0.145, 0.025],
+	[0.21, 0.03],
+	[0.285, 0.025],
+	[0.345, 0.02],
+	[0.405, 0.02],
+	[0.51, 0.025],
+];
+const STORY_END = 0.6;
+const TAIL_REST = 0.04;
+const STORY_LEN = STORY_END + HOLDS.reduce((a, h) => a + h[1], 0) + TAIL_REST;
+
+// scroll progress (0..1) to the story's own clock, pAll
+function storyClock(raw) {
+	const x = raw * STORY_LEN;
+	let acc = 0;
+	for (const [a, d] of HOLDS) {
+		if (x <= a + acc) return x - acc;
+		if (x <= a + acc + d) return a;
+		acc += d;
+	}
+	return Math.min(STORY_END, x - acc);
+}
+
 function render(st) {
-	// pAll runs the whole scroll; the window story (p) uses the first 60%, the word pairs the rest
-	const raw = st.p;
-	// pauses: at each [point, length] the story holds still for that much scroll before the next animation
-	// the scroll story ends at serenity centre stage (pAll 0.6), then rests briefly;
-	// the later node pull-out / word-pair act is skipped (its code stays inert past 0.6)
-	const holds = [
-		[0.03, 0.03],
-		[0.048, 0.03],
-		[0.096, 0.025],
-		[0.145, 0.025],
-		[0.21, 0.03],
-		[0.285, 0.025],
-		[0.345, 0.02],
-		[0.405, 0.02],
-		[0.51, 0.025],
-	];
-	const storyEnd = 0.6;
-	const tailRest = 0.04;
-	const holdSum = holds.reduce((a, h) => a + h[1], 0);
-	const pAll = (() => {
-		const x = raw * (storyEnd + holdSum + tailRest);
-		let acc = 0;
-		for (let i = 0; i < holds.length; i++) {
-			const a = holds[i][0];
-			const d = holds[i][1];
-			if (x <= a + acc) return x - acc;
-			if (x <= a + acc + d) return a;
-			acc += d;
-		}
-		return Math.min(storyEnd, x - acc);
-	})();
+	const pAll = storyClock(st.p);
 	const p = Math.min(1, pAll / 0.6);
 
 	const cl = (x) => Math.min(1, Math.max(0, x));
@@ -679,12 +695,20 @@ if (atCard) {
 }
 
 // ---- autoplay for readers who don't scroll ----
-// After 4s idle at the top, or at once from WATCH, the page scrolls itself through the
+// After 4s idle at the top, or at once from WATCH, the page plays itself through the
 // story; the pill pauses and resumes it. Any wheel, touch or key press hands control
 // straight back. Under reduced motion it never starts by itself, only from WATCH.
+//
+// The tour runs on the story's clock rather than at a steady scroll speed. At a steady
+// speed the pinned stage stopped dead at every hold and lurched back to full speed after
+// it. Here each move between two holds eases in and out, and each hold rests for its share
+// of the time. Every frame takes its place from the time elapsed (so a late frame catches
+// up), scrolls the page there and paints the story in that same frame, at the exact
+// progress rather than the whole pixel the scroll lands on.
 const tourPill = document.getElementById("srn-tour");
 if (tourPill) {
-	const SPEED = 300; // px per second: the whole story in about 25 seconds
+	const TOUR_MS = 25000; // the whole story, holds included
+	const RAMP_MS = 350; // how long a move takes to reach full speed, and to stop
 	const IDLE_MS = 4000;
 	const el = (k) => document.querySelector(`[data-tour="${k}"]`);
 	const toggle = el("toggle");
@@ -693,41 +717,100 @@ if (tourPill) {
 	const quiet = window.matchMedia?.("(prefers-reduced-motion: reduce)");
 	let playing = false;
 	let started = false;
-	let pos = 0;
+	let clock = 0; // ms into the tour
 	let last = 0;
+	let since = 0;
 	let idleTimer = 0;
 
-	// the scroll position where the story ends and the sections after it begin
-	const storyEnd = () =>
-		Math.max(
-			1,
-			track.getBoundingClientRect().top +
-				window.scrollY +
-				track.offsetHeight -
-				window.innerHeight,
-		);
+	// the tour's legs, in scroll progress: a move up to each hold, then a rest across it
+	const legs = [];
+	{
+		let x = 0;
+		let acc = 0;
+		const add = (to, move) => {
+			legs.push({ from: x / STORY_LEN, to: to / STORY_LEN, move });
+			x = to;
+		};
+		for (const [a, d] of HOLDS) {
+			add(a + acc, true);
+			add(a + acc + d, false);
+			acc += d;
+		}
+		add(STORY_END + acc, true);
+		add(STORY_LEN, false);
+		let t = 0;
+		for (const l of legs) {
+			l.t0 = t;
+			l.ms = (l.to - l.from) * TOUR_MS;
+			t += l.ms;
+		}
+	}
+
+	// the share of a move of d ms done after ms: speed rises on a half sine over r,
+	// stays level, and falls the same way over the last r
+	const ease = (ms, d) => {
+		if (ms <= 0) return 0;
+		if (ms >= d) return 1;
+		const r = Math.min(RAMP_MS, d / 3);
+		const v = 1 / (d - r);
+		const ramp = (u) =>
+			v * (u / 2 - (r / (2 * Math.PI)) * Math.sin((Math.PI * u) / r));
+		if (ms < r) return ramp(ms);
+		if (ms > d - r) return 1 - ramp(d - ms);
+		return v * (ms - r / 2);
+	};
+	const share = (l, ms) =>
+		l.move ? ease(ms, l.ms) : Math.min(1, Math.max(0, ms / l.ms));
+	const progressAt = (ms) => {
+		let l = legs[0];
+		for (const k of legs) if (k.t0 <= ms) l = k;
+		return l.from + (l.to - l.from) * share(l, ms - l.t0);
+	};
+	// the inverse, to resume from wherever the reader left the page
+	const timeAt = (p) => {
+		const l = legs.find((k) => p <= k.to) ?? legs[legs.length - 1];
+		const want = Math.min(1, Math.max(0, (p - l.from) / (l.to - l.from)));
+		let lo = 0;
+		let hi = l.ms;
+		for (let i = 0; i < 30; i++) {
+			const mid = (lo + hi) / 2;
+			if (share(l, mid) < want) lo = mid;
+			else hi = mid;
+		}
+		return l.t0 + hi;
+	};
+	const tourEnd = legs[legs.length - 1].t0 + legs[legs.length - 1].ms;
 
 	const show = () => {
-		const end = storyEnd();
+		const { top, span } = trackSpan();
+		const end = top + span;
 		const y = window.scrollY;
 		fill.style.transform = `scaleX(${Math.min(1, Math.max(0, y / end)).toFixed(4)})`;
 		tourPill.classList.toggle("is-paused", !playing);
 		tourPill.classList.toggle("is-off", !started || (!playing && y >= end - 2));
-		label.textContent = playing ? "PAUSE" : "PLAY";
-		toggle.setAttribute(
-			"aria-label",
-			playing ? "Pause the story" : "Play the story",
-		);
+		const text = playing ? "PAUSE" : "PLAY";
+		if (label.textContent !== text) {
+			label.textContent = text;
+			toggle.setAttribute(
+				"aria-label",
+				playing ? "Pause the story" : "Play the story",
+			);
+		}
 	};
 
 	const step = (t) => {
 		if (!playing) return;
-		const dt = last ? Math.min(64, t - last) : 16;
+		if (!since) since = t;
+		const dt = last ? Math.min(100, t - last) : 0;
 		last = t;
-		const end = storyEnd();
-		pos = Math.min(end, pos + (SPEED * dt) / 1000);
-		window.scrollTo({ top: pos, behavior: "instant" });
-		if (pos >= end) {
+		// after a start or a resume, come up to speed over RAMP_MS rather than at once
+		const w = Math.min(1, (t - since) / RAMP_MS);
+		clock = Math.min(tourEnd, clock + dt * w * w * (3 - 2 * w));
+		const p = progressAt(clock);
+		const { top, span } = trackSpan();
+		window.scrollTo({ top: top + p * span, behavior: "instant" });
+		paint(p, 0);
+		if (clock >= tourEnd) {
 			playing = false;
 			show();
 			return;
@@ -738,13 +821,18 @@ if (tourPill) {
 	const start = () => {
 		clearTimeout(idleTimer);
 		if (playing) return;
-		const end = storyEnd();
+		const { top, span } = trackSpan();
 		// from the end (or past it) a fresh play starts the story over
-		pos = window.scrollY >= end - 2 ? 0 : window.scrollY;
-		if (pos === 0) window.scrollTo({ top: 0, behavior: "instant" });
+		if (window.scrollY >= top + span - 2) {
+			clock = 0;
+			window.scrollTo({ top: 0, behavior: "instant" });
+		} else {
+			clock = timeAt(Math.max(0, (window.scrollY - top) / span));
+		}
 		playing = true;
 		started = true;
 		last = 0;
+		since = 0;
 		show();
 		requestAnimationFrame(step);
 	};
