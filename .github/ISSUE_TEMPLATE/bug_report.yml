@@ -1,0 +1,37 @@
+name: Bug report
+description: Something in serenity doesn't work as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `serenity` in …
+        2. Press …
+  - type: input
+    id: version
+    attributes:
+      label: serenity version
+      description: Output of `serenity version`
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: serenity doctor
+      description: Output of `serenity doctor` (tmux, claude, git and gh versions)
+      render: text
+  - type: textarea
+    id: log
+    attributes:
+      label: Daemon log
+      description: The relevant lines from `~/.local/state/serenity/daemon.log`. Check them for anything private first.
+      render: text
