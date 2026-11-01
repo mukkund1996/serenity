@@ -3,6 +3,7 @@ import {
 	type Color,
 	type MasterMessage,
 	type MasterPermission,
+	mentionSegments,
 	type Session,
 	type SlackItem,
 	type SlackSuggestion,
@@ -12,9 +13,22 @@ import {
 	truncate,
 	wrap,
 } from "@serenity/core";
-import { inputRows, PROMPT_W } from "./master-input";
+import {
+	inputRows,
+	listColor,
+	mentionColors,
+	PROMPT_W,
+	rowRuns,
+} from "./master-input";
 import { CURSOR, CURSOR_CELL, drawField, type Field } from "./text-input";
-import { age, askLine, glyph, nameColor, QUEUE_COLOR } from "./theme";
+import {
+	age,
+	askLine,
+	glyph,
+	MENTION_COLOR,
+	nameColor,
+	QUEUE_COLOR,
+} from "./theme";
 import {
 	type CardBox,
 	type CardElement,
@@ -262,7 +276,15 @@ export function drawMap(input: MapInput): MapLayout {
 
 	links.draw(canvas);
 	for (const draw of drawBubbles) draw();
-	drawMaster(canvas, mx, my, mw, masterH, input.master);
+	drawMaster(
+		canvas,
+		mx,
+		my,
+		mw,
+		masterH,
+		input.master,
+		input.groups.flatMap((g) => g.sessions),
+	);
 	return {
 		canvas,
 		rows,
@@ -396,6 +418,8 @@ function drawMaster(
 	w: number,
 	h: number,
 	m: MapMaster,
+	/** For colouring `@` mentions (ADR 0052). */
+	sessions: readonly Session[],
 ): void {
 	canvas.frame(
 		x,
@@ -544,7 +568,18 @@ function drawMaster(
 		const you = m.lastMessage.from === "you";
 		canvas.text(ix, body, you ? "you" : "◆", { fg: you ? "cyan" : "magenta" });
 		wrap(m.lastMessage.text, iw - 4, 3).forEach((line, i) => {
-			canvas.text(ix + 4, body + i, line, you ? {} : { fg: "white" });
+			if (!you) {
+				canvas.text(ix + 4, body + i, line, { fg: "white" });
+				return;
+			}
+			let col = ix + 4;
+			for (const segment of mentionSegments(line, sessions))
+				col = canvas.text(
+					col,
+					body + i,
+					segment.text,
+					segment.kind ? { fg: MENTION_COLOR[segment.kind] } : {},
+				);
 		});
 	} else {
 		canvas.text(ix, body, truncate("Press i to ask the master.", iw), DIM);
@@ -563,24 +598,24 @@ function drawMaster(
 			fg: "gray",
 			bg: "black",
 		});
-	else
+	else {
+		const colors = mentionColors(typed.text, sessions);
 		rows.forEach((row, i) => {
 			const style: Style = { fg: "whiteBright", bg: "black" };
-			const chars = [...row.text];
-			const c = row.cursor ?? chars.length;
-			let col = canvas.text(
-				ix + PROMPT_W,
-				inputRow + i,
-				chars.slice(0, c).join(""),
-				style,
-			);
-			if (row.cursor !== null)
-				col =
-					c < chars.length
-						? canvas.text(col, inputRow + i, chars[c] as string, CURSOR_CELL)
-						: canvas.text(col, inputRow + i, CURSOR, style);
-			canvas.text(col, inputRow + i, chars.slice(c + 1).join(""), style);
+			let col = ix + PROMPT_W;
+			for (const run of rowRuns(row, colors))
+				col = canvas.text(
+					col,
+					inputRow + i,
+					run.text,
+					run.cursor
+						? CURSOR_CELL
+						: { ...style, fg: run.color ?? "whiteBright" },
+				);
+			if (row.cursor !== null && row.cursor >= [...row.text].length)
+				canvas.text(col, inputRow + i, CURSOR, style);
 		});
+	}
 
 	// The @ list sits on the rows just above the input, over the panel's body.
 	const names = m.mentions?.names ?? [];
@@ -588,8 +623,13 @@ function drawMaster(
 		const row = inputRow - names.length + i;
 		const on = i === m.mentions?.selected;
 		canvas.fill(ix, row, iw, 1, { bg: "black" });
-		canvas.text(ix, row, truncate(`${on ? "▸ " : "  "}@${name}`, iw), {
-			fg: on ? "whiteBright" : "white",
+		const col = canvas.text(ix, row, on ? "▸ " : "  ", {
+			fg: "whiteBright",
+			bold: on,
+			bg: "black",
+		});
+		canvas.text(col, row, truncate(`@${name}`, iw - 2), {
+			fg: listColor(name),
 			bold: on,
 			bg: "black",
 		});

@@ -1,4 +1,10 @@
-import type { Color, PrTone, Session, SessionStatus } from "@serenity/core";
+import type {
+	Color,
+	MentionKind,
+	PrTone,
+	Session,
+	SessionStatus,
+} from "@serenity/core";
 
 /** The ◈ icon's green, as on getserenity.dev; brand only, never a status. */
 export const BRAND_COLOR = "#7fc77f";
@@ -8,6 +14,18 @@ export const BRAND_COLOR = "#7fc77f";
  * Coral, apart from NEEDS YOU's yellow and the master's magenta.
  */
 export const QUEUE_COLOR: Color = "#ff875f";
+
+/**
+ * `@` mentions in the master's input, @ list and chat (ADR 0052): a session
+ * blue, `@new` green, `@copy` and `@handover` (the handover-doc pair) yellow.
+ * Bright blue, since plain blue is hard to read on dark terminals.
+ */
+export const MENTION_COLOR: Record<MentionKind, Color> = {
+	session: "blueBright",
+	new: "green",
+	copy: "yellow",
+	handover: "yellow",
+};
 
 /** The only three status glyphs (design handover, "Status language"). */
 export function glyph(

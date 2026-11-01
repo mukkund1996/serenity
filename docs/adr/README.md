@@ -57,6 +57,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0049](0049-copy-and-handover-docs.md) | `@copy @session` and `@handover @session`: the session writes a handover doc in its worktree, serenity copies it to its state; `@copy` starts a follow-up session carrying it, `@handover` gives its path, and it can go to Slack as a file once confirmed | Accepted |
 | [0050](0050-needs-you-seen-and-explicit-actions.md) | NEEDS YOU: Enter marks an item seen (a Slack item dismissed and opened; a session hidden until it changes, never one waiting on you); ◆ says what `y` does to whom; Slack items you wrote after are read; Slack follow-ups reply, tell a session, or start one | Accepted |
 | [0051](0051-ctrl-g-always-reaches-serenity.md) | Ctrl+g in an agent pane always reaches serenity: Ctrl+G and Ctrl+M (Caps Lock) bound too; the daemon puts back a lost pane marker or binding every 5 s and logs it; detach by pane prefers the live session | Accepted |
+| [0052](0052-mention-colours.md) | `@` mentions are coloured where they resolve: a live session `blueBright`, `@new` green, `@copy` and `@handover` yellow; unknown `@word`s stay plain; in the input, the `@` list and the user's messages | Accepted |
 
 ## System at a glance
 

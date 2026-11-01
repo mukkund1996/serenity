@@ -14,13 +14,21 @@ import type {
 import {
 	actionLine,
 	commandHint,
+	mentionSegments,
 	prLine,
 	slackSuggestionLine,
 	suggestionAction,
 } from "@serenity/core";
 import { Box, Text } from "ink";
 import { type ReactNode, useEffect, useState } from "react";
-import { type InputRow, inputRows, PROMPT_W } from "./master-input";
+import {
+	type InputRow,
+	inputRows,
+	listColor,
+	mentionColors,
+	PROMPT_W,
+	rowRuns,
+} from "./master-input";
 import {
 	CONVERSATION_EMPTY,
 	type ConversationWindow,
@@ -32,7 +40,15 @@ import {
 	suggestionLines,
 } from "./master-layout";
 import { CURSOR, type Field, fieldWindow } from "./text-input";
-import { age, askLine, BRAND_COLOR, cardText, glyph, nameColor } from "./theme";
+import {
+	age,
+	askLine,
+	BRAND_COLOR,
+	cardText,
+	glyph,
+	MENTION_COLOR,
+	nameColor,
+} from "./theme";
 
 const ink = (color: Color | undefined) =>
 	color && color !== "default" ? color : undefined;
@@ -217,24 +233,28 @@ function Spinner() {
 /**
  * The master's input: it grows to four lines. `text` is null until `i` (or
  * Enter on it) opens it. `mentions` is the @ list over it; `width` is the
- * panel's text width.
+ * panel's text width. `@`s naming one of `sessions`, and command words, are
+ * coloured as typed (ADR 0052).
  */
 function MasterInput({
 	field,
 	selected = false,
 	mentions = null,
 	width = 0,
+	sessions = [],
 }: {
 	field: Field | null;
 	selected?: boolean;
 	mentions?: { names: string[]; selected: number } | null;
 	width?: number;
+	sessions?: readonly Session[];
 }) {
 	// Frame (2) and the prompt's "› " leave the rest of the row for text.
 	const rows =
 		field === null
 			? []
 			: inputRows(field.text, width - 2 - PROMPT_W, field.cursor);
+	const colors = field === null ? [] : mentionColors(field.text, sessions);
 	return (
 		<Box flexDirection="column" marginTop={1}>
 			{mentions?.names.map((name, i) => (
@@ -244,7 +264,8 @@ function MasterInput({
 					color={i === mentions.selected ? "whiteBright" : "white"}
 					bold={i === mentions.selected}
 				>
-					{i === mentions.selected ? "▸ " : "  "}@{name}
+					{i === mentions.selected ? "▸ " : "  "}
+					<Text color={listColor(name)}>@{name}</Text>
 					{commandHint(name) ? (
 						<Text color="gray"> {commandHint(name)}</Text>
 					) : null}
@@ -265,7 +286,7 @@ function MasterInput({
 						// biome-ignore lint/suspicious/noArrayIndexKey: rows have no identity; they are redrawn as a whole
 						<Text key={i} wrap="truncate-end" color="whiteBright">
 							<Text color="magenta">{i === 0 ? "› " : "  "}</Text>
-							<RowWithCursor row={row} />
+							<RowWithCursor row={row} colors={colors} />
 						</Text>
 					))
 				)}
@@ -274,19 +295,56 @@ function MasterInput({
 	);
 }
 
-/** An input row, the character under the cursor inverted, or CURSOR after the text. */
-function RowWithCursor({ row }: { row: InputRow }) {
-	if (row.cursor === null) return <>{row.text}</>;
-	const chars = [...row.text];
+/**
+ * An input row, `@` mentions in their colours (mentionColors of the whole
+ * text), the character under the cursor inverted, or CURSOR after the text.
+ */
+function RowWithCursor({
+	row,
+	colors,
+}: {
+	row: InputRow;
+	colors: readonly (Color | null)[];
+}) {
 	return (
 		<>
-			{chars.slice(0, row.cursor).join("")}
-			{row.cursor < chars.length ? (
-				<Text inverse>{chars[row.cursor]}</Text>
-			) : (
-				CURSOR
+			{rowRuns(row, colors).map((run, i) => (
+				<Text
+					// biome-ignore lint/suspicious/noArrayIndexKey: runs are redrawn as a whole
+					key={i}
+					color={run.color ?? undefined}
+					inverse={run.cursor}
+				>
+					{run.text}
+				</Text>
+			))}
+			{row.cursor !== null && row.cursor >= [...row.text].length
+				? CURSOR
+				: null}
+		</>
+	);
+}
+
+/** Text with its resolving `@` mentions coloured (ADR 0052). */
+function MentionText({
+	text,
+	sessions,
+}: {
+	text: string;
+	sessions: readonly Session[];
+}) {
+	return (
+		<>
+			{mentionSegments(text, sessions).map((segment, i) =>
+				segment.kind ? (
+					// biome-ignore lint/suspicious/noArrayIndexKey: segments are redrawn as a whole
+					<Text key={i} color={MENTION_COLOR[segment.kind]}>
+						{segment.text}
+					</Text>
+				) : (
+					segment.text
+				),
 			)}
-			{chars.slice(row.cursor + 1).join("")}
 		</>
 	);
 }
@@ -430,9 +488,12 @@ function PermissionItem({
 function Conversation({
 	messages,
 	window,
+	sessions,
 }: {
 	messages: MasterMessage[];
 	window: ConversationWindow;
+	/** For colouring the user's `@` mentions (ADR 0052). */
+	sessions: readonly Session[];
 }) {
 	const shown = messages.slice(window.start, window.end);
 	if (!shown.length) {
@@ -460,7 +521,11 @@ function Conversation({
 						)}
 					</Box>
 					<Text color={m.from === "you" ? undefined : "white"} wrap="wrap">
-						{clipLines(m.text, 4)}
+						{m.from === "you" ? (
+							<MentionText text={clipLines(m.text, 4)} sessions={sessions} />
+						) : (
+							clipLines(m.text, 4)
+						)}
 					</Text>
 				</Box>
 			))}
@@ -853,7 +918,11 @@ export function MasterPanel({
 					{queue}
 					{reviews}
 					<SectionHeader label="CONVERSATION" width={inner} />
-					<Conversation messages={conversation} window={plan.conversation} />
+					<Conversation
+						messages={conversation}
+						window={plan.conversation}
+						sessions={sessions}
+					/>
 				</>
 			)}
 			<MasterInput
@@ -861,6 +930,7 @@ export function MasterPanel({
 				selected={selected === MASTER_INPUT}
 				mentions={mentions}
 				width={inner}
+				sessions={sessions}
 			/>
 		</TitledBox>
 	);

@@ -1,7 +1,11 @@
+import type { Color, MasterCommand, Session } from "@serenity/core";
+import { MASTER_COMMANDS, mentionSegments } from "@serenity/core";
+import { MENTION_COLOR } from "./theme";
+
 /**
  * The master's message input: it grows to INPUT_MAX_ROWS lines, Shift+Enter
  * starts a new one (ADR 0038), and `@` opens a list of session names to tag
- * (ADR 0036).
+ * (ADR 0036). `@`s that resolve are coloured (ADR 0052).
  */
 
 /** Lines the input grows to; a longer message shows its last lines. */
@@ -13,6 +17,8 @@ export const PROMPT_W = 2;
 export interface InputRow {
 	text: string;
 	cursor: number | null;
+	/** The character of the whole text this row starts at. */
+	start: number;
 }
 
 /**
@@ -52,7 +58,11 @@ export function inputRows(
 				here && at - offset >= start && at - offset < end
 					? at - offset - start
 					: null;
-			rows.push({ text: chars.slice(start, end).join(""), cursor: col });
+			rows.push({
+				text: chars.slice(start, end).join(""),
+				cursor: col,
+				start: offset + start,
+			});
 			start = end;
 		};
 		while (cells - start > w) {
@@ -102,4 +112,55 @@ export function stepSelection(
 ): number {
 	if (count <= 0) return 0;
 	return (selected + delta + count) % count;
+}
+
+/**
+ * Per character of `text`, the colour of the resolving `@` mention it is in
+ * (ADR 0052), or null for plain text.
+ */
+export function mentionColors(
+	text: string,
+	sessions: readonly Session[],
+): (Color | null)[] {
+	return mentionSegments(text, sessions).flatMap((segment) => {
+		const color = segment.kind ? MENTION_COLOR[segment.kind] : null;
+		return [...segment.text].map(() => color);
+	});
+}
+
+/**
+ * The colour of a name in the @ list (ADR 0052): its command's, or a
+ * session's; the list only offers commands and live sessions.
+ */
+export function listColor(name: string): Color {
+	return Object.hasOwn(MASTER_COMMANDS, name)
+		? MENTION_COLOR[name as MasterCommand]
+		: MENTION_COLOR.session;
+}
+
+/** A stretch of an input row drawn one way: one colour, or the cursor's cell. */
+export interface RowRun {
+	text: string;
+	color: Color | null;
+	cursor: boolean;
+}
+
+/**
+ * `row`'s text as runs of one colour, taken from `colors` (mentionColors of
+ * the whole text), with the character under the cursor a run of its own.
+ */
+export function rowRuns(
+	row: InputRow,
+	colors: readonly (Color | null)[],
+): RowRun[] {
+	const runs: RowRun[] = [];
+	[...row.text].forEach((ch, i) => {
+		const color = colors[row.start + i] ?? null;
+		const cursor = i === row.cursor;
+		const last = runs.at(-1);
+		if (last && !last.cursor && !cursor && last.color === color)
+			last.text += ch;
+		else runs.push({ text: ch, color, cursor });
+	});
+	return runs;
 }

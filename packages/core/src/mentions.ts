@@ -54,6 +54,25 @@ export function masterCommands(text: string): MasterCommand[] {
 }
 
 /**
+ * The live session a mention's token names, and how much of the token the
+ * name takes: the whole token, or less when punctuation trails it.
+ */
+function resolveSession(
+	token: string,
+	sessions: readonly Session[],
+): { session: Session; name: string } | null {
+	let name = token;
+	for (;;) {
+		if (isReservedName(name)) return null;
+		const session = findSessionByName(sessions, name);
+		if (session && session.status !== "archived") return { session, name };
+		const shorter = name.replace(/[._-]+$/, "");
+		if (shorter === name || !shorter) return null;
+		name = shorter;
+	}
+}
+
+/**
  * The live sessions a message @-mentions by exact name, once each, in the
  * order mentioned. A name shared with an archived session means the live one
  * (findSessionByName); one that only an archived session has mentions nothing.
@@ -66,20 +85,56 @@ export function mentionedSessions(
 ): Session[] {
 	const found = new Map<string, Session>();
 	for (const [, token] of text.matchAll(MENTION)) {
-		let name = token as string;
-		for (;;) {
-			if (isReservedName(name)) break;
-			const session = findSessionByName(sessions, name);
-			if (session && session.status !== "archived") {
-				found.set(session.id, session);
-				break;
-			}
-			const shorter = name.replace(/[._-]+$/, "");
-			if (shorter === name || !shorter) break;
-			name = shorter;
-		}
+		const hit = resolveSession(token as string, sessions);
+		if (hit) found.set(hit.session.id, hit.session);
 	}
 	return [...found.values()];
+}
+
+/** What an `@word` turns out to be: a live session's name, or a command word. */
+export type MentionKind = "session" | MasterCommand;
+
+/** A piece of a message: an `@word` that resolves, or plain text (`kind` null). */
+export interface MentionSegment {
+	text: string;
+	kind: MentionKind | null;
+}
+
+/**
+ * `text` cut into plain text and the `@word`s that resolve, so the TUI can
+ * colour them (ADR 0052). A command word resolves as masterCommands reads
+ * it, a session name as mentionedSessions does; punctuation after either
+ * stays plain, and so does an `@word` that names nothing. Joined back,
+ * the segments are `text`.
+ */
+export function mentionSegments(
+	text: string,
+	sessions: readonly Session[],
+): MentionSegment[] {
+	const segments: MentionSegment[] = [];
+	let plainFrom = 0;
+	for (const match of text.matchAll(MENTION)) {
+		const token = match[1] as string;
+		const word = token.replace(/[._-]+$/, "");
+		let kind: MentionKind | null = null;
+		let name = word;
+		if (Object.hasOwn(MASTER_COMMANDS, word)) kind = word as MasterCommand;
+		else {
+			const hit = resolveSession(token, sessions);
+			if (hit) {
+				kind = "session";
+				name = hit.name;
+			}
+		}
+		if (kind === null) continue;
+		if (match.index > plainFrom)
+			segments.push({ text: text.slice(plainFrom, match.index), kind: null });
+		segments.push({ text: `@${name}`, kind });
+		plainFrom = match.index + 1 + name.length;
+	}
+	if (plainFrom < text.length)
+		segments.push({ text: text.slice(plainFrom), kind: null });
+	return segments;
 }
 
 /**

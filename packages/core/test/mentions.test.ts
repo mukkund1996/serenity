@@ -8,6 +8,7 @@ import {
 	matchMentions,
 	mentionDraft,
 	mentionedSessions,
+	mentionSegments,
 	mentionsSession,
 } from "../src/mentions";
 import { makeSession } from "../test-support";
@@ -199,5 +200,62 @@ describe("completeMention", () => {
 		expect(completeMention("ask @ap", "api-auth")).toBe("ask @api-auth ");
 		expect(completeMention("@", "api-auth")).toBe("@api-auth ");
 		expect(completeMention("a @x and @lo", "login")).toBe("a @x and @login ");
+	});
+});
+
+describe("mentionSegments", () => {
+	const all = [api, web, oldApi, gone];
+	const kinds = (text: string) =>
+		mentionSegments(text, all).map((s) => [s.text, s.kind]);
+
+	test("live session names and command words resolve; the rest is plain", () => {
+		expect(kinds("@new fix login and tell @api-auth")).toEqual([
+			["@new", "new"],
+			[" fix login and tell ", null],
+			["@api-auth", "session"],
+		]);
+		expect(kinds("@copy @web-login then @handover @api-auth")).toEqual([
+			["@copy", "copy"],
+			[" ", null],
+			["@web-login", "session"],
+			[" then ", null],
+			["@handover", "handover"],
+			[" ", null],
+			["@api-auth", "session"],
+		]);
+	});
+
+	test("unknown, archived-only, partial and miscased words stay plain", () => {
+		for (const text of [
+			"ask @nobody",
+			"ask @retired",
+			"ask @api",
+			"@New and @COPY",
+			"mail me@api-auth",
+		])
+			expect(kinds(text)).toEqual([[text, null]]);
+	});
+
+	test("punctuation after a mention stays plain", () => {
+		expect(kinds("@api-auth, then @new: go.")).toEqual([
+			["@api-auth", "session"],
+			[", then ", null],
+			["@new", "new"],
+			[": go.", null],
+		]);
+		expect(kinds("@web-login.")).toEqual([
+			["@web-login", "session"],
+			[".", null],
+		]);
+	});
+
+	test("segments join back to the text", () => {
+		const text = "hi @api-auth. @x @copy- me@web-login @web-login";
+		expect(
+			mentionSegments(text, all)
+				.map((s) => s.text)
+				.join(""),
+		).toBe(text);
+		expect(mentionSegments("", all)).toEqual([]);
 	});
 });

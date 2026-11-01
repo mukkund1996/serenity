@@ -355,3 +355,54 @@ describe("a cursor moved back into the text (ADR 0042)", () => {
 		expect(text).toMatch(/› \[s\]tart x+…/);
 	});
 });
+
+describe("@ mentions in the map's master are coloured (ADR 0052)", () => {
+	/** The style of the first character of `needle` on the canvas. */
+	const styleAt = (
+		canvas: ReturnType<typeof draw>["canvas"],
+		needle: string,
+	) => {
+		for (const runs of canvas.rows()) {
+			const line = runs.map((r) => r.text).join("");
+			const at = line.indexOf(needle);
+			if (at < 0) continue;
+			let col = [...line.slice(0, at)].length;
+			for (const run of runs) {
+				const n = [...run.text].length;
+				if (col < n) return run.style;
+				col -= n;
+			}
+		}
+		return undefined;
+	};
+
+	test("in the input: a live session blue, @new green, an unknown @word plain", () => {
+		const { canvas } = draw({
+			master: { input: fieldAt("@new ask @api-auth and @nobody") },
+		});
+		expect(styleAt(canvas, "@new")?.fg).toBe("green");
+		expect(styleAt(canvas, "@api-auth")?.fg).toBe("blueBright");
+		expect(styleAt(canvas, "@nobody")?.fg).toBe("whiteBright");
+	});
+
+	test("in the @ list and the last message", () => {
+		const { canvas } = draw({
+			master: {
+				input: fieldAt("@"),
+				mentions: { names: ["copy", "api-auth"], selected: 0 },
+				lastMessage: {
+					id: 1,
+					repo: "/r",
+					from: "you",
+					text: "@handover @sync-worker",
+					at: 1,
+				},
+			},
+		});
+		expect(styleAt(canvas, "@copy")).toMatchObject({
+			fg: "yellow",
+			bold: true,
+		});
+		expect(styleAt(canvas, "@api-auth")?.fg).toBe("blueBright");
+	});
+});

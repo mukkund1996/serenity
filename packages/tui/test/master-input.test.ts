@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test";
+import { makeSession } from "@serenity/core/testing";
 import {
 	INPUT_MAX_ROWS,
 	inputRows,
+	listColor,
 	listWindow,
+	mentionColors,
+	rowRuns,
 	stepSelection,
 } from "../src/master-input";
+import { MENTION_COLOR } from "../src/theme";
 import { showRows } from "./cursor";
 
 const rowsOf = (text: string, width: number, cursor?: number) =>
@@ -114,5 +119,61 @@ describe("stepSelection", () => {
 		expect(stepSelection(2, 3, 1)).toBe(0);
 		expect(stepSelection(0, 3, -1)).toBe(2);
 		expect(stepSelection(0, 0, 1)).toBe(0);
+	});
+});
+
+describe("mention colours (ADR 0052)", () => {
+	const sessions = [
+		makeSession({ id: "a", name: "api-auth", status: "idle" }),
+		makeSession({ id: "o", name: "old", status: "archived" }),
+	];
+
+	test("a session blue, @new green, @copy and @handover yellow", () => {
+		expect(MENTION_COLOR).toEqual({
+			session: "blueBright",
+			new: "green",
+			copy: "yellow",
+			handover: "yellow",
+		});
+		expect(listColor("api-auth")).toBe("blueBright");
+		expect(listColor("new")).toBe("green");
+		expect(listColor("copy")).toBe("yellow");
+		expect(listColor("handover")).toBe("yellow");
+	});
+
+	test("each character gets its mention's colour; unknown @words stay plain", () => {
+		const B = "blueBright";
+		const G = "green";
+		expect(mentionColors("@new @api-auth, @old @x", sessions)).toEqual([
+			...Array(4).fill(G),
+			null,
+			...Array(9).fill(B),
+			...Array(" , @old @x".length - 1).fill(null),
+		]);
+		expect(mentionColors("@api", sessions).every((c) => c === null)).toBe(true);
+	});
+
+	test("rows know where they start, so wrapped rows keep their colours", () => {
+		const text = "tell @api-auth to go";
+		const rows = inputRows(text, 10);
+		expect(rows.map((r) => r.start)).toEqual([0, 5, 15]);
+		const colors = mentionColors(text, sessions);
+		expect(rowRuns(rows[1] as (typeof rows)[number], colors)).toEqual([
+			{ text: "@api-auth", color: "blueBright", cursor: false },
+			{ text: " ", color: null, cursor: false },
+		]);
+	});
+
+	test("the character under the cursor is a run of its own", () => {
+		const text = "@new go";
+		const [row] = inputRows(text, 40, 2);
+		expect(
+			rowRuns(row as NonNullable<typeof row>, mentionColors(text, sessions)),
+		).toEqual([
+			{ text: "@n", color: "green", cursor: false },
+			{ text: "e", color: "green", cursor: true },
+			{ text: "w", color: "green", cursor: false },
+			{ text: " go", color: null, cursor: false },
+		]);
 	});
 });
