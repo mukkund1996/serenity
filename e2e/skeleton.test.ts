@@ -79,6 +79,62 @@ async function until(
 	throw new Error(`timed out waiting for ${what}`);
 }
 
+/** Runs the CLI with the test's environment, e.g. ["detach", pane]. */
+const serenity = (...args: string[]) =>
+	spawnSync(process.execPath, [MAIN, ...args], {
+		env: { ...process.env, ...env },
+	});
+
+/**
+ * Puts the shared map back after a test failed, without moving focus or
+ * zoom, which the next test starts from: no agent pane is left attached
+ * beside it, and no input is left open (Esc closes it, an @ list first).
+ */
+async function recover(): Promise<void> {
+	for (const pane of panesInMap().slice(1)) serenity("detach", pane);
+	await until(() => panesInMap().length === 1, "attached panes to park").catch(
+		() => {},
+	);
+	for (let i = 0; i < 3 && screen().includes("█"); i++) {
+		keys("Escape");
+		await until(
+			() => !screen().includes("█"),
+			"Esc to close the input",
+			1_000,
+		).catch(() => {});
+	}
+}
+
+/**
+ * A test of the shared map. The tests run in order on one map, each from
+ * where the last left it, so a failing one must not leave a pane attached
+ * or an input open that eats the next test's keys: it recovers, then fails.
+ */
+function step(
+	name: string,
+	fn: () => Promise<void>,
+	timeoutMs = STEP_TIMEOUT,
+): void {
+	test(
+		name,
+		async () => {
+			try {
+				await fn();
+			} catch (e) {
+				await recover();
+				throw e;
+			}
+		},
+		timeoutMs,
+	);
+}
+
+/** c focuses the master without going in; waits for that render. */
+async function focusMaster(): Promise<void> {
+	keys("c");
+	await waitFor(/┏━ ◆ master/);
+}
+
 /** Types a line into an agent's own pane, as if typed in Claude. */
 function typeInAgent(name: string, text: string): void {
 	tmux("send-keys", "-t", `serenity-demo:${name}`, "-l", text);
@@ -259,7 +315,7 @@ afterAll(() => {
 	else if (dir) rmSync(dir, { recursive: true, force: true });
 });
 
-test(
+step(
 	"first launch starts the daemon and shows the empty master",
 	async () => {
 		await waitFor(/No sessions yet/);
@@ -269,7 +325,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"n creates a session in a worktree beside the repo",
 	async () => {
 		keys("n");
@@ -284,7 +340,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"a reply reaches the agent; Haiku summarises it and Sonnet suggests a cleanup",
 	async () => {
 		keys("i");
@@ -298,7 +354,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"a card's reply is edited like a terminal line: Home End, Option+b and Option+Backspace; text goes in at the cursor",
 	async () => {
 		keys("i");
@@ -328,7 +384,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"a permission prompt waits, the master suggests approving, and y approves it",
 	async () => {
 		keys("i");
@@ -346,7 +402,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"Enter attaches the session beside the map; the Ctrl+q command detaches it",
 	async () => {
 		keys("Enter");
@@ -373,7 +429,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"the Ctrl+q command still detaches after the daemon restarted while attached",
 	async () => {
 		keys("Enter");
@@ -426,6 +482,32 @@ function withClient(): { typeHex: (hex: string) => void; close: () => void } {
 	};
 }
 
+/** What decides where a typed Ctrl+q goes, for a failure message. */
+function keyState(agentPane: string): string {
+	const log = readFileSync(join(dir, "home", "daemon.log"), "utf8");
+	return [
+		tmux(
+			"list-clients",
+			"-F",
+			"client #{client_name} table=#{client_key_table} pane=#{pane_id}",
+		),
+		tmux(
+			"display-message",
+			"-p",
+			"-t",
+			agentPane,
+			"agent #{pane_id} active=#{pane_active} marker=#{@serenity_session} mode=#{pane_in_mode}",
+		),
+		...tmux("list-keys", "-T", "root")
+			.split("\n")
+			.filter((line) => / C-[qQ] /.test(line)),
+		"daemon.log:",
+		...log.trim().split("\n").slice(-8),
+		"the agent pane shows:",
+		screen(agentPane),
+	].join("\n");
+}
+
 /** Attaches the session, types `hex` and waits for it to park; claude must not have got Ctrl+q. */
 async function attachAndPress(
 	typeHex: (hex: string) => void,
@@ -437,16 +519,33 @@ async function attachAndPress(
 		"the agent pane to join the map window",
 	);
 	const agentPane = panesInMap()[1] as string;
+	// The binding acts on the client's current pane by its marker: wait until
+	// that is the agent pane, marked, before typing.
+	await until(
+		() =>
+			/^1:./.test(
+				tmux(
+					"display-message",
+					"-p",
+					"-t",
+					agentPane,
+					"#{pane_active}:#{@serenity_session}",
+				),
+			),
+		"the attached agent pane to be active and marked",
+	);
 	typeHex(hex);
 	await until(
 		() => panesInMap().length === 1,
 		"the typed key to park the agent pane",
-	);
+	).catch((e: Error) => {
+		throw new Error(`${e.message}\n${keyState(agentPane)}`);
+	});
 	expect(screen(agentPane)).not.toContain("got Ctrl+q");
 	await waitFor(/zoom: topics/);
 }
 
-test(
+step(
 	"Ctrl+q typed in an attached session goes back to the map, also with Caps Lock on; claude never gets it",
 	async () => {
 		const client = withClient();
@@ -466,7 +565,52 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
+	"the Ctrl+q binding takes a pane whose session id starts with 0 for an agent's (ADR 0054)",
+	async () => {
+		// tmux reads a value starting with "0" as false; a UUID does one time in sixteen.
+		const binding =
+			tmux("list-keys", "-T", "root")
+				.split("\n")
+				.find((line) => line.split(/\s+/)[3] === "C-q") ?? "";
+		const condition = binding.match(/if-shell -F "([^"]+)"/)?.[1] ?? "";
+		expect(condition).not.toBe("");
+		const pane = tmux(
+			"new-session",
+			"-d",
+			"-P",
+			"-F",
+			"#{pane_id}",
+			"-s",
+			"probe",
+			"sleep 60",
+		).trim();
+		try {
+			const agentPane = (id: string | null) => {
+				if (id === null)
+					tmux("set-option", "-p", "-u", "-t", pane, "@serenity_session");
+				else tmux("set-option", "-p", "-t", pane, "@serenity_session", id);
+				return tmux(
+					"if-shell",
+					"-F",
+					"-t",
+					pane,
+					condition,
+					"display-message -p agent",
+					"display-message -p other",
+				).trim();
+			};
+			expect(agentPane("0c19d8e2-d78b-4d21-8367-1a092d2c6a20")).toBe("agent");
+			expect(agentPane("9f2e7a1b-0c3d-4e5f-8a9b-0c1d2e3f4a5b")).toBe("agent");
+			expect(agentPane(null)).toBe("other");
+		} finally {
+			tmux("kill-session", "-t", "=probe");
+		}
+	},
+	STEP_TIMEOUT,
+);
+
+step(
 	"the daemon sets a pane's marker and the Ctrl+q binding again after something else removed them",
 	async () => {
 		const client = withClient();
@@ -494,8 +638,15 @@ test(
 			tmux("set-option", "-p", "-u", "-t", agentPane, "@serenity_session");
 			tmux("unbind-key", "-n", "C-q");
 			await until(() => marker() === id, "the marker to be set again");
+			// By name: tmux 3.4 shows C-q and C-Q as one line (ADR 0054).
 			await until(
-				() => tmux("list-keys", "-T", "root").includes("send-keys C-q"),
+				() =>
+					tmux("list-keys", "-T", "root")
+						.split("\n")
+						.some(
+							(line) =>
+								line.split(/\s+/)[3] === "C-q" && line.includes("detach"),
+						),
 				"Ctrl+q to be bound again",
 			);
 			client.typeHex("11");
@@ -524,8 +675,7 @@ function press(...k: string[]): void {
 
 /** Focuses the master and opens its message input with i, as on any other node. */
 async function openMasterInput(): Promise<void> {
-	keys("c");
-	await Bun.sleep(300);
+	await focusMaster();
 	keys("i");
 	await waitFor(/› █/);
 }
@@ -537,7 +687,7 @@ async function closeMasterInput(): Promise<void> {
 	await waitFor(/message master…/);
 }
 
-test(
+step(
 	"i on the master messages it; the input stays open, cleared, after Enter; Esc closes it",
 	async () => {
 		await openMasterInput();
@@ -553,7 +703,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"Shift+Enter, Alt+Enter and Ctrl+J start a new line in the master input; Enter sends every line",
 	async () => {
 		/** The input's rows, from its first ("› ") row down. */
@@ -572,12 +722,19 @@ test(
 			() => inputLines("first")[1]?.includes("█") ?? false,
 			"the cursor on a new line",
 		);
+		// Each line's text is drawn before the key that ends it, and the new
+		// line before the next text: a key in the same chunk as text before it
+		// is not read as that key.
+		const lineHas = (row: number, text: string) => () =>
+			inputLines("first")[row]?.includes(text) ?? false;
 		type("second");
+		await until(lineHas(1, "second█"), "second typed");
 		keys("M-Enter");
-		await Bun.sleep(100);
+		await until(lineHas(2, "█"), "Alt+Enter to start a line");
 		type("third");
+		await until(lineHas(2, "third█"), "third typed");
 		keys("C-j");
-		await Bun.sleep(100);
+		await until(lineHas(3, "█"), "Ctrl+J to start a line");
 		type("fourth");
 		await until(
 			() => inputLines("first")[3]?.includes("fourth█") ?? false,
@@ -598,7 +755,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"the master input edits at the cursor: arrows, Home End, Ctrl+a e u k, Option+b f and Option+Backspace, Delete",
 	async () => {
 		await openMasterInput();
@@ -644,7 +801,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"g no longer opens the master input",
 	async () => {
 		keys("c");
@@ -656,7 +813,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"@ lists live sessions as you type; Tab and Enter complete the name, Esc closes the list only",
 	async () => {
 		await openMasterInput();
@@ -688,7 +845,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"the master shows three messages; PgUp and Shift+↑ scroll back, PgDn on, Esc shows the latest again",
 	async () => {
 		await openMasterInput();
@@ -722,7 +879,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"the master's suggested reply reaches its queue through serenity mcp; n declines it",
 	async () => {
 		await openMasterInput();
@@ -739,7 +896,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"the master's permission request waits at the top of NEEDS YOU until y",
 	async () => {
 		await openMasterInput();
@@ -756,7 +913,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"a session stuck on Claude's trust prompt shows as waiting; answering starts it",
 	async () => {
 		await newSession("a-untrusted");
@@ -771,7 +928,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"refusing the trust prompt ends the session instead of leaving it live",
 	async () => {
 		await newSession("b-untrusted");
@@ -781,7 +938,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"a crash restarts claude in the same pane, resuming its conversation",
 	async () => {
 		const pane = paneFormat("a-untrusted", "#{pane_id}");
@@ -793,7 +950,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"an agent that exits normally is restarted too",
 	async () => {
 		const pid = paneFormat("api-auth", "#{pane_pid}");
@@ -808,7 +965,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"a claude that keeps exiting is left ended, saying why",
 	async () => {
 		// One restart already; four more are allowed in the window.
@@ -827,7 +984,7 @@ test(
 	STEP_TIMEOUT * 2,
 );
 
-test(
+step(
 	"y on a cleanup suggestion stops the session, removes its worktree and merged branch",
 	async () => {
 		await newSession("tidy");
@@ -853,7 +1010,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"K kills a session but keeps its worktree; it moves to the archived list",
 	async () => {
 		await newSession("doomed");
@@ -877,7 +1034,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"a ready PR gets a reviewer from CODEOWNERS; y asks them through gh",
 	async () => {
 		await newSession("shipit");
@@ -917,7 +1074,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"once polled, the master lists the PRs waiting for my review",
 	async () => {
 		writeFileSync(
@@ -938,7 +1095,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"a squash-merged PR finishes the session; cleanup deletes the branch git calls unmerged",
 	async () => {
 		const worktree = join(dir, "repos", "demo-shipit");
@@ -962,7 +1119,7 @@ test(
 /** A claude the user started in their own tmux session, without serenity. */
 const MINE = "mywork:polish";
 
-test(
+step(
 	"I imports a claude already running in the user's own tmux window",
 	async () => {
 		tmux(
@@ -994,7 +1151,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"an imported session follows Claude's own status, permission prompts included",
 	async () => {
 		tmux("send-keys", "-t", MINE, "-l", "tidy the cards?");
@@ -1015,7 +1172,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"U restarts an imported session in place under serenity's hooks",
 	async () => {
 		const pane = tmux("display-message", "-p", "-t", MINE, "#{pane_id}").trim();
@@ -1032,7 +1189,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"a first prompt typed in the new session dialog reaches the agent",
 	async () => {
 		// N, not n: polish may have a cleanup suggestion by now, which n declines.
@@ -1050,7 +1207,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"z zooms out to the map, Z zooms in to topics, Esc zooms out one level",
 	async () => {
 		keys("z");
@@ -1072,7 +1229,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"/ finds a session by name; r renames it and its tmux window",
 	async () => {
 		const windows = () =>
@@ -1106,7 +1263,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"arrows and WASD move between nodes; Enter goes into the master, Esc leaves it",
 	async () => {
 		keys("c");
@@ -1123,10 +1280,13 @@ test(
 		await waitFor(/zoom: map/);
 		keys("Z");
 		await waitFor(/zoom: topics/);
-		// d moves to a card as → does: i there opens its quick message.
-		keys("d");
-		keys("i");
+		// d moves to a card as → does: i there opens its quick message. Sent
+		// as one chunk, the way keys typed faster than a render arrive: i must
+		// act on the card d moved to, not on the master it left.
+		type("di");
 		await waitFor(/▸/);
+		// The master's own input stays closed.
+		expect(screen()).toContain("message master…");
 		keys("Escape");
 		await until(() => !screen().includes("▸"), "Esc to close the message");
 	},
@@ -1144,23 +1304,24 @@ const selectedRow = () =>
 
 /** Goes into the master and steps down NEEDS YOU to the item whose row shows `name`. */
 async function selectNeed(name: string): Promise<void> {
-	// c focuses the master without going in. Wait for that render before
-	// Enter: keys that arrive in one chunk all see the state before it.
-	keys("c");
-	await until(
-		() => screen().includes("┏━ ◆ master") && !selectedRow(),
-		"c to focus the master",
-	);
+	await focusMaster();
+	await until(() => !selectedRow(), "the master to show no selection");
 	keys("Enter");
 	await waitFor(/▸/);
+	// One Down at a time, each waiting for the selection to move: a Down sent
+	// before the last one drew would step past the item.
 	for (let i = 0; i < 15 && !selectedRow().includes(name); i++) {
+		const from = selectedRow();
 		keys("Down");
-		await Bun.sleep(150);
+		await until(
+			() => selectedRow() !== from,
+			`Down to move past: ${from.trim()}`,
+		);
 	}
 	expect(selectedRow()).toContain(name);
 }
 
-test(
+step(
 	"x dismisses a Slack item for good; a newer message in its thread shows again",
 	async () => {
 		const selectDana = () => selectNeed("Dana");
@@ -1201,7 +1362,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"Enter on a Slack item dismisses it as seen",
 	async () => {
 		const before = needCount();
@@ -1227,7 +1388,7 @@ test(
 	STEP_TIMEOUT,
 );
 
-test(
+step(
 	"Enter on an ended session in NEEDS YOU marks it seen; it stays on the map",
 	async () => {
 		const before = needCount();

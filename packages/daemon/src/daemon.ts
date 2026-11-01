@@ -74,7 +74,7 @@ import { ReviewWatcher } from "./reviews";
 import { SlackWatcher } from "./slack";
 import { SlackAdvisor } from "./slack-advisor";
 import { uploadSlackFile } from "./slack-upload";
-import { Tmux } from "./tmux";
+import { SessionKeysKeeper, Tmux } from "./tmux";
 
 export interface DaemonOptions {
 	home: string;
@@ -171,8 +171,8 @@ export class Daemon {
 	private readonly timers = new Set<ReturnType<typeof setTimeout>>();
 	private readonly tmuxCheckMs: number;
 	private tmuxCheck: ReturnType<typeof setInterval> | null = null;
-	/** Set once a rebind did not show up in list-keys, so the check stops instead of rebinding forever. */
-	private keysUncheckable = false;
+	/** Binds Ctrl+q / Ctrl+w again when something removed them. */
+	private readonly keys: SessionKeysKeeper;
 	/** A check still waiting on tmux; the next one is skipped. */
 	private checkingTmux = false;
 	private readonly master: MasterSupervisor;
@@ -197,6 +197,7 @@ export class Daemon {
 
 	constructor(private readonly opts: DaemonOptions) {
 		this.tmux = opts.tmux ?? new Tmux();
+		this.keys = new SessionKeysKeeper(this.tmux, (m) => this.log(m));
 		this.claudeCommand = opts.claudeCommand ?? [
 			process.env.SERENITY_CLAUDE_BIN ?? "claude",
 		];
@@ -913,20 +914,7 @@ export class Daemon {
 					`${now.name}: pane ${pane.pane} had lost its @serenity_session marker${pane.session ? ` (it was ${pane.session})` : ""}; set it again`,
 				);
 			}
-			const command = this.detachCommand();
-			if (this.keysUncheckable || (await this.tmux.sessionKeysBound(command)))
-				return;
-			await this.tmux.bindSessionKeys(command);
-			if (await this.tmux.sessionKeysBound(command))
-				this.log(
-					"the Ctrl+q / Ctrl+w bindings were missing or changed; bound them again",
-				);
-			else {
-				this.keysUncheckable = true;
-				this.log(
-					"cannot confirm the Ctrl+q / Ctrl+w bindings; no longer checking them",
-				);
-			}
+			await this.keys.check(this.detachCommand());
 		} catch {
 			// tmux failing shows in the dependency health (ADR 0043).
 		}

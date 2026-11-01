@@ -214,6 +214,44 @@ function useLiveState<T>(
 	return [value, set, ref];
 }
 
+/**
+ * useInput, plus `later`, which hands keys back to run after the next render.
+ * Ink gives a chunk of keys typed before a render to the handler of the last
+ * render, so the second key of "di" would act on what d just changed: i
+ * opened the master's input, not the reply of the card d moved to. Keys
+ * handed back run one render at a time, each against the state the one
+ * before it left, and keys arriving meanwhile wait behind them.
+ */
+function useInputInTurn(
+	handler: (input: string, key: InkKey) => void,
+	options: { isActive: boolean },
+): (input: string, key: InkKey) => void {
+	const queue = useRef<{ input: string; key: InkKey }[]>([]);
+	const latest = useRef(handler);
+	latest.current = handler;
+	const [turn, setTurn] = useState(0);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: runs once per turn, reading the queue and handler through refs
+	useEffect(() => {
+		const next = queue.current.shift();
+		if (!next) return;
+		// A dialog's own input has the keys now; these were typed for the map.
+		if (!options.isActive) {
+			queue.current = [];
+			return;
+		}
+		latest.current(next.input, next.key);
+		setTurn((t) => t + 1);
+	}, [turn]);
+	useInput((input, key) => {
+		if (queue.current.length) queue.current.push({ input, key });
+		else latest.current(input, key);
+	}, options);
+	return useCallback((input: string, key: InkKey) => {
+		queue.current.unshift({ input, key });
+		setTurn((t) => t + 1);
+	}, []);
+}
+
 export function App({ home, repo, tmuxPane }: AppProps) {
 	const { exit } = useApp();
 	const { columns, rows } = useWindowSize();
@@ -823,7 +861,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		return [...new Set([pick, ...sentReplies].filter((r): r is string => !!r))];
 	};
 
-	useInput(
+	const later = useInputInTurn(
 		function onKey(input: string, key: InkKey) {
 			// Ctrl+w focuses the master from every view, the session zoom too
 			// (ADR 0026, 0053). With Caps Lock it may arrive as Ctrl+W.
@@ -1016,11 +1054,14 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			}
 
 			// Keys typed before a render arrive as one chunk ("ifinish\r" when the
-			// text comes before i's reply box is listening); take them one by one.
-			const keys = [...input];
-			if (keys.length > 1 && !key.ctrl && !key.meta) {
-				for (const k of keys) onKey(k, { ...key, return: k === "\r" });
-				return;
+			// text comes before i's reply box is listening). Take the first now and
+			// the rest after the render it causes, so each sees the state the one
+			// before left; a field opened by the first takes the rest as typed text.
+			const [first = "", ...rest] = [...input];
+			if (rest.length && !key.ctrl && !key.meta) {
+				const more = rest.join("");
+				later(more, { ...key, return: more === "\r" });
+				return onKey(first, { ...key, return: first === "\r" });
 			}
 
 			if (key.tab) return cycleNeeds(key.shift);

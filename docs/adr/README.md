@@ -56,9 +56,10 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0048](0048-at-new-starts-sessions-from-a-brief.md) | `@new <brief>` starts sessions at once, the master choosing the split, names and prompts; command words are never session names and lead the `@` list | Accepted |
 | [0049](0049-copy-and-handover-docs.md) | `@copy @session` and `@handover @session`: the session writes a handover doc in its worktree, serenity copies it to its state; `@copy` starts a follow-up session carrying it, `@handover` gives its path, and it can go to Slack as a file once confirmed | Accepted |
 | [0050](0050-needs-you-seen-and-explicit-actions.md) | NEEDS YOU: Enter marks an item seen (a Slack item dismissed and opened; a session hidden until it changes, never one waiting on you); ◆ says what `y` does to whom; Slack items you wrote after are read; Slack follow-ups reply, tell a session, or start one | Accepted |
-| [0051](0051-ctrl-g-always-reaches-serenity.md) | Ctrl+g in an agent pane always reaches serenity: Ctrl+G and Ctrl+M (Caps Lock) bound too; the daemon puts back a lost pane marker or binding every 5 s and logs it; detach by pane prefers the live session | Amended by 0053 |
+| [0051](0051-ctrl-g-always-reaches-serenity.md) | Ctrl+g in an agent pane always reaches serenity: Ctrl+G and Ctrl+M (Caps Lock) bound too; the daemon puts back a lost pane marker or binding every 5 s and logs it; detach by pane prefers the live session | Amended by 0053, 0054 |
 | [0052](0052-mention-colours.md) | `@` mentions are coloured where they resolve: a live session `blueBright`, `@new` green, `@copy` and `@handover` yellow; unknown `@word`s stay plain; in the input, the `@` list and the user's messages | Accepted |
-| [0053](0053-ctrl-q-and-ctrl-w.md) | `Ctrl+q` leaves a session for the map and `Ctrl+w` focuses the master, replacing `Ctrl+g` and `Ctrl+m`; plain control bytes, no extended keys needed; serenity's old bindings are removed | Accepted |
+| [0053](0053-ctrl-q-and-ctrl-w.md) | `Ctrl+q` leaves a session for the map and `Ctrl+w` focuses the master, replacing `Ctrl+g` and `Ctrl+m`; plain control bytes, no extended keys needed; serenity's old bindings are removed | Amended by 0054 |
+| [0054](0054-agent-pane-test-compares-marker.md) | The agent-pane test in the `Ctrl+q` / `Ctrl+w` bindings compares the marker with empty (tmux reads an id starting with `0` as false); the binding check reads tmux 3.4's folded `C-q`/`C-Q` and keeps trying instead of giving up | Accepted |
 
 ## System at a glance
 

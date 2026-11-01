@@ -1,5 +1,13 @@
 import { run } from "./exec";
 
+/**
+ * Whether the pane a key is typed in is an agent's: its @serenity_session
+ * marker is set. Compared with "", not tested as is: tmux takes any value
+ * starting with "0" for false, and a session id is a UUID, which does one
+ * time in sixteen (ADR 0054).
+ */
+export const IN_AGENT_PANE = "#{!=:#{@serenity_session},}";
+
 /** Shift+Enter as a CSI u key, after its Escape; Ink reads it as Enter with shift. */
 const SHIFT_ENTER_CSI_U = "[13;2u";
 
@@ -41,7 +49,7 @@ export class Tmux {
 			.SERENITY_TMUX_SOCKET,
 	) {}
 
-	private cmd(args: string[]): Promise<string> {
+	protected cmd(args: string[]): Promise<string> {
 		return run(
 			this.socketName
 				? ["tmux", "-L", this.socketName, ...args]
@@ -284,7 +292,7 @@ export class Tmux {
 				key,
 				"if-shell",
 				"-F",
-				"#{@serenity_session}",
+				IN_AGENT_PANE,
 				`run-shell -b "${detachCommand} #{pane_id}${suffix}"`,
 				`send-keys ${key}`,
 			]);
@@ -303,20 +311,30 @@ export class Tmux {
 	/**
 	 * Whether the root table still holds the bindings bindSessionKeys makes
 	 * for `detachCommand`; something else (a config reload, another program)
-	 * may have replaced or removed them.
+	 * may have replaced or removed them, or an older serenity bound them.
 	 */
 	async sessionKeysBound(detachCommand: string): Promise<boolean> {
 		const lines = (await this.cmd(["list-keys", "-T", "root"])).split("\n");
+		// tmux 3.4 (Ubuntu 24.04's) keeps no C-Q apart from C-q: binding C-Q
+		// replaces C-q, and list-keys shows one C-q line ending "send-keys C-Q",
+		// which stands for both keys there. Where tmux keeps them apart (3.6
+		// on), each needs its own line, so a lost C-Q is still found.
 		const bound = (key: string, text: string) =>
-			lines.some(
-				(line) =>
-					line.split(/\s+/)[3] === key &&
-					line.includes(text) &&
-					line.includes(`send-keys ${key}`),
-			);
+			lines.some((line) => {
+				const name = line.split(/\s+/)[3] ?? "";
+				const sends = line.match(/send-keys ([^\s"]+)"?\s*$/)?.[1] ?? "";
+				const same = (a: string) => a.toLowerCase() === key.toLowerCase();
+				return (
+					same(name) &&
+					same(sends) &&
+					(name === key || sends === key) &&
+					line.includes(text)
+				);
+			});
 		return (
-			["C-q", "C-Q", "C-w", "C-W"].every((key) => bound(key, detachCommand)) &&
-			bound("S-Enter", "@serenity_map")
+			["C-q", "C-Q", "C-w", "C-W"].every(
+				(key) => bound(key, detachCommand) && bound(key, IN_AGENT_PANE),
+			) && bound("S-Enter", "@serenity_map")
 		);
 	}
 
@@ -366,5 +384,40 @@ export class Tmux {
 				"xterm*:extkeys",
 			]);
 		await this.cmd(["set-option", "-g", "allow-passthrough", "on"]);
+	}
+}
+
+/**
+ * Keeps serenity's root key bindings in place (ADR 0051, 0054): a check binds
+ * them again when list-keys no longer shows them. A rebind that list-keys
+ * still does not show (a tmux that prints them in a form the check does not
+ * read, as 3.4 did before 0054) is logged once and tried again on the next
+ * check, rather than turning the repair off for the daemon's lifetime.
+ */
+export class SessionKeysKeeper {
+	private unconfirmed = false;
+
+	constructor(
+		private readonly tmux: Pick<Tmux, "sessionKeysBound" | "bindSessionKeys">,
+		private readonly log: (message: string) => void,
+	) {}
+
+	async check(detachCommand: string): Promise<void> {
+		if (await this.tmux.sessionKeysBound(detachCommand)) {
+			this.unconfirmed = false;
+			return;
+		}
+		await this.tmux.bindSessionKeys(detachCommand);
+		if (await this.tmux.sessionKeysBound(detachCommand)) {
+			this.unconfirmed = false;
+			this.log(
+				"the Ctrl+q / Ctrl+w bindings were missing or changed; bound them again",
+			);
+		} else if (!this.unconfirmed) {
+			this.unconfirmed = true;
+			this.log(
+				"cannot confirm the Ctrl+q / Ctrl+w bindings; binding them again on each check",
+			);
+		}
 	}
 }
