@@ -78,7 +78,14 @@ tmux_ok() {
 install_tools() {
 	if [ "$os" = darwin ] && ! has brew && ! brew_shellenv; then
 		say "Installing Homebrew (for tmux and gh)"
-		/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+		brew_installer=$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh) || die "could not download the Homebrew installer"
+		# Under `curl | sh` our stdin is the pipe, so Homebrew runs non-interactively
+		# and cannot ask for the sudo password it needs. Give it the terminal.
+		if (exec </dev/tty) 2>/dev/null; then
+			/bin/bash -c "$brew_installer" </dev/tty
+		else
+			/bin/bash -c "$brew_installer"
+		fi
 		brew_shellenv || die "Homebrew did not install"
 	fi
 
