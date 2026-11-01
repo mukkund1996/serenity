@@ -71,6 +71,17 @@ Bug fixes that restore intended behaviour don't need an ADR. Where an ADR and th
 - **CI must be green** before merge. A maintainer squash-merges once it is.
 - **Update the docs** that your change makes wrong: the README (keys, config, commands) and any ADR it amends.
 
+## Maintainers
+
+### Leaving your own visits out of the website analytics
+
+getserenity.dev counts page views and a few events (copy, scroll, star and outbound clicks) with [GoatCounter](https://www.goatcounter.com) (`website/analytics.js`). To keep your own visits out:
+
+1. **In each browser, once:** open <https://getserenity.dev/#toggle-goatcounter>. An alert says tracking is now *disabled in this browser*. count.js then sets `localStorage.skipgc` and sends nothing from that browser: no page views and no events, on every page. Opening the same link again turns counting back on. The setting lives in that browser's storage, so do it in every browser and on every device you use, phone included. It is lost if you clear site data, and private windows don't keep it.
+2. **For a fixed connection:** in the GoatCounter dashboard go to *Settings*, add your home or office IP under *Ignore IPs* and save. This covers every browser on that network, but only from then on. It stops working when your ISP changes the IP, and it does not cover a phone on mobile data, so keep using step 1 there.
+
+Visits from `localhost`, `127.*`, LAN addresses (`192.168.*`, `10.*`, `172.16–31.*`) and `file://` are never counted. Most ad blockers block `gc.zgo.at`, so a browser with one may already send nothing. Don't rely on that, because blocker lists change.
+
 ## License
 
 By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).

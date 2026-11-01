@@ -6,6 +6,10 @@
 //   docs-copy: <command>                    a docs copy button (docs/docs.js)
 //   reached-install                         the landing #install section came into view (site.js)
 //   outbound: <host/path>                   any other link off the site (below)
+// Owner opt-out: loading any page with #toggle-goatcounter makes count.js set (or clear)
+// localStorage skipgc, after which it sends nothing from that browser: page views, the
+// data-goatcounter-click events and srnEvent alike all go through goatcounter.count().
+// It also skips localhost, LAN addresses and file://. See CONTRIBUTING.md (Maintainers).
 
 window.srnEvent = (path, title) => {
 	try {
@@ -27,3 +31,9 @@ document.addEventListener(
 	},
 	{ capture: true },
 );
+
+// count.js only reads #toggle-goatcounter when the page loads. Adding the hash to a page
+// already open is just a jump within that page, so reload to let count.js see it.
+window.addEventListener("hashchange", () => {
+	if (location.hash === "#toggle-goatcounter") location.reload();
+});
