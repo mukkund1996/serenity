@@ -187,6 +187,10 @@ A new build replaces a running daemon by itself.
 
 **Releases:** merging the release-please PR on `main` tags a version; the release workflow attaches the binaries and bumps the Homebrew tap ([ADR 0025](docs/adr/0025-install-script-and-homebrew.md)).
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks, ADRs and pull requests. Ask questions and share ideas in [Discussions](https://github.com/mukkund1996/serenity/discussions). Report bugs as [issues](https://github.com/mukkund1996/serenity/issues).
+
 ## License
 
 [MIT](LICENSE). serenity is an independent open-source project, not affiliated with or endorsed by Anthropic, Slack or Microsoft.
