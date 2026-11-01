@@ -50,9 +50,9 @@ $case
 EOF
 	name=$(printf '%s-%s-%s' "$image" "$platform" "$mode" | tr ':/' '__')
 	extra=""
-	# su - drops the environment, so the pin goes in the command.
+	# sudo drops the environment, so the pin goes in the command.
 	pin="SERENITY_EXPECT_VERSION=${SERENITY_EXPECT_VERSION:-}"
-	run="export $pin; sh /smoke/check.sh script /smoke/install.sh"
+	run="cd; export $pin; sh /smoke/check.sh script /smoke/install.sh"
 	case "$mode" in
 	sudo) extra=sudo ;;
 	brew)
@@ -60,10 +60,11 @@ EOF
 		extra="sudo git procps file build-essential gcc"
 		run='NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" >/dev/null &&
 			eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" && sh /smoke/check.sh brew'
-		run="export $pin; $run"
+		run="cd; export $pin; $run"
 		;;
 	esac
-	if [ "$mode" = root ]; then as="sh -c"; else as="su - smoke -c"; fi
+	# Not su: Fedora's image has none. sudo resets the environment.
+	if [ "$mode" = root ]; then as="sh -c"; else as="sudo -u smoke -H sh -c"; fi
 	printf '%-55s ' "$case"
 	docker run --rm --platform "$platform" \
 		-v "$here/check.sh:/smoke/check.sh:ro" -v "$installer:/smoke/install.sh:ro" \

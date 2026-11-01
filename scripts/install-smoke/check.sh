@@ -71,8 +71,11 @@ export PATH
 
 version=$(serenity --version 2>&1)
 want="${SERENITY_EXPECT_VERSION#v}"
+# Unquoted, so [0-9] is a pattern: a pinned version, or any.
+pattern="${want:-[0-9]}*+*"
+# shellcheck disable=SC2254
 case "$version" in
-"${want:-[0-9]}"*+*) pass "serenity --version: $version" ;;
+$pattern) pass "serenity --version: $version" ;;
 *) fail "serenity --version: $version (want ${SERENITY_EXPECT_VERSION:-x.y.z}+build)" ;;
 esac
 
