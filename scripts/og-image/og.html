@@ -1,0 +1,98 @@
+<!doctype html>
+<!--
+  Source of website/og.png, the 1200×630 social preview (Open Graph / Twitter card,
+  and the GitHub repo's social preview). Regenerate with scripts/og-image/render.sh.
+  Palette and type follow the landing page: #0d0f12 ground, sage #7fc77f accent,
+  Instrument Serif headings, JetBrains Mono details. The logo is website/favicon.svg.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500&amp;family=JetBrains+Mono:wght@400;500&amp;display=block">
+<style>
+html, body { margin: 0; padding: 0; }
+body { width: 1200px; height: 630px; overflow: hidden; background: #0d0f12; }
+.card {
+	position: relative; width: 1200px; height: 630px; overflow: hidden;
+	display: flex; flex-direction: column; align-items: center; justify-content: center;
+	background: #0d0f12; color: #d0d4da; font-family: 'Inter', system-ui, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+.glow {
+	position: absolute; left: 50%; top: 46%; width: 980px; height: 620px; transform: translate(-50%, -50%);
+	border-radius: 50%;
+	background: radial-gradient(closest-side, rgba(127,199,127,.22), rgba(127,199,127,.07) 55%, rgba(127,199,127,0) 100%);
+}
+/* faint mind map in the corners: topics around the master, as on the landing page */
+.map { position: absolute; inset: 0; }
+.content { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.logo { width: 112px; height: 112px; margin-bottom: 22px; }
+h1 {
+	margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400;
+	font-size: 150px; line-height: .9; letter-spacing: -.01em; color: #e8eaee;
+}
+.tagline {
+	margin: 22px 0 0; font-family: 'Instrument Serif', Georgia, serif; font-size: 44px; line-height: 1.1; color: #b5bac2;
+}
+.tagline em { font-style: italic; color: #7fc77f; }
+.status {
+	margin-top: 34px; display: flex; gap: 34px;
+	font-family: 'JetBrains Mono', Menlo, monospace; font-size: 19px; color: #858c97;
+}
+.status b { font-weight: 500; }
+.w { color: #f2c14e; }
+.k { color: #6ea8fe; }
+.d { color: #7fc77f; }
+.url {
+	position: absolute; bottom: 34px; left: 0; right: 0; text-align: center;
+	font-family: 'JetBrains Mono', Menlo, monospace; font-size: 18px; letter-spacing: .08em; color: #858c97;
+}
+.url span { color: #d0d4da; }
+</style>
+</head>
+<body>
+<div class="card">
+<div class="glow"></div>
+<svg class="map" viewBox="0 0 1200 630" aria-hidden="true" fill="none">
+	<g stroke="#23272e" stroke-width="2">
+		<path d="M150 120 H250 V210 H150 M250 165 H330"/>
+		<path d="M1050 110 H950 V230 H1050 M950 170 H870 M950 290 V230"/>
+		<path d="M140 470 H240 V560 H140 M240 515 H320"/>
+		<path d="M1060 500 H960 V580 M960 540 H880"/>
+	</g>
+	<g font-family="JetBrains Mono, Menlo, monospace" font-size="15" fill="#3a3f47">
+		<text x="40" y="125">auth-fix</text>
+		<text x="40" y="215">docs</text>
+		<text x="1062" y="115">billing</text>
+		<text x="1062" y="235">tests</text>
+		<text x="40" y="475">release</text>
+		<text x="40" y="565">ci</text>
+		<text x="1072" y="505">refactor</text>
+	</g>
+	<g>
+		<circle cx="150" cy="120" r="5" fill="#2e4a2e"/>
+		<circle cx="150" cy="210" r="5" fill="#3a3f47"/>
+		<circle cx="1050" cy="110" r="5" fill="#4a3f22"/>
+		<circle cx="1050" cy="230" r="5" fill="#25344a"/>
+		<circle cx="140" cy="470" r="5" fill="#3a3f47"/>
+		<circle cx="140" cy="560" r="5" fill="#2e4a2e"/>
+		<circle cx="1060" cy="500" r="5" fill="#25344a"/>
+	</g>
+</svg>
+<div class="content">
+	<!-- website/favicon.svg -->
+	<svg class="logo" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0f1216"/><g fill="none" stroke="#7fc77f" stroke-width="4" stroke-linejoin="round"><path d="M32 10 54 32 32 54 10 32z"/></g><path d="M32 23 41 32 32 41 23 32z" fill="#7fc77f"/></svg>
+	<h1>serenity</h1>
+	<p class="tagline">One <em>calm map</em> for your Claude Code sessions.</p>
+	<div class="status">
+		<span><b class="w">◐</b> waiting calls you</span>
+		<span><b class="k">●</b> working stays quiet</span>
+		<span><b class="d">✓</b> done</span>
+	</div>
+</div>
+<div class="url"><span>getserenity.dev</span></div>
+</div>
+</body>
+</html>

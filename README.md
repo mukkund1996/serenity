@@ -14,7 +14,7 @@ Working agents stay quiet. Waiting agents call you. The master keeps the overvie
 [![License: MIT](https://img.shields.io/badge/license-MIT-7fc77f)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-858c97)
 
-[**Website**](https://getserenity.dev) · [**Install**](#install) · [**How it works**](#how-it-works) · [**Keys**](#keys) · [**Configuration**](#configuration) · [**Docs**](docs/adr/README.md)
+[**Website**](https://getserenity.dev) · [**Install**](#install) · [**How it works**](#how-it-works) · [**Keys**](#keys) · [**Configuration**](#configuration) · [**Usage and cost**](#usage-and-cost) · [**Docs**](docs/adr/README.md)
 
 <br>
 
@@ -34,7 +34,7 @@ serenity puts them all on one keyboard-driven map in your terminal:
 - **Focus instead of distraction.** Working agents stay grey and quiet. An agent that needs an answer turns yellow and moves to the top.
 - **Clarity instead of noise.** The master agent summarises every session, suggests the next step, and acts on it when you press `y`.
 
-serenity runs on your existing Claude Code login and subscription.
+serenity runs on your existing Claude Code login and subscription ([what it uses](#usage-and-cost)).
 
 > [!NOTE]
 > serenity is in **beta**. Expect rough edges and changes between releases.
@@ -55,17 +55,20 @@ serenity runs on your existing Claude Code login and subscription.
 
 ## Install
 
-macOS or Linux. One command installs serenity and anything it needs that you don't have yet: [tmux](https://github.com/tmux/tmux) 3.2+, git, [`gh`](https://cli.github.com) and [Claude Code](https://claude.com/claude-code).
+**Requirements:** macOS or Linux, [Claude Code](https://claude.com/claude-code) logged in with a Claude subscription (Pro or Max, or a Team or Enterprise seat) or an Anthropic Console account, [tmux](https://github.com/tmux/tmux) 3.2+, git, and [`gh`](https://cli.github.com) logged in (`gh auth login`). The install script installs tmux, git, gh and Claude Code if they are missing; logging in is up to you.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mukkund1996/serenity/main/scripts/install.sh | sh
 ```
 
-Or with Homebrew (tmux, git and gh come as dependencies; Claude Code is a cask):
+Or with Homebrew (tmux, git and gh come as dependencies):
 
 ```bash
-brew install --cask claude-code; brew install mukkund1996/tap/serenity
+brew install mukkund1996/tap/serenity
 ```
+
+> [!TIP]
+> **If you don't have Claude Code yet,** install it first with `brew install --cask claude-code`. Skip this if you already installed it with npm or Anthropic's installer, or you end up with two copies.
 
 The install script reads these environment variables:
 
@@ -163,7 +166,27 @@ Config lives in `~/.config/serenity/config.json`. Every field is optional.
 | `crashReports.enabled` | `false` | File daemon crashes as GitHub issues through your `gh`, scrubbed of paths, tokens and emails, one issue per crash signature ([ADR 0045](docs/adr/0045-daemon-supervisor-crash-reports-recovery.md)). Reports are always kept in `crash-reports/` in the state directory |
 | `crashReports.repo` | `mukkund1996/serenity` | Where crash issues go |
 
+Model names are anything `claude --model` accepts (an alias like `sonnet` or a full model id). Config is read when the daemon starts, so run `serenity restart` after changing it.
+
 A supervisor restarts the daemon if it crashes, and it picks up where it left off (ADR 0045). State (SQLite, socket, daemon log, crash reports) lives in `~/.local/state/serenity`. Set `SERENITY_HOME` to use another directory.
+
+## Usage and cost
+
+serenity has no API key or model access of its own. Every model call goes through Claude Code with your login, so it counts against your Claude plan's usage limits, or is billed to your Anthropic Console account if that is how Claude Code is logged in. The sessions on the map are ordinary Claude Code sessions and use what they would use anyway; the master's calls come on top:
+
+| Role (`models.…`) | Default | Runs when |
+|-------------------|---------|-----------|
+| `summarizer` | Haiku | A session replies. One short call per reply (a burst of hook events within 1.5 seconds counts once) writes its summary and picks its topic. |
+| `suggester` | Sonnet | A session starts waiting on you or finishes, its question changes, or its PR merges. One call proposes the next step for `y` / `e` / `n`. |
+| `chat` | Opus | The master's chat gets a message: one you send with `i`, or serenity's note that a session you asked it to watch has finished. It does nothing between messages. |
+
+**Slack** (off by default) adds calls only while the map of a repo in `slack.repos` is open: the `summarizer` model reads your mentions and DMs once a minute and when you open the map, the `suggester` model proposes a follow-up for each new item (and again when a session you told about it answers), and the `summarizer` model posts a reply or shares a file you approved.
+
+Status, PRs, cleanup and the map itself use no model. To use smaller models, set them in `~/.config/serenity/config.json` and run `serenity restart`; fields you leave out keep their defaults:
+
+```json
+{ "models": { "chat": "sonnet", "summarizer": "haiku", "suggester": "haiku" } }
+```
 
 ## Development
 

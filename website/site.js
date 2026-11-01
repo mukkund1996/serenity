@@ -418,7 +418,7 @@ const commands = {
 	quick:
 		"curl -fsSL https://raw.githubusercontent.com/mukkund1996/serenity/main/scripts/install.sh | sh",
 	curl: "curl -fsSL https://raw.githubusercontent.com/mukkund1996/serenity/main/scripts/install.sh | sh",
-	brew: "brew install --cask claude-code; brew install mukkund1996/tap/serenity",
+	brew: "brew install mukkund1996/tap/serenity",
 };
 let copyTimer = 0;
 for (const btn of document.querySelectorAll("[data-copy]")) {

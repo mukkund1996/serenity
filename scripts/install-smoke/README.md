@@ -3,7 +3,7 @@
 Installs serenity the way the README tells users to, on clean machines, and checks that it runs headless: no Claude or GitHub login needed.
 
 - `check.sh script [install.sh]` pipes the installer into `sh`, as `curl | sh` does. Without the argument, it uses the installer on main.
-- `check.sh brew` runs the README's Homebrew line: `brew install --cask claude-code; brew install mukkund1996/tap/serenity`.
+- `check.sh brew` follows the README's Homebrew steps: `brew install --cask claude-code` when `claude` is missing (the README's "If you don't have Claude Code yet" note), then `brew install mukkund1996/tap/serenity`.
 
 After installing, `check.sh` checks:
 - the binary is in `~/.local/bin` (or the brew prefix);

@@ -42,8 +42,8 @@ script)
 	status=$?
 	;;
 brew)
-	# The README's line, as given.
-	{ brew install --cask claude-code; brew install mukkund1996/tap/serenity && brew test serenity; } >"$log" 2>&1
+	# The README's steps: the cask only when Claude Code is missing, then the formula.
+	{ command -v claude >/dev/null 2>&1 || brew install --cask claude-code; brew install mukkund1996/tap/serenity && brew test serenity; } >"$log" 2>&1
 	status=$?
 	bin_dir=$(brew --prefix)/bin
 	;;
