@@ -13,6 +13,8 @@ set -eu
 
 REPO="mukkund1996/serenity"
 INSTALL_DIR="${SERENITY_INSTALL_DIR:-$HOME/.local/bin}"
+# The user's PATH, before installing Claude Code adds ~/.local/bin to ours.
+USER_PATH="$PATH"
 
 say() { printf '\033[1m%s\033[0m\n' "$*"; }
 warn() { printf '\033[33m! %s\033[0m\n' "$*" >&2; }
@@ -139,7 +141,7 @@ install_serenity
 echo
 "$INSTALL_DIR/serenity" doctor || true
 echo
-case ":$PATH:" in
+case ":$USER_PATH:" in
 	*":$INSTALL_DIR:"*) ;;
 	*) warn "$INSTALL_DIR is not on your PATH; add it to your shell profile: export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
 esac
