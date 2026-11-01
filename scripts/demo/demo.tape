@@ -8,9 +8,11 @@ Require tmux
 Require bun
 
 Set Shell "bash"
-Set FontSize 15
-Set Width 1360
-Set Height 820
+# About 190 columns: from roughly 180 serenity centres the master with topics
+# on both sides (ADR 0027); narrower, the master docks left.
+Set FontSize 14
+Set Width 1720
+Set Height 940
 Set Padding 18
 Set Framerate 15
 Set TypingSpeed 0

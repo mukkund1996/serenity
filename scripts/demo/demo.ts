@@ -40,8 +40,8 @@ const GH_DIR = join(WORLD, "gh");
 const SLACK = join(WORLD, "slack.json");
 const MAP = `${tmuxSessionName(REPO_DIR)}:map`;
 /** The map's size until a client attaches; vhs then resizes it to its own. */
-const COLS = 150;
-const ROWS = 40;
+const COLS = 190;
+const ROWS = 50;
 
 const env: Record<string, string> = {
 	SERENITY_HOME: HOME,
