@@ -79,8 +79,8 @@ install_tools() {
 	if [ "$os" = darwin ] && ! has brew && ! brew_shellenv; then
 		say "Installing Homebrew (for tmux and gh)"
 		brew_installer=$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh) || die "could not download the Homebrew installer"
-		# Under `curl | sh` our stdin is the pipe, so Homebrew runs non-interactively
-		# and cannot ask for the sudo password it needs. Give it the terminal.
+		# Our stdin is /dev/null (see below), so Homebrew would run non-interactively
+		# and could not ask for the sudo password it needs. Give it the terminal.
 		if (exec </dev/tty) 2>/dev/null; then
 			/bin/bash -c "$brew_installer" </dev/tty
 		else
@@ -142,7 +142,9 @@ install_serenity() {
 	say "Installed $INSTALL_DIR/serenity ($("$INSTALL_DIR/serenity" version))"
 }
 
-[ "${SERENITY_NO_DEPS:-}" = 1 ] || install_tools
+# Under `curl | sh` the rest of this script is on stdin: a package manager or
+# installer that reads stdin would swallow it, and sh would exit 0 halfway.
+[ "${SERENITY_NO_DEPS:-}" = 1 ] || install_tools </dev/null
 install_serenity
 
 echo
