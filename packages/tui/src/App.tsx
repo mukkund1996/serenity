@@ -825,11 +825,15 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 	useInput(
 		function onKey(input: string, key: InkKey) {
-			// Ctrl+m focuses the master from every view, the session zoom too.
-			// tmux passes it here as an extended key; Enter stays Enter (ADR 0026).
-			const toMasterKey = key.ctrl && input === "m";
+			// Ctrl+w focuses the master from every view, the session zoom too
+			// (ADR 0026, 0053). With Caps Lock it may arrive as Ctrl+W.
+			const toMasterKey = key.ctrl && input.toLowerCase() === "w";
 			if (attached) {
-				if (key.escape || (key.ctrl && input === "g") || toMasterKey)
+				if (
+					key.escape ||
+					(key.ctrl && input.toLowerCase() === "q") ||
+					toMasterKey
+				)
 					call("session.detach", { id: attached.id }).catch(fail);
 				if (toMasterKey) focusNode(MASTER);
 				return;
@@ -1364,7 +1368,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				) : (
 					<Text color="gray" wrap="truncate">
 						<Key>←↑↓→ WASD</Key> move · <Key>Enter</Key> open · <Key>i</Key>{" "}
-						message · <Key>Ctrl+m</Key> master · <Key>z Z</Key> zoom ·{" "}
+						message · <Key>Ctrl+w</Key> master · <Key>z Z</Key> zoom ·{" "}
 						<Key>/</Key> search
 					</Text>
 				)}
@@ -1597,7 +1601,7 @@ function SessionZoom({
 				</Box>
 				<Box flexShrink={0} marginLeft={1}>
 					<Text color="gray">
-						<Key>Ctrl+g</Key> map · <Key>Ctrl+m</Key> master
+						<Key>Ctrl+q</Key> map · <Key>Ctrl+w</Key> master
 					</Text>
 				</Box>
 			</Box>

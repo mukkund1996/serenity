@@ -127,11 +127,11 @@ serenity is keyboard-only. The footer shows the moves; `?` opens the full list.
 | `←` `↑` `↓` `→` / `WASD` | Move between nodes |
 | `Enter` | Attach to a session, or go into the master; on a NEEDS YOU item, mark it seen (a Slack item is also opened; a session waiting on you is attached instead) |
 | `i` | Send the focused session a quick message; on the master, open its chat input (`@` tags a session, `Shift+Enter` or `Ctrl+J` starts a new line, `Esc` closes it) |
-| `Ctrl+g` | Back to the map from inside a session |
+| `Ctrl+q` | Back to the map from inside a session |
 | `z` / `Z` / `Esc` | Zoom out to the map / zoom in / one level up |
-| `Ctrl+m` | Focus the master from anywhere (Enter in Apple Terminal) |
+| `Ctrl+w` | Focus the master from anywhere |
 | `PgUp` `PgDn` | On the master, scroll its conversation back and on (`Shift+↑` `Shift+↓` too) |
-| `←` `→` `Home` `End` | In a text field, move the cursor; `Option+←` `→` by a word. `Ctrl+a` `e` `w` `u` `k` and `Option+Backspace` edit as in a shell |
+| `←` `→` `Home` `End` | In a text field, move the cursor; `Option+←` `→` by a word. `Ctrl+a` `e` `u` `k` and `Option+Backspace` edit as in a shell |
 | `Tab` | Jump to the next session that needs you |
 | `y` `e` `n` | Approve, edit or decline the master's suggestion |
 | `[` `]` | Previous / next topic |

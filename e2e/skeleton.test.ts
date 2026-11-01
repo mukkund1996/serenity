@@ -299,7 +299,7 @@ test(
 );
 
 test(
-	"a card's reply is edited like a terminal line: Home End, Option+b and Ctrl+w; text goes in at the cursor",
+	"a card's reply is edited like a terminal line: Home End, Option+b and Option+Backspace; text goes in at the cursor",
 	async () => {
 		keys("i");
 		type("tokens");
@@ -315,8 +315,8 @@ test(
 		keys("End");
 		type(" twice");
 		await waitFor(/› rotate tokens twice█/);
-		// Option+b to the start of "twice"; Ctrl+w takes "tokens " before it.
-		press("M-b", "C-w");
+		// Option+b to the start of "twice"; Option+Backspace takes "tokens " before it.
+		press("M-b", "M-BSpace");
 		await until(
 			() => screen().includes("› rotate twice") && !screen().includes("twice█"),
 			"a word removed before the cursor",
@@ -347,7 +347,7 @@ test(
 );
 
 test(
-	"Enter attaches the session beside the map; the Ctrl+g command detaches it",
+	"Enter attaches the session beside the map; the Ctrl+q command detaches it",
 	async () => {
 		keys("Enter");
 		await until(
@@ -355,10 +355,10 @@ test(
 			"the agent pane to join the map window",
 		);
 		const [mapPane, agentPane] = panesInMap() as [string, string];
-		await waitFor(/Ctrl\+g map/, mapPane);
+		await waitFor(/Ctrl\+q map/, mapPane);
 		expect(screen(mapPane)).toContain("ABOUT THIS SESSION");
-		expect(tmux("list-keys", "-T", "root", "C-g")).toContain("detach");
-		expect(tmux("list-keys", "-T", "root", "C-m")).toContain("master");
+		expect(tmux("list-keys", "-T", "root", "C-q")).toContain("detach");
+		expect(tmux("list-keys", "-T", "root", "C-w")).toContain("master");
 
 		// send-keys bypasses key bindings, so run what the binding runs.
 		spawnSync(process.execPath, [MAIN, "detach", agentPane], {
@@ -374,7 +374,7 @@ test(
 );
 
 test(
-	"the Ctrl+g command still detaches after the daemon restarted while attached",
+	"the Ctrl+q command still detaches after the daemon restarted while attached",
 	async () => {
 		keys("Enter");
 		await until(
@@ -426,7 +426,7 @@ function withClient(): { typeHex: (hex: string) => void; close: () => void } {
 	};
 }
 
-/** Attaches the session, types `hex` and waits for it to park; claude must not have got Ctrl+g. */
+/** Attaches the session, types `hex` and waits for it to park; claude must not have got Ctrl+q. */
 async function attachAndPress(
 	typeHex: (hex: string) => void,
 	hex: string,
@@ -442,12 +442,12 @@ async function attachAndPress(
 		() => panesInMap().length === 1,
 		"the typed key to park the agent pane",
 	);
-	expect(screen(agentPane)).not.toContain("opened $EDITOR");
+	expect(screen(agentPane)).not.toContain("got Ctrl+q");
 	await waitFor(/zoom: topics/);
 }
 
 test(
-	"Ctrl+g typed in an attached session goes back to the map, also with Caps Lock on; claude never gets it",
+	"Ctrl+q typed in an attached session goes back to the map, also with Caps Lock on; claude never gets it",
 	async () => {
 		const client = withClient();
 		try {
@@ -455,10 +455,10 @@ test(
 				() => tmux("list-clients").includes("serenity-demo"),
 				"the client to attach",
 			);
-			// Plain Ctrl+g, then Ctrl+g with Caps Lock as a terminal reports it
-			// under extended keys (xterm modifyOtherKeys): Ctrl+G.
-			await attachAndPress(client.typeHex, "07");
-			await attachAndPress(client.typeHex, "1b 5b 32 37 3b 35 3b 37 31 7e");
+			// Plain Ctrl+q, then Ctrl+q with Caps Lock as a terminal reports it
+			// under extended keys (xterm modifyOtherKeys): Ctrl+Q.
+			await attachAndPress(client.typeHex, "11");
+			await attachAndPress(client.typeHex, "1b 5b 32 37 3b 35 3b 38 31 7e");
 		} finally {
 			client.close();
 		}
@@ -467,7 +467,7 @@ test(
 );
 
 test(
-	"the daemon sets a pane's marker and the Ctrl+g binding again after something else removed them",
+	"the daemon sets a pane's marker and the Ctrl+q binding again after something else removed them",
 	async () => {
 		const client = withClient();
 		try {
@@ -492,18 +492,18 @@ test(
 			const id = marker();
 			expect(id).not.toBe("");
 			tmux("set-option", "-p", "-u", "-t", agentPane, "@serenity_session");
-			tmux("unbind-key", "-n", "C-g");
+			tmux("unbind-key", "-n", "C-q");
 			await until(() => marker() === id, "the marker to be set again");
 			await until(
-				() => tmux("list-keys", "-T", "root").includes("send-keys C-g"),
-				"Ctrl+g to be bound again",
+				() => tmux("list-keys", "-T", "root").includes("send-keys C-q"),
+				"Ctrl+q to be bound again",
 			);
-			client.typeHex("07");
+			client.typeHex("11");
 			await until(
 				() => panesInMap().length === 1,
-				"Ctrl+g to park the agent pane",
+				"Ctrl+q to park the agent pane",
 			);
-			expect(screen(agentPane)).not.toContain("opened $EDITOR");
+			expect(screen(agentPane)).not.toContain("got Ctrl+q");
 			const log = readFileSync(join(dir, "home", "daemon.log"), "utf8");
 			expect(log).toContain("had lost its @serenity_session marker");
 			expect(log).toContain("bindings were missing or changed");
@@ -599,7 +599,7 @@ test(
 );
 
 test(
-	"the master input edits at the cursor: arrows, Home End, Ctrl+a e w u k, Option+b f and Option+Backspace, Delete",
+	"the master input edits at the cursor: arrows, Home End, Ctrl+a e u k, Option+b f and Option+Backspace, Delete",
 	async () => {
 		await openMasterInput();
 		type("status now");
@@ -616,8 +616,8 @@ test(
 		keys("C-e");
 		type("?");
 		await waitFor(/› ok status right now\?█/);
-		// Option+b twice lands before "right"; Ctrl+w takes "status " back to the space.
-		press("M-b", "M-b", "C-w");
+		// Option+b twice lands before "right"; Option+Backspace takes "status ".
+		press("M-b", "M-b", "M-BSpace");
 		await waitFor(/› ok right now\?/);
 		press("End", "M-BSpace");
 		await waitFor(/› ok right █/);

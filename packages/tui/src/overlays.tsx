@@ -182,7 +182,7 @@ export function NewSessionDialog({
 /**
  * Kept to a fixed handful of rows: related keys share one, so a new key
  * joins a row rather than growing the panel. The footer covers the moves,
- * Enter, i, Ctrl+m, z Z and /.
+ * Enter, i, Ctrl+w, z Z and /.
  */
 const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 	[
@@ -197,7 +197,7 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 	[
 		"MAP",
 		[
-			["[ ] Ctrl+m", "topic · master"],
+			["[ ] Ctrl+w", "topic · master"],
 			["N I", "new session · import"],
 			["Tab Esc H", "next need · zoom out · archived"],
 			["y e n x", "run ◆ · edit · decline · dismiss"],

@@ -129,7 +129,7 @@ const DEFAULT_REVIEW_POLL_MS = 5 * 60_000;
 /** Neither do Slack messages. Each read is a model call, but a read already in flight is never doubled, so a slow one only skips ticks. */
 const DEFAULT_SLACK_POLL_MS = 60_000;
 /**
- * Ctrl+g depends on a pane option and a root binding that anything else on
+ * Ctrl+q depends on a pane option and a root binding that anything else on
  * the tmux server can change; they are checked this often (ADR 0051).
  */
 const DEFAULT_TMUX_CHECK_MS = 5000;
@@ -462,7 +462,7 @@ export class Daemon {
 			this.mapPanes.delete(peer);
 			// A map that closes mid-word no longer holds topic moves.
 			this.setTyping(peer, null);
-			// The pane may outlive the map, as a shell; Ctrl+m is Enter there again.
+			// The pane may outlive the map, as a shell; Shift+Enter is plain there again.
 			if (pane)
 				void this.tmux.unsetPaneOption(pane, "@serenity_map").catch(() => {});
 		});
@@ -832,7 +832,7 @@ export class Daemon {
 	};
 
 	/**
-	 * The shell command the Ctrl+g binding runs. tmux runs it with the server's
+	 * The shell command the Ctrl+q / Ctrl+w bindings run. tmux runs it with the server's
 	 * environment, so the daemon's home and tmux socket are passed explicitly.
 	 */
 	private detachCommand(): string {
@@ -859,7 +859,7 @@ export class Daemon {
 	}
 
 	/**
-	 * Puts back what Ctrl+g depends on when something outside serenity
+	 * Puts back what Ctrl+q depends on when something outside serenity
 	 * removed it (ADR 0051): each live session's pane marker and the root key
 	 * bindings. Each repair is logged. A pane is only marked again while it
 	 * still runs that session's claude, since pane ids are reused after a
@@ -919,12 +919,12 @@ export class Daemon {
 			await this.tmux.bindSessionKeys(command);
 			if (await this.tmux.sessionKeysBound(command))
 				this.log(
-					"the Ctrl+g / Ctrl+m bindings were missing or changed; bound them again",
+					"the Ctrl+q / Ctrl+w bindings were missing or changed; bound them again",
 				);
 			else {
 				this.keysUncheckable = true;
 				this.log(
-					"cannot confirm the Ctrl+g / Ctrl+m bindings; no longer checking them",
+					"cannot confirm the Ctrl+q / Ctrl+w bindings; no longer checking them",
 				);
 			}
 		} catch {
@@ -933,8 +933,8 @@ export class Daemon {
 	}
 
 	/**
-	 * Marks the map pane and binds Ctrl+g / Ctrl+m, so Ctrl+m reaches the map
-	 * before any session is attached. Extended keys let tmux tell it from Enter.
+	 * Marks the map pane and binds Ctrl+q / Ctrl+w before any session is
+	 * attached. Extended keys let tmux tell Shift+Enter from Enter.
 	 */
 	private async bindMapKeys(pane: string): Promise<void> {
 		try {
@@ -1104,7 +1104,7 @@ export class Daemon {
 		this.timers.add(timer);
 	}
 
-	/** Detaches; with `master`, then presses Ctrl+m in the map so it focuses the master. */
+	/** Detaches; with `master`, then presses Ctrl+w in the map so it focuses the master. */
 	private async detach(sessionId: string, master = false): Promise<void> {
 		const session = this.requireSession(sessionId);
 		const known = this.attached.get(session.repo);
@@ -1133,7 +1133,7 @@ export class Daemon {
 		}
 		if (await this.tmux.paneExists(attached.clientPane)) {
 			await this.tmux.selectPane(attached.clientPane);
-			if (master) await this.tmux.pressCtrlM(attached.clientPane);
+			if (master) await this.tmux.pressCtrlW(attached.clientPane);
 		}
 		this.prs.schedule(session.id, 0);
 		this.broadcast(session.repo);
@@ -1142,7 +1142,7 @@ export class Daemon {
 	/**
 	 * Where a session is shown when the daemon has no record of attaching it
 	 * (it restarted since, or the user went to the agent's window in tmux):
-	 * beside the map in its window, or on a client of its own. Ctrl+g then
+	 * beside the map in its window, or on a client of its own. Ctrl+q then
 	 * still gets back to the map.
 	 */
 	private async shownBeside(

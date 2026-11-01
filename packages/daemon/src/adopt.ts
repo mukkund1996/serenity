@@ -41,7 +41,7 @@ export interface AdoptHost {
 	markEnded(session: Session): void;
 	/** When the daemon last heard a hook from this session (epoch ms; 0 if never). */
 	lastHookAt(sessionId: string): number;
-	/** Binds Ctrl+g and Ctrl+m so an adopted pane can return to the map. */
+	/** Binds Ctrl+q and Ctrl+w so an adopted pane can return to the map. */
 	bindSessionKeys(): Promise<void>;
 	log(line: string): void;
 }
@@ -253,7 +253,7 @@ export class ClaudeObserver {
 		for (let session of observed) {
 			const proc = session.claudePid ? byPid.get(session.claudePid) : undefined;
 			// The same claude on a new conversation (/clear, /resume): follow it,
-			// keeping the pane marked so Ctrl+g still reaches serenity.
+			// keeping the pane marked so Ctrl+q still reaches serenity.
 			if (proc && proc.sessionId !== session.claudeSessionId) {
 				this.seen.delete(session.id);
 				session = this.host.change(session, {

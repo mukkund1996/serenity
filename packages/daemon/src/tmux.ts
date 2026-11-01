@@ -1,7 +1,5 @@
 import { run } from "./exec";
 
-/** Ctrl+m as a CSI u key, after its Escape: `ESC [ 109 ; 5 u`. */
-const CTRL_M_CSI_U = "[109;5u";
 /** Shift+Enter as a CSI u key, after its Escape; Ink reads it as Enter with shift. */
 const SHIFT_ENTER_CSI_U = "[13;2u";
 
@@ -16,6 +14,7 @@ const IDEMPOTENT = new Set([
 	"switch-client",
 	"rename-window",
 	"bind-key",
+	"unbind-key",
 	"set-option",
 	"list-keys",
 	"list-panes",
@@ -252,19 +251,33 @@ export class Tmux {
 	}
 
 	/**
-	 * Ctrl+g in an agent pane detaches it back to the map; Ctrl+m does too and
-	 * then focuses the master. In the map pane Ctrl+m reaches the map as a CSI u
-	 * key, which it tells apart from Enter. Anywhere else both pass through.
-	 * Shift+Enter reaches the map pane as a CSI u key too, a new line in the
-	 * master input (ADR 0038); other panes get it unchanged.
+	 * Ctrl+q in an agent pane detaches it back to the map; Ctrl+w does too and
+	 * then focuses the master. Anywhere else, the map pane included, both
+	 * pass through: the map reads Ctrl+w itself. Shift+Enter reaches the map
+	 * pane as a CSI u key, a new line in the master input (ADR 0038); other
+	 * panes get it unchanged.
 	 * Agent panes carry the @serenity_session option, the map pane @serenity_map.
-	 * Ctrl+m and Shift+Enter differ from Enter only when the terminal sends
-	 * extended keys. A terminal sending extended keys may report Ctrl+g with
-	 * Caps Lock on as Ctrl+G, which tmux keeps apart, so both cases are bound
-	 * (ADR 0051).
+	 * A terminal sending extended keys may report Ctrl+q with Caps Lock on as
+	 * Ctrl+Q, which tmux keeps apart, so both cases are bound (ADR 0051, 0053).
 	 */
 	async bindSessionKeys(detachCommand: string): Promise<void> {
-		for (const key of ["C-g", "C-G"])
+		// Before ADR 0053 these were Ctrl+g and Ctrl+m. A tmux server that
+		// outlived an upgrade still has them; Ctrl+g belongs to claude again.
+		const old = (await this.cmd(["list-keys", "-T", "root"])).split("\n");
+		for (const key of ["C-g", "C-G", "C-m", "C-M"])
+			if (
+				old.some(
+					(line) =>
+						line.split(/\s+/)[3] === key && line.includes("@serenity_session"),
+				)
+			)
+				await this.cmd(["unbind-key", "-n", key]);
+		for (const [key, suffix] of [
+			["C-q", ""],
+			["C-Q", ""],
+			["C-w", " master"],
+			["C-W", " master"],
+		] as const)
 			await this.cmd([
 				"bind-key",
 				"-n",
@@ -272,19 +285,8 @@ export class Tmux {
 				"if-shell",
 				"-F",
 				"#{@serenity_session}",
-				`run-shell -b "${detachCommand} #{pane_id}"`,
+				`run-shell -b "${detachCommand} #{pane_id}${suffix}"`,
 				`send-keys ${key}`,
-			]);
-		for (const key of ["C-m", "C-M"])
-			await this.cmd([
-				"bind-key",
-				"-n",
-				key,
-				"if-shell",
-				"-F",
-				"#{@serenity_session}",
-				`run-shell -b "${detachCommand} #{pane_id} master"`,
-				`if-shell -F "#{@serenity_map}" "send-keys Escape '${CTRL_M_CSI_U}'" "send-keys ${key}"`,
 			]);
 		await this.cmd([
 			"bind-key",
@@ -313,7 +315,7 @@ export class Tmux {
 					line.includes(`send-keys ${key}`),
 			);
 		return (
-			["C-g", "C-G", "C-m", "C-M"].every((key) => bound(key, detachCommand)) &&
+			["C-q", "C-Q", "C-w", "C-W"].every((key) => bound(key, detachCommand)) &&
 			bound("S-Enter", "@serenity_map")
 		);
 	}
@@ -337,9 +339,9 @@ export class Tmux {
 			});
 	}
 
-	/** Presses Ctrl+m in `pane` as a CSI u key, as the binding does in the map pane. */
-	async pressCtrlM(pane: string): Promise<void> {
-		await this.cmd(["send-keys", "-t", pane, "Escape", CTRL_M_CSI_U]);
+	/** Presses Ctrl+w in `pane`, so the map there focuses the master. */
+	async pressCtrlW(pane: string): Promise<void> {
+		await this.cmd(["send-keys", "-t", pane, "C-w"]);
 	}
 
 	/**

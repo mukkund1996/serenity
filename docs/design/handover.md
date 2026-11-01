@@ -14,7 +14,7 @@ Copied from the design canvas "Agent Mind Map CLI — Screens" ([source](https:/
 | `1 · Zoom: map` | Lowest zoom (layout in ADR 0018). Master box in the centre (status line, latest message to or from the master, input). Topics as rounded bubbles around it, joined by right-angle links. One line per agent: cursor `▸`, glyph, name, `⚑` if watched. Waiting rows are inverse yellow. At most ~5 agents per bubble, then `+N more`. No PR info here. |
 | `2 · Zoom: topics` | Default view. Master panel in the centre of the screen with topics on both sides, or docked left when the terminal is too narrow for two sides (ADR 0027), vertically centred on its trunk. Every topic is shown, neediest first, with all of its cards (ADR 0017). Bubbles are a grid of 40-col cards and size to their content (one column when it fits). A stack taller than the screen scrolls to the focused card. |
 | `2b · infra expanded` | Dropped (ADR 0017): every card is already shown. |
-| `3 · Zoom: session` | The real Claude Code pane, untouched, in the right ⅔, framed in the status colour with name, PR and WAITING chip on its top border. Master floats left (not full height): "about this session" with a one-key suggested reply, then the other sessions that need you. `Ctrl+g` back to the map. |
+| `3 · Zoom: session` | The real Claude Code pane, untouched, in the right ⅔, framed in the status colour with name, PR and WAITING chip on its top border. Master floats left (not full height): "about this session" with a one-key suggested reply, then the other sessions that need you. `Ctrl+q` back to the map. |
 | `4a · Reply` | `i` focuses the card's input row. `Tab` in the input opens recent replies; the master's pick is first and highlighted. |
 | `4b · Confirm` | Opens on `x`, on `e` for a cleanup suggestion, or when `y` is pressed but something is unsafe. Lists every step plus a safety line (uncommitted changes, unpushed commits, PR merged). |
 | `4c · Slack draft` | **v2.** Only when the master decides a message is worth sending. Destination, why, editable text. Nothing is sent without `y`. |
@@ -35,7 +35,7 @@ Copied from the design canvas "Agent Mind Map CLI — Screens" ([source](https:/
 - `[` / `]` jump to the previous / next topic, wrapping around.
 
 ## Zoom levels
-`map` › `topics` › `session`. The current level is always shown top right (`zoom: topics`). `Esc` goes one level up; inside a session use `Ctrl+g` because Esc belongs to Claude Code.
+`map` › `topics` › `session`. The current level is always shown top right (`zoom: topics`). `Esc` goes one level up; inside a session use `Ctrl+q` because Esc belongs to Claude Code.
 
 ## Status language
 | State | Shown as |
@@ -57,7 +57,7 @@ Only these three glyphs exist. PR status is words only: checks failing (red), ch
 - Focus = heavy white frame `┏━┓`. Waiting = yellow light frame. Others = grey light frame.
 
 ## Header and footer
-Header: `◆ mindmap  <repo>` · centred inverse-yellow `4 need you` · `zoom: …`. Footer: `←↑↓→ WASD move · Enter open · i message · Ctrl+m master` left (ADR 0026, 0028), `? shortcuts` always bottom right.
+Header: `◆ mindmap  <repo>` · centred inverse-yellow `4 need you` · `zoom: …`. Footer: `←↑↓→ WASD move · Enter open · i message · Ctrl+w master` left (ADR 0026, 0028), `? shortcuts` always bottom right.
 
 ## Frames and grid
 | Element | Characters |
@@ -96,7 +96,7 @@ Status never relies on colour alone except idle and archived, which are delibera
 | `←` `↑` `↓` `→` · WASD | move between nodes (between topics on the map zoom; ADR 0019, 0026, 0028) |
 | `Enter` · `Esc` | on a card attach; go into the master · leave it (ADR 0028) |
 | `↑` `↓` `w` `s` | inside the master, select an element, marked `▸` (ADR 0028) |
-| `c` · `Ctrl+m` | center on master · focus the master from any view, the session too (ADR 0026) |
+| `c` · `Ctrl+w` | center on master · focus the master from any view, the session too (ADR 0026) |
 | `z` `Z` | zoom out (map) / zoom in (topics; on a card in topics, into its session) |
 | `Esc` | one level up (outside a node) |
 | `[` `]` | previous / next topic |
@@ -106,7 +106,7 @@ Status never relies on colour alone except idle and archived, which are delibera
 | Key | Action |
 |-----|--------|
 | `i` | reply · `Tab` opens recent replies |
-| `Enter` | attach the card · inside the master, act on `▸` · `Ctrl+g` back |
+| `Enter` | attach the card · inside the master, act on `▸` · `Ctrl+q` back |
 | `o` | open PR |
 | `f` | watch (remind master when done) |
 | `p` | pin / unpin: keep for reuse under `pinned`; never done, resumed on attach (ADR 0022) |
@@ -119,7 +119,7 @@ Status never relies on colour alone except idle and archived, which are delibera
 | `i` · `M` | message master (on the master; `@` tags a session to relay to, ADR 0036, 0037) · expand master (v1.1) |
 | `y` `e` `n` | approve · edit / inspect · decline a suggestion |
 | `H` | archived sessions, nested under their topic |
-| `?` | shortcuts panel (`Ctrl+g ?` inside a session) |
+| `?` | shortcuts panel (`Ctrl+q ?` inside a session) |
 | `q` | quit the map; sessions keep running |
 
 ## Data model sketch

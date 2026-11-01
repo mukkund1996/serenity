@@ -143,7 +143,7 @@
 <p><kbd>N</kbd> opens the New session form: a name, a first prompt, and either a <strong>new worktree</strong> or an <strong>existing branch</strong>. A new worktree is created beside the repo, at <code>&lt;parent&gt;/&lt;repo&gt;-&lt;name&gt;</code>, on a new branch named after the session off the default branch. You can also ask the master to start sessions for you (see <a href="#mentions"><code>@new</code></a>).</p>
 <p><kbd>I</kbd> imports Claude sessions you already run in tmux. They join the map and stay in their windows.</p>
 <h3>Work in one</h3>
-<p><kbd>Enter</kbd> on a card attaches to the session: you are in its Claude Code pane, as it is. <kbd>Ctrl</kbd>+<kbd>g</kbd> takes you back to the map. To send a quick message without attaching, press <kbd>i</kbd> on its card.</p>
+<p><kbd>Enter</kbd> on a card attaches to the session: you are in its Claude Code pane, as it is. <kbd>Ctrl</kbd>+<kbd>q</kbd> takes you back to the map. To send a quick message without attaching, press <kbd>i</kbd> on its card.</p>
 <h3>Pull requests</h3>
 <p>Each card shows its PR and checks via <code>gh</code>. <kbd>o</kbd> opens the PR. Ready PRs get a review request from CODEOWNERS, and a merged PR finishes the session.</p>
 <h3>Keep, rename, end</h3>
@@ -184,7 +184,7 @@
 </ul>
 <p>The master proposes; nothing runs until you approve it. The exceptions are the ones you ask for in so many words: starting sessions from a brief, and messaging a session you <code>@</code>-mention.</p>
 <h3>Talking to it</h3>
-<p><kbd>Ctrl</kbd>+<kbd>m</kbd> focuses the master from anywhere (in Apple Terminal, <kbd>Enter</kbd>). <kbd>i</kbd> on the master opens its chat input, which stays open after you send. <kbd>Shift</kbd>+<kbd>Enter</kbd> or <kbd>Ctrl</kbd>+<kbd>J</kbd> starts a new line, <kbd>Esc</kbd> closes it, and <kbd>PgUp</kbd> <kbd>PgDn</kbd> scroll the conversation.</p>
+<p><kbd>Ctrl</kbd>+<kbd>w</kbd> focuses the master from anywhere. <kbd>i</kbd> on the master opens its chat input, which stays open after you send. <kbd>Shift</kbd>+<kbd>Enter</kbd> or <kbd>Ctrl</kbd>+<kbd>J</kbd> starts a new line, <kbd>Esc</kbd> closes it, and <kbd>PgUp</kbd> <kbd>PgDn</kbd> scroll the conversation.</p>
 </section>
 
 <!-- ============ MENTIONS ============ -->
@@ -221,9 +221,9 @@
 <tr><td><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> / <kbd>WASD</kbd></td><td>Move between nodes</td></tr>
 <tr><td><kbd>Enter</kbd></td><td>Attach to a session, or go into the master; on a NEEDS YOU item, mark it seen</td></tr>
 <tr><td><kbd>i</kbd></td><td>Send the focused session a quick message; on the master, open its chat input</td></tr>
-<tr><td><kbd>Ctrl</kbd>+<kbd>g</kbd></td><td>Back to the map from inside a session</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>q</kbd></td><td>Back to the map from inside a session</td></tr>
 <tr><td><kbd>z</kbd> <kbd>Z</kbd> <kbd>Esc</kbd></td><td>Zoom out to the map · zoom in · one level up</td></tr>
-<tr><td><kbd>Ctrl</kbd>+<kbd>m</kbd></td><td>Focus the master from anywhere (<kbd>Enter</kbd> in Apple Terminal)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>w</kbd></td><td>Focus the master from anywhere</td></tr>
 <tr><td><kbd>PgUp</kbd> <kbd>PgDn</kbd></td><td>On the master, scroll its conversation (<kbd>Shift</kbd>+<kbd>↑</kbd> <kbd>↓</kbd> too)</td></tr>
 <tr><td><kbd>Tab</kbd></td><td>Jump to the next session that needs you</td></tr>
 <tr><td><kbd>y</kbd> <kbd>e</kbd> <kbd>n</kbd></td><td>Approve, edit or decline the master's suggestion</td></tr>
@@ -236,7 +236,7 @@
 </tbody>
 </table></div>
 <h3>In a text field</h3>
-<p><kbd>←</kbd> <kbd>→</kbd> <kbd>Home</kbd> <kbd>End</kbd> move the cursor, <kbd>Option</kbd>+<kbd>←</kbd> <kbd>→</kbd> by a word. <kbd>Ctrl</kbd>+<kbd>a</kbd> <kbd>e</kbd> <kbd>w</kbd> <kbd>u</kbd> <kbd>k</kbd> and <kbd>Option</kbd>+<kbd>Backspace</kbd> edit as in a shell.</p>
+<p><kbd>←</kbd> <kbd>→</kbd> <kbd>Home</kbd> <kbd>End</kbd> move the cursor, <kbd>Option</kbd>+<kbd>←</kbd> <kbd>→</kbd> by a word. <kbd>Ctrl</kbd>+<kbd>a</kbd> <kbd>e</kbd> <kbd>u</kbd> <kbd>k</kbd> and <kbd>Option</kbd>+<kbd>Backspace</kbd> edit as in a shell.</p>
 <div class="d-next">
 <a href="https://github.com/mukkund1996/serenity#configuration">Configuration ↗</a>
 <a href="https://github.com/mukkund1996/serenity/blob/main/docs/adr/README.md">Why it works this way ↗</a>
