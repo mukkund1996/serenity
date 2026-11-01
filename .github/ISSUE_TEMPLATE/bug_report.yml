@@ -2,6 +2,10 @@ name: Bug report
 description: Something in serenity doesn't work as it should
 labels: [bug]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Found a security problem? Please don't file it here; report it privately as [SECURITY.md](https://github.com/mukkund1996/serenity/blob/main/SECURITY.md) describes.
   - type: textarea
     id: what
     attributes:

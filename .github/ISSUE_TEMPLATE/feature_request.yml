@@ -1,0 +1,50 @@
+name: Feature request
+description: Suggest a change or a new feature for serenity
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Not sure yet, or just an idea to talk through? [Discussions](https://github.com/mukkund1996/serenity/discussions) is a good first stop. Larger changes get an ADR, so agreeing on the design first saves work.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+      placeholder: When I have ten sessions open, I can't tell which …
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What serenity should do instead. Keys, screens and config are all fair game.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways to solve it, or how you work around it now.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of serenity is this about?
+      multiple: true
+      options:
+        - Map
+        - Sessions
+        - NEEDS YOU
+        - Master agent
+        - Slack
+        - Install
+        - Website / docs
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: serenity version
+      description: Output of `serenity version`, if you have it installed

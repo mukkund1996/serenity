@@ -5,7 +5,8 @@ Thanks for helping out. This page covers how the repo works and what a pull requ
 ## Questions, ideas and bugs
 
 - **Questions and ideas:** start a thread in [GitHub Discussions](https://github.com/mukkund1996/serenity/discussions).
-- **Bugs:** open an [issue](https://github.com/mukkund1996/serenity/issues) with what you did, what you expected, and `serenity version`. The daemon log (`~/.local/state/serenity/daemon.log`) and `serenity doctor` output usually help.
+- **Bugs and feature requests:** open an [issue](https://github.com/mukkund1996/serenity/issues/new/choose) from its form. For a bug, give what you did, what you expected, and `serenity version`. The daemon log (`~/.local/state/serenity/daemon.log`) and `serenity doctor` output usually help.
+- **Security problems:** don't open an issue. Report them privately as [SECURITY.md](SECURITY.md) describes.
 - **Larger changes:** discuss them first, so the design can be agreed before you write the code.
 
 ## Setup

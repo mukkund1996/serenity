@@ -1,5 +1,8 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
   - name: Questions and ideas
     url: https://github.com/mukkund1996/serenity/discussions
-    about: Ask a question or suggest an idea in GitHub Discussions
+    about: Ask a question or talk through an idea in GitHub Discussions
+  - name: Report a security vulnerability
+    url: https://github.com/mukkund1996/serenity/security/advisories/new
+    about: Report it privately, not in a public issue. See SECURITY.md.
