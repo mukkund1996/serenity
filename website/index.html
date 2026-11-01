@@ -29,11 +29,35 @@ a:hover{color:#ffffff}
 .srn-cur{animation:srn-blink 1.05s steps(1) infinite}
 .srn-pulse{animation:srn-pulse 1.8s ease-in-out infinite}
 .srn-busy{animation:srn-pulse 0.9s ease-in-out infinite}
+/* the SCROLL hint's arrow bobs gently so it reads as "scroll down" */
+.srn-bob{display:inline-block;color:#7fc77f;animation:srn-bob 1.8s ease-in-out infinite}
 @keyframes srn-blink{50%{opacity:0}}
 @keyframes srn-pulse{0%,100%{opacity:1}50%{opacity:.35}}
-@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}.srn-cur,.srn-pulse,.srn-busy{animation:none}}
-/* phones: drop the Install nav link so logo, GitHub and the version pill fit on one line */
+@keyframes srn-bob{0%,100%{transform:translateY(-1px);opacity:.75}50%{transform:translateY(4px);opacity:1}}
+/* the Clarity card's master: @ list rows, and the session its @copy starts */
+.srn-at-list{position:absolute;left:0;right:0;bottom:0;background:#161a1f}
+.srn-at-list div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srn-at-at{color:#c792ea}
+.srn-at-node{transition:opacity .5s ease,transform .5s ease}
+.srn-at-node.is-off{opacity:0;transform:translateY(-8px);visibility:hidden}
+/* autoplay for readers who don't scroll: the Watch link beside the hint, and the play/pause pill */
+.srn-watch{display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:0 10px;border:0;border-radius:999px;background:transparent;color:#d0d4da;font:inherit;letter-spacing:inherit;cursor:pointer}
+.srn-watch:hover,.srn-watch:focus-visible{background:#161a1f;color:#ffffff}
+#srn-tour{position:fixed;left:50%;bottom:20px;z-index:40;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:4px 18px 4px 4px;background:rgba(15,18,22,.94);border:1px solid #3a3f47;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.45);font:500 12px/1 'JetBrains Mono',Menlo,monospace;letter-spacing:.1em;color:#d0d4da;transition:opacity .3s ease,transform .3s ease,visibility .3s}
+#srn-tour.is-off{opacity:0;visibility:hidden;pointer-events:none;transform:translate(-50%,8px)}
+#srn-tour button{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border:0;border-radius:999px;background:transparent;color:inherit;font:inherit;letter-spacing:inherit;cursor:pointer}
+#srn-tour button:hover,#srn-tour button:focus-visible{background:#161a1f;color:#ffffff}
+#srn-tour .srn-ico-play,#srn-tour.is-paused .srn-ico-pause{display:none}
+#srn-tour.is-paused .srn-ico-play{display:inline}
+.srn-tour-bar{width:88px;height:2px;border-radius:2px;background:#23272e;overflow:hidden}
+.srn-tour-bar span{display:block;height:100%;background:#7fc77f;transform-origin:0 50%;transform:scaleX(0)}
+.srn-vis{min-height:320px}
+@media (min-width: 1100px){.srn-vis{min-height:400px}}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}.srn-cur,.srn-pulse,.srn-busy,.srn-bob{animation:none}.srn-at-node{transition:none}#srn-tour{transition:none}}
+/* phones: drop the Install nav link so logo, Docs, GitHub and the version pill fit on one line */
 @media (max-width: 639px){.srn-wide{display:none}}
+/* narrow phones: the pill keeps BETA and drops the version, so Docs never touches the logo */
+@media (max-width: 399px){.srn-ver{display:none}}
 </style>
 </head>
 <body>
@@ -46,12 +70,13 @@ a:hover{color:#ffffff}
 <div aria-hidden="true" style="position: absolute; pointer-events: none; border-radius: 50%; background: radial-gradient(closest-side, rgba(127,199,127,.38), rgba(127,199,127,.14) 55%, rgba(127,199,127,0) 100%)" data-st="position: absolute; pointer-events: none; border-radius: 50%; background: radial-gradient(closest-side, rgba(127,199,127,.38), rgba(127,199,127,.14) 55%, rgba(127,199,127,0) 100%); {{glow}}"></div>
 
 <!-- top bar -->
-<div style="position: absolute; top: 0; left: 0; right: 0; height: 64px; z-index: 20; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; box-sizing: border-box; max-width: 1280px; margin: 0 auto">
+<div style="position: absolute; top: 0; left: 0; right: 0; height: 64px; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 24px; box-sizing: border-box; max-width: 1280px; margin: 0 auto">
 <a href="#top" style="display: flex; align-items: center; gap: 10px; height: 24px; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 15px; font-weight: 500; line-height: 1; color: #e8eaee"><span style="display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; font-size: 17px; line-height: 1; color: #7fc77f; font-family: 'JetBrains Mono', 'Noto Sans Symbols 2', 'Apple Symbols', sans-serif" aria-hidden="true">◈</span><span style="display: inline-flex; align-items: center; height: 18px; line-height: 1">serenity</span></a>
 <nav style="display: flex; align-items: center; font-size: 14px" data-st="display: flex; align-items: center; gap: {{navGap}}; font-size: 14px">
 <a href="#install" style="color: #d0d4da" class="srn-wide">Install</a>
+<a href="docs/" style="color: #d0d4da">Docs</a>
 <a href="https://github.com/mukkund1996/serenity" style="color: #d0d4da">GitHub</a>
-<span title="serenity is in beta" style="display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border: 1px solid #3a3f47; border-radius: 999px; font: 500 11px/1 'JetBrains Mono', Menlo, monospace; letter-spacing: .04em; color: #858c97; white-space: nowrap"><span style="color: #7fc77f; letter-spacing: .1em">BETA</span>__SERENITY_VERSION__</span>
+<span title="serenity is in beta" style="display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border: 1px solid #3a3f47; border-radius: 999px; font: 500 11px/1 'JetBrains Mono', Menlo, monospace; letter-spacing: .04em; color: #858c97; white-space: nowrap"><span style="color: #7fc77f; letter-spacing: .1em">BETA</span><span class="srn-ver">__SERENITY_VERSION__</span></span>
 </nav>
 </div>
 
@@ -357,11 +382,13 @@ a:hover{color:#ffffff}
 <span style="position: absolute" data-st="position: absolute; {{side2}}">Distraction</span>
 <span style="position: absolute" data-st="position: absolute; {{side3}}">Noise</span>
 </div>
-<div style="position: absolute; left: 0; right: 0; text-align: center; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; letter-spacing: .1em; color: #858c97" data-st="position: absolute; left: 0; right: 0; text-align: center; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; letter-spacing: .1em; color: #858c97; {{hint}}">SCROLL ↓</div>
+<div style="position: absolute; left: 0; right: 0; display: flex; align-items: center; justify-content: center; gap: 6px; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; line-height: 1; letter-spacing: .1em; color: #858c97" data-st="position: absolute; left: 0; right: 0; display: flex; align-items: center; justify-content: center; gap: 6px; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; line-height: 1; letter-spacing: .1em; color: #858c97; {{hint}}"><span>SCROLL <span class="srn-bob">↓</span></span><span aria-hidden="true" style="color: #3a3f47">·</span><button type="button" class="srn-watch" data-tour="watch"><svg width="9" height="10" viewBox="0 0 9 10" fill="#7fc77f" aria-hidden="true"><path d="M0 0l9 5-9 5z"/></svg>WATCH</button></div>
 
 </div>
 </div>
 <!-- /scroll story -->
+<!-- autoplay control: shown once the story plays by itself or from WATCH (site.js) -->
+<div id="srn-tour" class="is-off"><button type="button" data-tour="toggle" aria-label="Pause the story"><svg class="srn-ico-pause" width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><rect x="1" y="0" width="3" height="10"/><rect x="6" y="0" width="3" height="10"/></svg><svg class="srn-ico-play" width="10" height="10" viewBox="0 0 9 10" fill="#7fc77f" aria-hidden="true"><path d="M0 0l9 5-9 5z"/></svg><span data-tour="label">PAUSE</span></button><span class="srn-tour-bar" aria-hidden="true"><span data-tour="fill"></span></span></div>
 
 <!-- ============ QUICK INSTALL (right after the story) ============ -->
 <section style="max-width: 860px; margin: 0 auto; padding: 96px 24px 8px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center">
@@ -379,7 +406,7 @@ a:hover{color:#ffffff}
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 24px; align-items: stretch">
 
 <div style="display: flex; flex-direction: column; align-items: center; gap: 28px; text-align: center; border: 1px solid #23272e; border-radius: 8px; padding: 40px 24px 36px; box-sizing: border-box">
-<div style="min-height: 320px; width: 100%; display: flex; align-items: center; justify-content: center">
+<div class="srn-vis" style="width: 100%; display: flex; align-items: center; justify-content: center">
 <div style="position: relative; width: 100%; max-width: 340px; box-sizing: border-box; border: 1px solid #41678c; border-radius: 3px; background: #0f1216; padding: 22px 18px 14px; font: 14px/21px 'JetBrains Mono', Menlo, monospace; color: #d0d4da; text-align: left">
 <div style="position: absolute; top: -11px; left: 12px; right: 12px; display: flex; justify-content: space-between; line-height: 21px">
 <span style="background: #0d0f12; padding: 0 6px"><span style="color: #6cb0f0">●</span> auth-refactor</span>
@@ -393,7 +420,7 @@ a:hover{color:#ffffff}
 </div>
 
 <div style="display: flex; flex-direction: column; align-items: center; gap: 28px; text-align: center; border: 1px solid #23272e; border-radius: 8px; padding: 40px 24px 36px; box-sizing: border-box">
-<div style="min-height: 320px; width: 100%; display: flex; align-items: center; justify-content: center">
+<div class="srn-vis" style="width: 100%; display: flex; align-items: center; justify-content: center">
 <div style="position: relative; width: 100%; max-width: 340px; box-sizing: border-box; border: 1px solid #f2c14e; border-radius: 3px; background: #0f1216; padding: 22px 18px 14px; font: 14px/21px 'JetBrains Mono', Menlo, monospace; color: #d0d4da; text-align: left">
 <div style="position: absolute; top: -11px; left: 12px; right: 12px; display: flex; justify-content: space-between; line-height: 21px">
 <span style="background: #0d0f12; padding: 0 6px"><span class="srn-pulse" style="color: #f2c14e">◐</span> flaky-e2e</span>
@@ -408,10 +435,14 @@ a:hover{color:#ffffff}
 </div>
 
 <div style="display: flex; flex-direction: column; align-items: center; gap: 28px; text-align: center; border: 1px solid #23272e; border-radius: 8px; padding: 40px 24px 36px; box-sizing: border-box">
-<div style="min-height: 320px; width: 100%; display: flex; align-items: center; justify-content: center">
-<div style="position: relative; width: 100%; max-width: 360px; box-sizing: border-box; border: 1px solid #8a6fae; border-radius: 12px; background: #0f1216; padding: 20px 16px 14px; font: 12.5px/19px 'JetBrains Mono', Menlo, monospace; color: #d0d4da; display: flex; flex-direction: column; text-align: left">
+<div class="srn-vis" style="width: 100%; display: flex; align-items: center; justify-content: center">
+<!-- the master's @ features (ADRs 0036, 0048, 0049): site.js types "@", completes a name, relays a message,
+     then runs "@copy @session <follow-up>"; this markup is the still frame shown without JS or under reduced motion -->
+<div id="srn-at" style="width: 100%; max-width: 360px; display: flex; flex-direction: column; align-items: stretch">
+<div style="position: relative; box-sizing: border-box; border: 1px solid #8a6fae; border-radius: 12px; background: #0f1216; padding: 20px 16px 14px; font: 12.5px/19px 'JetBrains Mono', Menlo, monospace; color: #d0d4da; display: flex; flex-direction: column; text-align: left">
 <div style="position: absolute; top: -10px; left: 14px; line-height: 19px; background: #0d0f12; padding: 0 6px; color: #c792ea">◆ master</div>
-<div style="color: #858c97">watching 4 sessions, 1 thread</div>
+<div style="color: #858c97">watching <span data-at="count">5</span> sessions, 1 thread</div>
+<div style="position: relative">
 <div style="margin-top: 10px; font-size: 11px; letter-spacing: .12em; color: #858c97">NEEDS YOU</div>
 <div><span class="srn-pulse" style="color: #f2c14e">◐</span> flaky-e2e</div>
 <div style="color: #858c97; padding-left: 16px">wants to edit e2e/run.ts</div>
@@ -419,8 +450,18 @@ a:hover{color:#ffffff}
 <div style="margin-top: 8px"><span style="color: #858c97">#</span> eng-platform · Priya</div>
 <div style="color: #858c97; padding-left: 16px">is the deploy blocked on #482?</div>
 <div style="display: flex; justify-content: space-between; gap: 8px; padding-left: 16px"><span><span style="color: #c792ea">◆</span> reply "Not blocked, checks running."</span><span style="color: #ffffff; font-weight: 700; white-space: nowrap">y e n</span></div>
-<div style="margin-top: 10px; border-top: 1px solid #3a3f47; padding-top: 8px"><span style="color: #c792ea">◆ master ›</span> Two things need you. Everything else is quiet.</div>
-<div style="margin-top: 6px; background: #161a1f; padding: 0 8px; color: #858c97">› <span class="srn-cur" style="color: #d0d4da">█</span></div>
+<div style="margin-top: 10px; border-top: 1px solid #3a3f47; padding-top: 8px; min-height: 57px; display: flex; gap: 1ch"><span data-at="who" style="flex: none; width: 3ch; color: #6cb0f0">you</span><span data-at="msg" style="min-width: 0; overflow-wrap: anywhere"><span class="srn-at-at">@copy</span> <span class="srn-at-at">@auth-refactor</span> add keychain tests</span></div>
+<div data-at="list" class="srn-at-list" hidden></div>
+</div>
+<div style="margin-top: 6px; background: #161a1f; padding: 0 8px; color: #858c97; overflow-wrap: anywhere"><span style="color: #c792ea">›</span> <span data-at="in" style="color: #d0d4da"></span><span class="srn-cur" style="color: #d0d4da">█</span></div>
+</div>
+<div data-at="node" class="srn-at-node" style="display: flex; flex-direction: column; align-items: center">
+<div style="width: 2px; height: 22px; background: #8a6fae"></div>
+<div style="position: relative; width: 100%; box-sizing: border-box; border: 1px solid #41678c; border-radius: 3px; background: #0f1216; padding: 16px 14px 8px; font: 12.5px/19px 'JetBrains Mono', Menlo, monospace; color: #d0d4da; text-align: left">
+<div style="position: absolute; top: -10px; left: 10px; line-height: 19px; background: #0d0f12; padding: 0 6px"><span style="color: #6cb0f0">●</span> keychain-tests</div>
+<div style="color: #858c97">from auth-refactor's handover doc</div>
+</div>
+</div>
 </div>
 </div>
 <p style="margin: 0; display: flex; justify-content: center; align-items: baseline; column-gap: .5em; font-family: 'Instrument Serif', Georgia, serif; font-size: clamp(34px, 3.6vw, 44px); line-height: 1.1"><span style="position: relative; display: inline-block; color: #6b717b">Noise<span style="position: absolute; left: -4%; right: -4%; top: 56%; height: 3px; background: #858c97"></span></span><span style="color: #7fc77f">Clarity</span></p>
@@ -428,6 +469,19 @@ a:hover{color:#ffffff}
 </div>
 
 </div>
+</section>
+
+<!-- ============ WHY I BUILT THIS (in Mukkund's words) ============ -->
+<section id="why" style="max-width: 720px; margin: 0 auto; padding: 100px 24px 0; box-sizing: border-box">
+<p style="margin: 0 0 16px; text-align: center; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; letter-spacing: .14em; color: #858c97">WHY I BUILT THIS</p>
+<h2 style="margin: 0 0 32px; text-align: center; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: clamp(32px, 4.4vw, 48px); line-height: 1.08; color: #e8eaee; text-wrap: balance">One session was just sitting there, waiting on me.</h2>
+<div style="display: flex; flex-direction: column; gap: 18px; font-size: 17px; line-height: 1.7; color: #b5bac2">
+<p style="margin: 0">I usually run six to eight Claude sessions. Most of them are feature and bug-fix work; a few stay open for quick prompts, product work and analysing product analytics. I ran them in plain Claude windows, tmux panes, iTerm windows and the terminals in VS Code.</p>
+<p style="margin: 0">I found myself scrolling through tmux sessions and clicking into each one to make sure it was still running. At some point I realized a big portion of my engineering was spent on switching contexts, while one session sat there waiting for a simple, straightforward input from me.</p>
+<p style="margin: 0">I wanted one persistent session that kept track of all the others, and took away the overhead of telling my teammates on Slack where everything stood. That became serenity's master agent. Now I have a lot more focus: I get to any session quickly, and I delegate both the tasks and the status updates through the master.</p>
+<p style="margin: 0">It's for developers, product engineers, and anyone who uses Claude Code (and, in the future, other coding harnesses) on a regular basis.</p>
+</div>
+<p style="margin: 28px 0 0; font-family: 'Instrument Serif', Georgia, serif; font-size: 24px; font-style: italic; color: #e8eaee">— <a href="https://thisismukkunds.site/" style="color: #7fc77f">Mukkund</a></p>
 </section>
 
 <!-- ============ INSTALL ============ -->
@@ -463,6 +517,7 @@ a:hover{color:#ffffff}
 <div style="display: flex; gap: 24px; flex-wrap: wrap">
 <span>__SERENITY_VERSION__ · beta</span>
 <span>MIT license</span>
+<a href="docs/" style="color: #d0d4da">Docs</a>
 <a href="https://github.com/mukkund1996/serenity" style="color: #d0d4da">github.com/mukkund1996/serenity</a>
 </div>
 <p style="flex-basis: 100%; margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: #b5bac2"><span style="color: #7fc77f; font: 500 11px/1 'JetBrains Mono', Menlo, monospace; letter-spacing: .1em; margin-right: 8px">BETA</span>serenity is still in development: expect rough edges and changes between releases.</p>

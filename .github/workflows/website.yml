@@ -44,8 +44,8 @@ jobs:
           echo "version: $tag"
           mkdir _site
           cp -R website/. _site/
-          sed -i "s/__SERENITY_VERSION__/$tag/g" _site/index.html
-          if grep -q __SERENITY_VERSION__ _site/index.html; then echo "version placeholder left in the page"; exit 1; fi
+          find _site -name '*.html' -exec sed -i "s/__SERENITY_VERSION__/$tag/g" {} +
+          if grep -rl --include='*.html' __SERENITY_VERSION__ _site; then echo "version placeholder left in the pages above"; exit 1; fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

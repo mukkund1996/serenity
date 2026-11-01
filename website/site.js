@@ -408,7 +408,8 @@ function render(st) {
 		cap2: fade(c2),
 		// phones: tighter nav so logo, GitHub and the version pill fit on one line
 		navGap: mob ? "16px" : "24px",
-		hint: `top:${n(vh - 36, 1)}px;opacity:${n(1 - ss(seg(0, 0.03)), 3)}`,
+		// the hint row holds the WATCH button, so once it has faded it stops taking clicks
+		hint: `top:${n(vh - 50, 1)}px;opacity:${n(1 - ss(seg(0, 0.03)), 3)};${seg(0, 0.03) >= 1 ? "visibility:hidden" : ""}`,
 	};
 }
 
@@ -452,6 +453,287 @@ for (const btn of document.querySelectorAll("[data-copy]")) {
 			done();
 		}
 	});
+}
+
+// ---- the Clarity card: the master's @ features ----
+// Plays while the card is on screen: "@" lists the commands and then the sessions
+// (ADR 0048), typed letters narrow it, Tab completes "@name " (0036), the message is
+// relayed and the master says what it sent (0037); then "@copy @session <follow-up>"
+// has the session write a handover doc that starts a new session (0049). The HTML
+// holds the still frame, which stays as is without JS or under reduced motion.
+const atCard = document.getElementById("srn-at");
+if (atCard) {
+	const $ = (k) => atCard.querySelector(`[data-at="${k}"]`);
+	const ui = {
+		count: $("count"),
+		who: $("who"),
+		msg: $("msg"),
+		list: $("list"),
+		input: $("in"),
+		node: $("node"),
+	};
+	const COMMANDS = {
+		new: "start sessions from a brief",
+		copy: "hand a session's work to a new session",
+		handover: "get a session's handover doc",
+	};
+	const SESSIONS = [
+		"auth-refactor",
+		"flaky-e2e",
+		"install-docs",
+		"release-notes",
+	];
+	// matchMentions() from core: commands starting with the letters, then names starting with them, then names containing them
+	const matches = (q) => [
+		...Object.keys(COMMANDS).filter((c) => c.startsWith(q)),
+		...SESSIONS.filter((s) => s.startsWith(q)),
+		...SESSIONS.filter((s) => !s.startsWith(q) && s.includes(q)),
+	];
+	const esc = (t) => t.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+	const tagged = (t) =>
+		esc(t).replace(/@[\w-]+/g, (m) => `<span class="srn-at-at">${m}</span>`);
+
+	// the timeline: [ms to hold, state changes]; typing expands into one step per letter
+	const QUIET = "Two things need you. Everything else is quiet.";
+	const steps = [];
+	let text = "";
+	const at = (ms, patch) => steps.push([ms, patch]);
+	const type = (s, ms = 70) => {
+		for (const ch of s) {
+			text += ch;
+			const draft = /(?:^|\s)@([\w-]*)$/.exec(text);
+			at(ms, { input: text, list: draft ? matches(draft[1]) : null });
+		}
+	};
+	const complete = (name) => {
+		text = `${text.replace(/@[\w-]*$/, "")}@${name} `;
+		at(450, { input: text, list: null });
+	};
+	const send = (ms) => {
+		at(ms, { input: "", list: null, who: "you", msg: text });
+		text = "";
+	};
+	at(1400, {
+		input: "",
+		list: null,
+		who: "◆",
+		msg: QUIET,
+		node: false,
+		count: 4,
+	});
+	type("@");
+	steps[steps.length - 1][0] = 1500;
+	type("in", 260);
+	steps[steps.length - 1][0] = 700;
+	complete("install-docs");
+	type("also cover the Homebrew tap");
+	send(1100);
+	at(2400, {
+		who: "◆",
+		msg: "Sent to install-docs: also cover the Homebrew tap.",
+	});
+	type("@c", 200);
+	steps[steps.length - 1][0] = 1100;
+	complete("copy");
+	type("@au", 220);
+	steps[steps.length - 1][0] = 800;
+	complete("auth-refactor");
+	type("add keychain tests");
+	send(1200);
+	at(1800, { who: "◆", msg: "Asked auth-refactor for its handover doc." });
+	at(5200, {
+		msg: "auth-refactor wrote its handover doc. Started keychain-tests from it.",
+		node: true,
+		count: 5,
+	});
+
+	const show = (st) => {
+		ui.count.textContent = st.count;
+		ui.who.textContent = st.who;
+		ui.who.style.color = st.who === "you" ? "#6cb0f0" : "#c792ea";
+		ui.msg.innerHTML = tagged(st.msg);
+		ui.input.innerHTML = tagged(st.input);
+		ui.node.classList.toggle("is-off", !st.node);
+		if (st.list?.length) {
+			ui.list.innerHTML = st.list
+				.map(
+					(name, i) =>
+						`<div style="color:${i ? "#d0d4da" : "#ffffff"};font-weight:${i ? 400 : 700}">${i ? "&nbsp;&nbsp;" : "▸ "}@${name}${COMMANDS[name] ? ` <span style="color:#858c97;font-weight:400">${COMMANDS[name]}</span>` : ""}</div>`,
+				)
+				.join("");
+			ui.list.hidden = false;
+		} else {
+			ui.list.hidden = true;
+		}
+	};
+
+	const still = atCard.cloneNode(true);
+	const motion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+	let timer = 0;
+	let i = 0;
+	let st = {};
+	const stop = () => {
+		clearTimeout(timer);
+		timer = 0;
+	};
+	const next = () => {
+		if (i >= steps.length) {
+			i = 0;
+			st = {};
+		}
+		const [ms, patch] = steps[i++];
+		st = { ...st, ...patch };
+		show(st);
+		timer = setTimeout(next, ms);
+	};
+	const play = () => {
+		if (timer || motion?.matches) return;
+		i = 0;
+		st = {};
+		next();
+	};
+	const rest = () => {
+		stop();
+		// back to the still frame
+		for (const k of Object.keys(ui)) {
+			const fresh = still.querySelector(`[data-at="${k}"]`);
+			ui[k].innerHTML = fresh.innerHTML;
+			ui[k].className = fresh.className;
+			ui[k].hidden = fresh.hidden;
+			ui[k].setAttribute("style", fresh.getAttribute("style") ?? "");
+		}
+	};
+	let onScreen = false;
+	if (window.IntersectionObserver) {
+		new IntersectionObserver(
+			([e]) => {
+				onScreen = e.isIntersecting;
+				if (onScreen) play();
+				else stop();
+			},
+			{ threshold: 0.6 },
+		).observe(atCard);
+	}
+	motion?.addEventListener?.("change", () => {
+		if (motion.matches) rest();
+		else if (onScreen) play();
+	});
+}
+
+// ---- autoplay for readers who don't scroll ----
+// After 4s idle at the top, or at once from WATCH, the page scrolls itself through the
+// story; the pill pauses and resumes it. Any wheel, touch or key press hands control
+// straight back. Under reduced motion it never starts by itself, only from WATCH.
+const tourPill = document.getElementById("srn-tour");
+if (tourPill) {
+	const SPEED = 300; // px per second: the whole story in about 25 seconds
+	const IDLE_MS = 4000;
+	const el = (k) => document.querySelector(`[data-tour="${k}"]`);
+	const toggle = el("toggle");
+	const label = el("label");
+	const fill = el("fill");
+	const quiet = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+	let playing = false;
+	let started = false;
+	let pos = 0;
+	let last = 0;
+	let idleTimer = 0;
+
+	// the scroll position where the story ends and the sections after it begin
+	const storyEnd = () =>
+		Math.max(
+			1,
+			track.getBoundingClientRect().top +
+				window.scrollY +
+				track.offsetHeight -
+				window.innerHeight,
+		);
+
+	const show = () => {
+		const end = storyEnd();
+		const y = window.scrollY;
+		fill.style.transform = `scaleX(${Math.min(1, Math.max(0, y / end)).toFixed(4)})`;
+		tourPill.classList.toggle("is-paused", !playing);
+		tourPill.classList.toggle("is-off", !started || (!playing && y >= end - 2));
+		label.textContent = playing ? "PAUSE" : "PLAY";
+		toggle.setAttribute(
+			"aria-label",
+			playing ? "Pause the story" : "Play the story",
+		);
+	};
+
+	const step = (t) => {
+		if (!playing) return;
+		const dt = last ? Math.min(64, t - last) : 16;
+		last = t;
+		const end = storyEnd();
+		pos = Math.min(end, pos + (SPEED * dt) / 1000);
+		window.scrollTo({ top: pos, behavior: "instant" });
+		if (pos >= end) {
+			playing = false;
+			show();
+			return;
+		}
+		requestAnimationFrame(step);
+	};
+
+	const start = () => {
+		clearTimeout(idleTimer);
+		if (playing) return;
+		const end = storyEnd();
+		// from the end (or past it) a fresh play starts the story over
+		pos = window.scrollY >= end - 2 ? 0 : window.scrollY;
+		if (pos === 0) window.scrollTo({ top: 0, behavior: "instant" });
+		playing = true;
+		started = true;
+		last = 0;
+		show();
+		requestAnimationFrame(step);
+	};
+	const pause = () => {
+		if (!playing) return;
+		playing = false;
+		show();
+	};
+
+	el("watch")?.addEventListener("click", start);
+	toggle.addEventListener("click", () => (playing ? pause() : start()));
+
+	// the reader takes over: stop playing, and never start by itself after that
+	const handBack = (e) => {
+		if (e.target?.closest?.("#srn-tour, [data-tour]")) return;
+		if (
+			e.type === "keydown" &&
+			["Tab", "Shift", "Control", "Alt", "Meta"].includes(e.key)
+		)
+			return;
+		clearTimeout(idleTimer);
+		pause();
+	};
+	for (const type of ["wheel", "touchstart", "keydown", "pointerdown"]) {
+		window.addEventListener(type, handBack, { passive: true });
+	}
+	document.addEventListener(
+		"scroll",
+		() => {
+			// a scroll we didn't make (scrollbar drag, anchor link) also cancels the idle start
+			if (!playing && window.scrollY > 4) clearTimeout(idleTimer);
+			if (started) show();
+		},
+		{ passive: true },
+	);
+
+	const arm = () => {
+		idleTimer = setTimeout(() => {
+			if (window.scrollY > 4) return;
+			if (document.hidden) {
+				document.addEventListener("visibilitychange", arm, { once: true });
+				return;
+			}
+			start();
+		}, IDLE_MS);
+	};
+	if (!quiet?.matches && window.scrollY <= 4) arm();
 }
 
 document.addEventListener("scroll", onScroll, { passive: true, capture: true });

@@ -1,0 +1,262 @@
+<!doctype html>
+<!--
+  serenity docs: Basics (served at getserenity.dev/docs/).
+
+  Adding a section to this page: add a <section id="stable-id"> to <main> and a matching
+  <li><a href="#stable-id"> to the sidebar list. Ids are links people share; never rename one.
+
+  Adding a page: copy this file to website/docs/<topic>.html, keep the bar, sidebar and footer,
+  replace <main>, and add the page to the sidebar of every docs page as its own <h2> group
+  (link to other pages as <topic>.html, to this one as ./). docs.css and docs.js are shared.
+  The deploy workflow copies website/ as is and fills in __SERENITY_VERSION__ in every .html.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>serenity docs — Basics</title>
+<meta name="description" content="Install serenity, start it in a repo, and learn the map, sessions, NEEDS YOU, the master agent, @ mentions and the keys.">
+<meta name="theme-color" content="#0d0f12">
+<link rel="canonical" href="https://getserenity.dev/docs/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://getserenity.dev/docs/">
+<meta property="og:title" content="serenity docs — Basics">
+<meta property="og:description" content="Install serenity, start it in a repo, and learn the map, sessions, NEEDS YOU, the master agent, @ mentions and the keys.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Noto+Sans+Symbols+2&amp;display=swap">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<header class="d-bar">
+<div class="d-bar-in">
+<a class="d-logo" href="../"><b aria-hidden="true">◈</b>serenity<span>/ docs</span></a>
+<nav class="d-nav" aria-label="Site">
+<a href="../" class="d-wide">Home</a>
+<a href="./" aria-current="page">Docs</a>
+<a href="https://github.com/mukkund1996/serenity">GitHub</a>
+<span class="d-pill" title="serenity is in beta"><em>BETA</em>__SERENITY_VERSION__</span>
+</nav>
+</div>
+</header>
+
+<div class="d-wrap">
+
+<details class="d-side" open>
+<summary>CONTENTS</summary>
+<nav class="d-side-list" aria-label="Docs">
+<h2>BASICS</h2>
+<ul>
+<li><a href="#install">Install</a></li>
+<li><a href="#start">Starting serenity</a></li>
+<li><a href="#map">The map</a></li>
+<li><a href="#sessions">Sessions</a></li>
+<li><a href="#needs-you">NEEDS YOU</a></li>
+<li><a href="#master">The master agent</a></li>
+<li><a href="#mentions">@ mentions</a></li>
+<li><a href="#keys">Key bindings</a></li>
+</ul>
+<h2>MORE</h2>
+<ul>
+<li><a href="https://github.com/mukkund1996/serenity#configuration">Configuration ↗</a></li>
+<li><a href="https://github.com/mukkund1996/serenity/blob/main/docs/adr/README.md">Decision records ↗</a></li>
+<li><a href="https://github.com/mukkund1996/serenity/blob/main/CHANGELOG.md">Changelog ↗</a></li>
+</ul>
+</nav>
+</details>
+
+<main class="d-main" id="content">
+<p class="d-eyebrow">DOCS · BASICS</p>
+<h1>Getting around serenity</h1>
+<p class="d-lede">serenity puts every Claude Code session on one keyboard-driven map in your terminal, around a master agent that keeps the overview. This page covers what you need on day one.</p>
+
+<!-- ============ INSTALL ============ -->
+<section id="install">
+<h2><a href="#install">Install</a></h2>
+<p>macOS or Linux. One command installs serenity and anything it needs that you don't have yet: <a href="https://github.com/tmux/tmux">tmux</a> 3.2+, git, <a href="https://cli.github.com"><code>gh</code></a> and <a href="https://claude.com/claude-code">Claude Code</a>.</p>
+<div class="d-cmd"><pre><span class="p">$ </span>curl -fsSL https://raw.githubusercontent.com/mukkund1996/serenity/main/scripts/install.sh | sh</pre><button type="button" class="d-copy" aria-label="Copy the install command"><span class="done"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7fc77f" stroke-width="2" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span><span class="idle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg></span></button></div>
+<p>Or with Homebrew (tmux, git and gh come as dependencies; Claude Code is a cask):</p>
+<div class="d-cmd"><pre><span class="p">$ </span>brew install --cask claude-code; brew install mukkund1996/tap/serenity</pre><button type="button" class="d-copy" aria-label="Copy the Homebrew command"><span class="done"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7fc77f" stroke-width="2" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span><span class="idle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg></span></button></div>
+<p>The install script reads these environment variables:</p>
+<div class="d-table"><table>
+<thead><tr><th>VARIABLE</th><th>DEFAULT</th><th>EFFECT</th></tr></thead>
+<tbody>
+<tr><td><code>SERENITY_VERSION</code></td><td>latest release</td><td>Install a specific version</td></tr>
+<tr><td><code>SERENITY_INSTALL_DIR</code></td><td><code>~/.local/bin</code></td><td>Where the binary goes</td></tr>
+<tr><td><code>SERENITY_NO_DEPS</code></td><td>unset</td><td>Set to <code>1</code> to skip installing dependencies</td></tr>
+</tbody>
+</table></div>
+<p>serenity runs on your existing Claude Code login and subscription.</p>
+</section>
+
+<!-- ============ START ============ -->
+<section id="start">
+<h2><a href="#start">Starting serenity</a></h2>
+<p>serenity is scoped to a repo: run it inside one and you get that repo's map.</p>
+<div class="d-cmd"><pre><span class="p">$ </span>gh auth login   <span class="c"># optional: PR status on cards</span>
+<span class="p">$ </span>cd ~/your/repo
+<span class="p">$ </span>serenity        <span class="c"># opens the map for this repo</span></pre><button type="button" class="d-copy" aria-label="Copy the commands"><span class="done"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7fc77f" stroke-width="2" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span><span class="idle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg></span></button></div>
+<p>Press <kbd>N</kbd> to start your first session and <kbd>?</kbd> for the shortcuts. <kbd>q</kbd> quits the map; your sessions keep running, and the next <code>serenity</code> picks them up again.</p>
+<div class="d-table"><table>
+<thead><tr><th>COMMAND</th><th>WHAT IT DOES</th></tr></thead>
+<tbody>
+<tr><td><code>serenity</code></td><td>Open the map for the git repo you are in</td></tr>
+<tr><td><code>serenity doctor</code></td><td>Check tmux, claude, git and gh</td></tr>
+<tr><td><code>serenity slack login</code></td><td>Sign in to Slack for the master (once)</td></tr>
+<tr><td><code>serenity restart</code></td><td>Restart the background daemon (sessions keep running)</td></tr>
+<tr><td><code>serenity stop</code></td><td>Stop the background daemon</td></tr>
+<tr><td><code>serenity version</code></td><td>Print the version</td></tr>
+</tbody>
+</table></div>
+<p>Behind the map, a background daemon keeps the state, receives status from Claude Code hooks, polls PRs through <code>gh</code> and runs the master. If it crashes, a supervisor restarts it and it picks up where it left off.</p>
+</section>
+
+<!-- ============ MAP ============ -->
+<section id="map">
+<h2><a href="#map">The map</a></h2>
+<p>serenity has three zoom levels:</p>
+<ul>
+<li><strong>Map</strong>: the master in the centre, your sessions grouped into topic bubbles around it.</li>
+<li><strong>Topics</strong>: every session as a card, with its summary and its PR.</li>
+<li><strong>Session</strong>: the real Claude Code pane, untouched.</li>
+</ul>
+<p><kbd>z</kbd> zooms out to the map, <kbd>Z</kbd> zooms in to the topics, and <kbd>Esc</kbd> goes up one level. Move with the arrow keys or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>; <kbd>[</kbd> <kbd>]</kbd> step between topics, <kbd>c</kbd> centres on the master and <kbd>/</kbd> searches session names, topics and branches as you type.</p>
+<p>The master picks the topics for you and keeps them to a handful (ten by default). Each session shows its status, reported by Claude Code's hooks:</p>
+<div class="d-table"><table>
+<thead><tr><th>GLYPH</th><th>MEANS</th></tr></thead>
+<tbody>
+<tr><td><span class="g-wait">◐</span> yellow</td><td>Waiting on you. Only these ask for attention.</td></tr>
+<tr><td><span class="g-work">●</span> blue</td><td>Working. It stays quiet.</td></tr>
+<tr><td><span class="g-done">✓</span> green</td><td>Finished.</td></tr>
+<tr><td>name in grey</td><td>Idle.</td></tr>
+</tbody>
+</table></div>
+</section>
+
+<!-- ============ SESSIONS ============ -->
+<section id="sessions">
+<h2><a href="#sessions">Sessions</a></h2>
+<p>Each session is a real <code>claude</code> process in its own tmux pane, usually in its own git worktree.</p>
+<h3>Start one</h3>
+<p><kbd>N</kbd> opens the New session form: a name, a first prompt, and either a <strong>new worktree</strong> or an <strong>existing branch</strong>. A new worktree is created beside the repo, at <code>&lt;parent&gt;/&lt;repo&gt;-&lt;name&gt;</code>, on a new branch named after the session off the default branch. You can also ask the master to start sessions for you (see <a href="#mentions"><code>@new</code></a>).</p>
+<p><kbd>I</kbd> imports Claude sessions you already run in tmux. They join the map and stay in their windows.</p>
+<h3>Work in one</h3>
+<p><kbd>Enter</kbd> on a card attaches to the session: you are in its Claude Code pane, as it is. <kbd>Ctrl</kbd>+<kbd>g</kbd> takes you back to the map. To send a quick message without attaching, press <kbd>i</kbd> on its card.</p>
+<h3>Pull requests</h3>
+<p>Each card shows its PR and checks via <code>gh</code>. <kbd>o</kbd> opens the PR. Ready PRs get a review request from CODEOWNERS, and a merged PR finishes the session.</p>
+<h3>Keep, rename, end</h3>
+<ul>
+<li><kbd>p</kbd> pins a session you reuse. It is never marked finished or cleaned up, and resumes with <code>claude --resume</code> when you attach after it ended.</li>
+<li><kbd>f</kbd> watches a session; <kbd>r</kbd> renames it.</li>
+<li><kbd>K</kbd> kills the agent. <kbd>x</kbd> cleans the session up, after checking for uncommitted changes, unpushed commits and PR state before it touches the worktree.</li>
+<li><kbd>H</kbd> shows archived sessions.</li>
+</ul>
+</section>
+
+<!-- ============ NEEDS YOU ============ -->
+<section id="needs-you">
+<h2><a href="#needs-you">NEEDS YOU</a></h2>
+<p>NEEDS YOU is the one list of what is waiting on you, and the yellow <strong>N need you</strong> chip at the top counts it. It holds sessions waiting on an answer or a permission prompt, the master's suggestions, and, if you set up Slack, up to three mentions and DMs that need you to act.</p>
+<p>Each item carries a ◆ line that says exactly what <kbd>y</kbd> will do and to whom, for example <code>Tell api-auth: …</code>, <code>Reply in #eng thread: …</code> or <code>Start new session fix-login: …</code>.</p>
+<div class="d-table"><table>
+<thead><tr><th>KEY</th><th>ON A NEEDS YOU ITEM</th></tr></thead>
+<tbody>
+<tr><td><kbd>Tab</kbd></td><td>Jump to the next session that needs you</td></tr>
+<tr><td><kbd>y</kbd> <kbd>e</kbd> <kbd>n</kbd></td><td>Run the ◆ suggestion · edit it · decline it</td></tr>
+<tr><td><kbd>Enter</kbd></td><td>Mark it seen. A Slack item is also opened in Slack; a session waiting on a prompt or a question is attached instead</td></tr>
+<tr><td><kbd>x</kbd></td><td>Dismiss a Slack item</td></tr>
+</tbody>
+</table></div>
+<p>Replies the master wants to send to a session wait in their own <strong>QUEUE</strong> under NEEDS YOU, so they never make an idle session look like it needs you. <kbd>Enter</kbd> shows the whole message, <kbd>y</kbd> sends it.</p>
+<p class="d-note"><strong>Slack is optional.</strong> Run <code>serenity slack login</code> once and list the repo under <code>slack.repos</code> in <code>~/.config/serenity/config.json</code>. A Slack item drops out as soon as you write after it on Slack.</p>
+</section>
+
+<!-- ============ MASTER ============ -->
+<section id="master">
+<h2><a href="#master">The master agent</a></h2>
+<p>The master sits in the centre of the map and keeps the overview, using three models through your Claude Code login:</p>
+<ul>
+<li><strong>Haiku</strong> writes a one-line summary of every session and groups them into topics.</li>
+<li><strong>Sonnet</strong> suggests replies, approvals and cleanups, which you accept with <kbd>y</kbd>, edit with <kbd>e</kbd> or decline with <kbd>n</kbd>.</li>
+<li><strong>Opus</strong> is the chat: it can see and steer every session, start new ones from a brief, and talk to any session you tag.</li>
+</ul>
+<p>The master proposes; nothing runs until you approve it. The exceptions are the ones you ask for in so many words: starting sessions from a brief, and messaging a session you <code>@</code>-mention.</p>
+<h3>Talking to it</h3>
+<p><kbd>Ctrl</kbd>+<kbd>m</kbd> focuses the master from anywhere (in Apple Terminal, <kbd>Enter</kbd>). <kbd>i</kbd> on the master opens its chat input, which stays open after you send. <kbd>Shift</kbd>+<kbd>Enter</kbd> or <kbd>Ctrl</kbd>+<kbd>J</kbd> starts a new line, <kbd>Esc</kbd> closes it, and <kbd>PgUp</kbd> <kbd>PgDn</kbd> scroll the conversation.</p>
+</section>
+
+<!-- ============ MENTIONS ============ -->
+<section id="mentions">
+<h2><a href="#mentions">@ mentions</a></h2>
+<p>In the master's input, <kbd>@</kbd> opens a list that completes as you type: the commands first, each with a hint, then the live sessions of the repo. <kbd>↑</kbd> <kbd>↓</kbd> move, <kbd>Tab</kbd> or <kbd>Enter</kbd> complete, <kbd>Esc</kbd> closes the list. Names are exact and case-sensitive, which is why the list completes whole names.</p>
+
+<h3><code>@session</code>: talk to a session</h3>
+<p>A message that tags a session goes to that session at once, lightly reworded to stand on its own. The master doesn't investigate it itself: the session's own agent does the looking. If you asked a question, the master watches the session and condenses its answer for you when it replies.</p>
+<pre class="d-term"><span class="u">@api-auth why is CI red?</span>
+<span class="m">◈</span> <span class="h">Asked api-auth; I'll relay its answer.</span></pre>
+
+<h3><code>@new &lt;brief&gt;</code>: start sessions now</h3>
+<p>Starts the work at once, with no plan to confirm: one session, or one per piece when the brief clearly holds independent pieces. The master picks the names, topics and prompts. A split you don't want costs a <kbd>K</kbd> on the extra sessions.</p>
+<pre class="d-term"><span class="u">@new add rate limiting to the public API and document it</span></pre>
+
+<h3><code>@copy @session &lt;follow-up&gt;</code>: continue in a fresh session</h3>
+<p>The session writes a handover doc (goal, state, decisions, open questions, key files, branches and PRs, next steps). serenity keeps a copy that outlives the worktree, then the master starts a new session with your follow-up and the doc attached word for word.</p>
+<pre class="d-term"><span class="u">@copy @api-auth add the refresh-token flow next</span></pre>
+
+<h3><code>@handover @session</code>: write it down for someone</h3>
+<p>Gets a handover doc from the session, or reuses an up-to-date one, and gives you its path. The master can share it on Slack as a file, once you have confirmed the file, the channel and the comment.</p>
+<pre class="d-term"><span class="u">@handover @api-auth</span></pre>
+<p>Command words such as <code>new</code> are reserved: no session can take them as its name.</p>
+</section>
+
+<!-- ============ KEYS ============ -->
+<section id="keys">
+<h2><a href="#keys">Key bindings</a></h2>
+<p>serenity is keyboard-only. The footer shows the moves; <kbd>?</kbd> opens the shortcuts in the app.</p>
+<div class="d-table"><table>
+<thead><tr><th>KEY</th><th>ACTION</th></tr></thead>
+<tbody>
+<tr><td><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> / <kbd>WASD</kbd></td><td>Move between nodes</td></tr>
+<tr><td><kbd>Enter</kbd></td><td>Attach to a session, or go into the master; on a NEEDS YOU item, mark it seen</td></tr>
+<tr><td><kbd>i</kbd></td><td>Send the focused session a quick message; on the master, open its chat input</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>g</kbd></td><td>Back to the map from inside a session</td></tr>
+<tr><td><kbd>z</kbd> <kbd>Z</kbd> <kbd>Esc</kbd></td><td>Zoom out to the map · zoom in · one level up</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>m</kbd></td><td>Focus the master from anywhere (<kbd>Enter</kbd> in Apple Terminal)</td></tr>
+<tr><td><kbd>PgUp</kbd> <kbd>PgDn</kbd></td><td>On the master, scroll its conversation (<kbd>Shift</kbd>+<kbd>↑</kbd> <kbd>↓</kbd> too)</td></tr>
+<tr><td><kbd>Tab</kbd></td><td>Jump to the next session that needs you</td></tr>
+<tr><td><kbd>y</kbd> <kbd>e</kbd> <kbd>n</kbd></td><td>Approve, edit or decline the master's suggestion</td></tr>
+<tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>Previous / next topic</td></tr>
+<tr><td><kbd>N</kbd> <kbd>I</kbd></td><td>New session · import from tmux</td></tr>
+<tr><td><kbd>o</kbd> <kbd>f</kbd> <kbd>p</kbd></td><td>Open the PR · watch · pin</td></tr>
+<tr><td><kbd>r</kbd> <kbd>K</kbd> <kbd>x</kbd></td><td>Rename · kill the agent · clean up; on a Slack item, <kbd>x</kbd> dismisses it</td></tr>
+<tr><td><kbd>/</kbd> <kbd>c</kbd> <kbd>H</kbd></td><td>Search sessions · centre on the master · archived sessions</td></tr>
+<tr><td><kbd>?</kbd> <kbd>q</kbd></td><td>Shortcuts · quit the map (sessions keep running)</td></tr>
+</tbody>
+</table></div>
+<h3>In a text field</h3>
+<p><kbd>←</kbd> <kbd>→</kbd> <kbd>Home</kbd> <kbd>End</kbd> move the cursor, <kbd>Option</kbd>+<kbd>←</kbd> <kbd>→</kbd> by a word. <kbd>Ctrl</kbd>+<kbd>a</kbd> <kbd>e</kbd> <kbd>w</kbd> <kbd>u</kbd> <kbd>k</kbd> and <kbd>Option</kbd>+<kbd>Backspace</kbd> edit as in a shell.</p>
+<div class="d-next">
+<a href="https://github.com/mukkund1996/serenity#configuration">Configuration ↗</a>
+<a href="https://github.com/mukkund1996/serenity/blob/main/docs/adr/README.md">Why it works this way ↗</a>
+</div>
+</section>
+</main>
+</div>
+
+<footer class="d-foot">
+<div class="d-foot-in">
+<a class="d-logo" href="../"><b aria-hidden="true">◈</b>serenity</a>
+<div>
+<span>__SERENITY_VERSION__ · beta</span>
+<span>MIT license</span>
+<a href="https://github.com/mukkund1996/serenity">github.com/mukkund1996/serenity</a>
+</div>
+<p>serenity is an independent open-source project, not affiliated with or endorsed by Anthropic, Slack or Microsoft. Product names are trademarks of their respective owners.</p>
+</div>
+</footer>
+
+<script src="docs.js" defer></script>
+</body>
+</html>
