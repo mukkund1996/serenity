@@ -12,14 +12,10 @@ for (const btn of document.querySelectorAll(".d-copy")) {
 			.map((n) => n.textContent)
 			.join("")
 			.trim();
-		// a GoatCounter event (no cookies); count.js loads async and may be blocked
-		try {
-			window.goatcounter?.count?.({
-				path: `docs-copy: ${text.slice(0, 60)}`,
-				title: "Copied a command in the docs",
-				event: true,
-			});
-		} catch {}
+		window.srnEvent?.(
+			`docs-copy: ${text.slice(0, 60)}`,
+			"Copied a command in the docs",
+		); // analytics.js
 		const done = () => {
 			for (const other of document.querySelectorAll(".d-copy.is-copied")) {
 				other.classList.remove("is-copied");

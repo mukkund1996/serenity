@@ -413,11 +413,15 @@ function render(st) {
 	};
 }
 
-// ---- GoatCounter events (no cookies; count.js loads async and may be blocked) ----
-function gcEvent(path, title) {
-	try {
-		window.goatcounter?.count?.({ path, title, event: true });
-	} catch {}
+// ---- GoatCounter: count the visit reaching the install section, once (analytics.js) ----
+const installSection = document.getElementById("install");
+if (installSection && window.IntersectionObserver) {
+	const seen = new IntersectionObserver((entries) => {
+		if (!entries.some((e) => e.isIntersecting)) return;
+		seen.disconnect();
+		window.srnEvent?.("reached-install", "Scrolled to the install section");
+	});
+	seen.observe(installSection);
 }
 
 // ---- GitHub stars on the install section's Star button ----
@@ -474,7 +478,10 @@ let copyTimer = 0;
 for (const btn of document.querySelectorAll("[data-copy]")) {
 	const label = btn.getAttribute("aria-label");
 	btn.addEventListener("click", () => {
-		gcEvent(`install-copy-${btn.dataset.copy}`, "Copied the install command");
+		window.srnEvent?.(
+			`install-copy-${btn.dataset.copy}`,
+			"Copied the install command",
+		);
 		const done = () => {
 			for (const other of document.querySelectorAll("[data-copy].is-copied")) {
 				other.classList.remove("is-copied");
