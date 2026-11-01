@@ -16,6 +16,10 @@ Working agents stay quiet. Waiting agents call you. The master keeps the overvie
 
 [**Website**](https://getserenity.dev) · [**Install**](#install) · [**How it works**](#how-it-works) · [**Keys**](#keys) · [**Configuration**](#configuration) · [**Docs**](docs/adr/README.md)
 
+<br>
+
+<img src="docs/demo.gif" alt="The serenity map: five sessions working, a permission prompt, a question and two Slack messages arriving in NEEDS YOU, and y approving and answering them">
+
 </div>
 
 ---
