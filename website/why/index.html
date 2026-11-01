@@ -1,0 +1,115 @@
+<!doctype html>
+<!--
+  serenity: Why serenity (served at getserenity.dev/why/), in Mukkund's own words.
+  Reuses the docs pages' bar, footer and palette (../docs/docs.css); the article styles are below.
+  The deploy workflow copies website/ as is and fills in __SERENITY_VERSION__ in every .html.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why serenity</title>
+<meta name="description" content="Why I built serenity: six to eight Claude Code sessions, too much context switching, and one master agent that keeps track of the rest.">
+<meta name="theme-color" content="#0d0f12">
+<link rel="canonical" href="https://getserenity.dev/why/">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://getserenity.dev/why/">
+<meta property="og:title" content="Why serenity">
+<meta property="og:description" content="Why I built serenity: six to eight Claude Code sessions, too much context switching, and one master agent that keeps track of the rest.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Noto+Sans+Symbols+2&amp;display=swap">
+<link rel="stylesheet" href="../docs/docs.css">
+<style>
+.w-main {
+	max-width: 640px;
+	margin: 0 auto;
+	padding: 112px 24px 128px;
+	box-sizing: border-box;
+}
+.w-main h1 {
+	margin: 0 0 40px;
+	font: 400 clamp(40px, 6vw, 60px) / 1.04 var(--serif);
+	color: var(--heading);
+	text-wrap: balance;
+}
+.w-main p {
+	margin: 0 0 20px;
+	font-size: 18px;
+	line-height: 1.75;
+	color: var(--text-2);
+}
+.w-main .w-sign {
+	margin: 36px 0 0;
+	font: italic 400 26px / 1.2 var(--serif);
+	color: var(--heading);
+}
+.w-main .w-sign a {
+	color: var(--accent);
+	text-decoration: none;
+}
+.w-next {
+	margin-top: 64px;
+	padding-top: 28px;
+	border-top: 1px solid var(--line);
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px 28px;
+	font-size: 14px;
+}
+@media (max-width: 899px) {
+	.w-main {
+		padding: 64px 16px 96px;
+	}
+	.w-main p {
+		font-size: 17px;
+	}
+}
+</style>
+</head>
+<body>
+
+<header class="d-bar">
+<div class="d-bar-in">
+<a class="d-logo" href="../"><b aria-hidden="true">◈</b>serenity</a>
+<nav class="d-nav" aria-label="Site">
+<a href="../" class="d-wide">Home</a>
+<a href="../docs/">Docs</a>
+<a href="./" aria-current="page" class="d-narrow">Why</a>
+<a href="https://github.com/mukkund1996/serenity">GitHub</a>
+<span class="d-pill" title="serenity is in beta"><em>BETA</em><span class="d-ver">__SERENITY_VERSION__</span></span>
+</nav>
+</div>
+</header>
+
+<main class="w-main" id="content">
+<p class="d-eyebrow">WHY SERENITY</p>
+<h1>Less switching. More focus.</h1>
+<p>I usually run six to eight Claude sessions: feature and bug-fix work, plus a few for quick prompts, product work and product analytics. They lived in plain Claude windows, tmux panes, iTerm windows and VS Code terminals.</p>
+<p>At some point I realized a big portion of my engineering was spent on switching contexts.</p>
+<p>I wanted one persistent session that kept track of all the others, and took away the overhead of telling my teammates on Slack where everything stood. That became serenity's master agent.</p>
+<p>Now I have a lot more focus. I get to any session quickly, and I delegate both the tasks and the status updates through the master.</p>
+<p>It's for developers, product engineers, and anyone who uses Claude Code regularly.</p>
+<p class="w-sign">— <a href="https://thisismukkunds.site/">Mukkund</a></p>
+<nav class="w-next" aria-label="Next">
+<a href="../#install">Install serenity →</a>
+<a href="../docs/">Read the docs →</a>
+</nav>
+</main>
+
+<footer class="d-foot">
+<div class="d-foot-in">
+<a class="d-logo" href="../"><b aria-hidden="true">◈</b>serenity</a>
+<div>
+<span>__SERENITY_VERSION__ · beta</span>
+<span>MIT license</span>
+<a href="../docs/">Docs</a>
+<a href="https://github.com/mukkund1996/serenity">github.com/mukkund1996/serenity</a>
+</div>
+<p>serenity is an independent open-source project, not affiliated with or endorsed by Anthropic, Slack or Microsoft. Product names are trademarks of their respective owners.</p>
+</div>
+</footer>
+
+</body>
+</html>

@@ -507,11 +507,23 @@ kbd {
 	.d-nav {
 		gap: 16px;
 	}
-	.d-nav .d-wide,
 	.d-logo span {
 		display: none;
 	}
 	.d-table td:first-child {
 		white-space: normal;
+	}
+}
+/* narrow screens: drop Home and the pill's version (BETA stays) so Docs, Why and GitHub fit
+   beside the logo; on the narrowest phones Why moves to the footer only */
+@media (max-width: 639px) {
+	.d-nav .d-wide,
+	.d-pill .d-ver {
+		display: none;
+	}
+}
+@media (max-width: 359px) {
+	.d-nav .d-narrow {
+		display: none;
 	}
 }
