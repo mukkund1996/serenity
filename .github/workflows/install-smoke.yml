@@ -1,0 +1,89 @@
+name: install-smoke
+
+# Installs serenity on clean machines the way users do (README "Install") and
+# checks it runs headless: scripts/install-smoke/. Linux in fresh containers,
+# macOS on GitHub's runners (which come with Homebrew, git and gh already).
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+  pull_request:
+    paths:
+      - scripts/install.sh
+      - scripts/install-smoke/**
+      - .github/workflows/install-smoke.yml
+
+permissions:
+  contents: read
+
+env:
+  # On a release, `serenity version` must report it.
+  SERENITY_EXPECT_VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+
+jobs:
+  # The release is published before its binaries and the tap bump land
+  # (release.yml's publish job), so wait for both.
+  ready:
+    runs-on: ubuntu-latest
+    steps:
+      - if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          for i in $(seq 60); do
+            if gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -qx SHA256SUMS &&
+              curl -fsSL https://raw.githubusercontent.com/mukkund1996/homebrew-tap/HEAD/Formula/serenity.rb | grep -q "version \"${TAG#v}\""; then
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::error::$TAG binaries or tap formula did not appear within 30 minutes"
+          exit 1
+
+  linux:
+    needs: ready
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ubuntu:24.04, debian:stable-slim, fedora:latest]
+        arch: [amd64, arm64]
+        user: [sudo, root]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/install-smoke/docker.sh -o logs "${{ matrix.image }},linux/${{ matrix.arch }},${{ matrix.user }}"
+      - if: always()
+        run: cat logs/*.log
+
+  linuxbrew:
+    needs: ready
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/install-smoke/docker.sh -o logs "ubuntu:24.04,linux/amd64,brew"
+      - if: always()
+        run: cat logs/*.log
+
+  macos:
+    needs: ready
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel]
+        # script-nobrew: the runner's Homebrew removed first, as on a new Mac.
+        method: [script, script-nobrew, brew]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - if: matrix.method == 'script-nobrew'
+        run: |
+          NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)"
+          hash -r
+          if command -v brew; then echo "::error::brew is still installed"; exit 1; fi
+          echo "tmux: $(command -v tmux || echo none) · gh: $(command -v gh || echo none) · git: $(command -v git)"
+      - if: matrix.method != 'brew'
+        run: sh scripts/install-smoke/check.sh script scripts/install.sh
+      - if: matrix.method == 'brew'
+        run: sh scripts/install-smoke/check.sh brew
