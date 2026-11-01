@@ -64,6 +64,7 @@
 <ul>
 <li><a href="#requirements">Requirements</a></li>
 <li><a href="#install">Install</a></li>
+<li><a href="#skill">Install the skill</a></li>
 <li><a href="#start">Starting serenity</a></li>
 <li><a href="#map">The map</a></li>
 <li><a href="#sessions">Sessions</a></li>
@@ -121,6 +122,15 @@
 </tbody>
 </table></div>
 <p>serenity runs on your existing Claude Code login and subscription; see <a href="#usage">Usage and cost</a>.</p>
+</section>
+
+<!-- ============ SKILL ============ -->
+<section id="skill">
+<h2><a href="#skill">Install the skill</a></h2>
+<p>The free <a href="https://github.com/mukkund1996/serenity/tree/main/plugins/parallel-sessions">parallel-sessions</a> skill teaches Claude the habits serenity is built on: one git worktree per task, checks for uncommitted changes, unpushed commits, PR state and stacked branches before any cleanup (nothing is removed until you confirm), and short handover notes. It works without serenity. Add it in Claude Code:</p>
+<pre class="d-term"><span class="u">/plugin marketplace add mukkund1996/serenity</span>
+<span class="u">/plugin install parallel-sessions@serenity</span></pre>
+<p>For claude.ai, build the upload zip from a clone with <code>bun run package:skill</code> and upload it under Settings → Capabilities → Skills. See <a href="https://github.com/mukkund1996/serenity/blob/main/plugins/parallel-sessions/README.md">the skill's README</a>.</p>
 </section>
 
 <!-- ============ START ============ -->

@@ -1,0 +1,14 @@
+{
+	"name": "serenity",
+	"owner": { "name": "Mukkund Sunjii" },
+	"metadata": {
+		"description": "Claude Code plugins from the serenity project (getserenity.dev)."
+	},
+	"plugins": [
+		{
+			"name": "parallel-sessions",
+			"source": "./plugins/parallel-sessions",
+			"description": "Keep parallel Claude Code sessions tidy: one git worktree per task, safety checks before cleanup, and short handover notes."
+		}
+	]
+}

@@ -78,6 +78,17 @@ The install script reads these environment variables:
 | `SERENITY_INSTALL_DIR` | `~/.local/bin` | Where the binary goes |
 | `SERENITY_NO_DEPS` | unset | Set to `1` to skip installing dependencies |
 
+## Install the skill
+
+New to running several sessions? The free [parallel-sessions](plugins/parallel-sessions/) skill gives Claude a worktree per task, safety checks before cleanup and short handover notes, with or without serenity:
+
+```
+/plugin marketplace add mukkund1996/serenity
+/plugin install parallel-sessions@serenity
+```
+
+For claude.ai, build the upload zip with `bun run package:skill` ([details](plugins/parallel-sessions/README.md)).
+
 ## Quick start
 
 ```bash

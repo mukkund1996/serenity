@@ -13,7 +13,8 @@
 		"test": "bun test packages",
 		"test:e2e": "bun test e2e",
 		"build": "bun scripts/build.ts",
-		"install:local": "bun scripts/install-local.ts"
+		"install:local": "bun scripts/install-local.ts",
+		"package:skill": "sh scripts/package-skill.sh"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.6.3",
