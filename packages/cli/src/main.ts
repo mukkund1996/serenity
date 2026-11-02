@@ -237,15 +237,22 @@ async function superviseDaemon(): Promise<void> {
 	process.exit(await runSupervisor(home));
 }
 
-async function stopDaemon(): Promise<void> {
+/** Stops the daemon if one is up. Returns whether anything was stopped. */
+async function stopDaemon(
+	opts: { quietIfStopped?: boolean } = {},
+): Promise<boolean> {
 	const peer = await connectDaemon(home);
-	if (!peer) return console.log("daemon is not running");
+	if (!peer) {
+		if (!opts.quietIfStopped) console.log("daemon is not running");
+		return false;
+	}
 	await peer
 		.request("daemon.shutdown", {}, { timeoutMs: 2000 })
 		.catch(() => {});
 	peer.close();
 	await waitForDaemonGone(home);
 	console.log("daemon stopped");
+	return true;
 }
 
 /**
@@ -328,7 +335,8 @@ switch (command) {
 		await stopDaemon();
 		break;
 	case "restart": {
-		await stopDaemon();
+		// Don't print "daemon is not running" when restart is starting fresh (#84).
+		await stopDaemon({ quietIfStopped: true });
 		(await ensureDaemon(home)).close();
 		console.log(`daemon running ${BUILD_ID}`);
 		break;
