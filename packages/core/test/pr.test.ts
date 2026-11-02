@@ -7,9 +7,13 @@ import {
 	parseCodeowners,
 	parsePr,
 	parseReviewRequests,
+	prHeads,
+	prLabel,
 	prStatus,
+	remoteOwner,
 	reviewerCandidates,
 	rollupChecks,
+	touchesPr,
 	wantsReviewer,
 } from "../src/pr";
 
@@ -222,5 +226,93 @@ describe("the master's GitHub", () => {
 		expect(ids("me")).toEqual(["b", "a"]);
 		// Before gh names the user, every open PR counts.
 		expect(ids(null)).toEqual(["theirs", "b", "a"]);
+	});
+});
+
+describe("prHeads", () => {
+	const b = (
+		name: string,
+		upstream: string | null = null,
+		remote = "origin",
+	) => ({
+		name,
+		upstream,
+		remote: upstream ? remote : null,
+	});
+
+	test("the worktree's branch, then the session's, never the base", () => {
+		expect(
+			prHeads({
+				branches: [b("fix/x", "main"), b("x", "main")],
+				base: "main",
+				owners: {},
+			}),
+		).toEqual(["fix/x", "x"]);
+		expect(
+			prHeads({ branches: [b("main")], base: "main", owners: {} }),
+		).toEqual([]);
+		expect(
+			prHeads({ branches: [b("HEAD")], base: "main", owners: {} }),
+		).toEqual([]);
+	});
+
+	test("an upstream counts only when it is the same work renamed", () => {
+		expect(
+			prHeads({ branches: [b("x", "docs/x")], base: "main", owners: {} }),
+		).toEqual(["docs/x", "x"]);
+		// Started from develop, not pushed as it: develop's PRs are not ours.
+		expect(
+			prHeads({ branches: [b("x", "develop")], base: "main", owners: {} }),
+		).toEqual(["x"]);
+	});
+
+	test("with a fork's remotes, each head is also tried as owner:branch", () => {
+		expect(
+			prHeads({
+				branches: [b("fix/x", "fix/x", "origin")],
+				base: "main",
+				owners: { origin: "me", upstream: "org" },
+			}),
+		).toEqual(["fix/x", "me:fix/x"]);
+		expect(
+			prHeads({
+				branches: [b("fix/x", "fix/x")],
+				base: "main",
+				owners: { origin: "me" },
+			}),
+		).toEqual(["fix/x"]);
+	});
+});
+
+describe("remoteOwner", () => {
+	test("reads https and ssh GitHub URLs", () => {
+		expect(remoteOwner("https://github.com/acme/serenity.git")).toBe("acme");
+		expect(remoteOwner("git@github.com:acme/serenity.git")).toBe("acme");
+		expect(remoteOwner("https://github.com/acme/serenity")).toBe("acme");
+		expect(remoteOwner("/local/path")).toBeNull();
+	});
+});
+
+describe("touchesPr", () => {
+	const bash = (command: string) => ({
+		tool_name: "Bash",
+		tool_input: { command },
+	});
+	test("pushes and gh pr changes, not reads or other tools", () => {
+		expect(touchesPr(bash("git push -u origin fix/x"))).toBe(true);
+		expect(touchesPr(bash("git -C /w push"))).toBe(true);
+		expect(touchesPr(bash("bun test && gh pr create --fill"))).toBe(true);
+		expect(touchesPr(bash("gh pr merge 74 --squash"))).toBe(true);
+		expect(touchesPr(bash("gh pr view 74"))).toBe(false);
+		expect(touchesPr(bash("git status"))).toBe(false);
+		expect(
+			touchesPr({ tool_name: "Edit", tool_input: { command: "git push" } }),
+		).toBe(false);
+	});
+});
+
+describe("prLabel", () => {
+	test("is the number with PR in front", () => {
+		expect(prLabel({ number: 74 })).toBe("PR #74");
 	});
 });

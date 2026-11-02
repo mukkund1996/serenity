@@ -129,7 +129,92 @@ export function parsePr(raw: unknown): PrInfo | null {
 	};
 }
 
+// ------------------------------------------------- finding a session's PR
+
+/** What git knows about a local branch, for finding its PR (ADR 0055). */
+export interface BranchFacts {
+	name: string;
+	/** The remote branch it tracks, e.g. "fix/x" for origin/fix/x; null if none. */
+	upstream: string | null;
+	/** The remote it tracks, e.g. "origin"; null if none. */
+	remote: string | null;
+}
+
+/**
+ * Whether `upstream` is the branch's own push target under another prefix
+ * (X pushed as fix/X, docs/X → X) rather than the branch it started from: a
+ * new worktree's branch tracks origin/main, whose PRs are not the session's.
+ */
+function sameWork(name: string, upstream: string): boolean {
+	return (
+		name === upstream ||
+		upstream.endsWith(`/${name}`) ||
+		name.endsWith(`/${upstream}`)
+	);
+}
+
+/**
+ * The heads to ask gh about, most likely first (ADR 0055): each branch's
+ * upstream when it is the same work under another name, then the branch
+ * itself, never the base. With more than one remote (a fork), each is
+ * repeated as `owner:branch`, which is how gh finds a PR from a fork.
+ */
+export function prHeads(opts: {
+	/** The worktree's current branch first, then the session's own. */
+	branches: BranchFacts[];
+	base: string | null;
+	/** Remote name → GitHub owner; only consulted with more than one remote. */
+	owners: Record<string, string>;
+}): string[] {
+	const plain: string[] = [];
+	const forked: string[] = [];
+	const fork = Object.keys(opts.owners).length > 1;
+	const add = (head: string, remote: string | null) => {
+		if (!head || head === "HEAD" || head === opts.base) return;
+		if (!plain.includes(head)) plain.push(head);
+		const owner = fork && remote ? opts.owners[remote] : undefined;
+		const qualified = owner ? `${owner}:${head}` : null;
+		if (qualified && !forked.includes(qualified)) forked.push(qualified);
+	};
+	for (const b of opts.branches) {
+		const pushed =
+			b.upstream && sameWork(b.name, b.upstream) ? b.upstream : null;
+		// Only the name it was pushed as exists on the fork.
+		if (pushed) add(pushed, b.remote);
+		add(b.name, pushed ? null : b.remote);
+	}
+	return [...plain, ...forked];
+}
+
+/** The GitHub owner in a remote URL (https or ssh); null if not GitHub-shaped. */
+export function remoteOwner(url: string): string | null {
+	const remote =
+		/^(?:[a-z+]+:\/\/(?:[^@/]+@)?[^/]+\/|[^@/:]+@[^:/]+:)([^/]+)\/[^/]+?\/?$/i;
+	return url.trim().match(remote)?.[1] ?? null;
+}
+
+/** A PostToolUse that may have opened, pushed or merged a PR (ADR 0055). */
+export function touchesPr(payload: {
+	tool_name?: string;
+	[key: string]: unknown;
+}): boolean {
+	if (payload.tool_name !== "Bash") return false;
+	const command = (payload.tool_input as { command?: unknown } | undefined)
+		?.command;
+	return (
+		typeof command === "string" &&
+		/\bgit\s+(?:-\S+\s+\S+\s+)*push\b|\bgh\s+pr\s+(?:create|merge|ready|close|reopen|edit)\b/.test(
+			command,
+		)
+	);
+}
+
 export type PrTone = "merged" | "good" | "bad" | "warn" | "quiet";
+
+/** "PR #74": drawn in PR_LABEL_COLOR wherever a session's PR shows. */
+export function prLabel(pr: Pick<PrInfo, "number">): string {
+	return `PR #${pr.number}`;
+}
 
 /** The word on the card (design: words only, never a glyph). */
 export function prStatus(pr: PrInfo): { text: string; tone: PrTone } {

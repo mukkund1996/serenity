@@ -15,7 +15,9 @@ import {
 	actionLine,
 	commandHint,
 	mentionSegments,
+	prLabel,
 	prLine,
+	prStatus,
 	slackSuggestionLine,
 	suggestionAction,
 } from "@serenity/core";
@@ -48,6 +50,8 @@ import {
 	glyph,
 	MENTION_COLOR,
 	nameColor,
+	PR_LABEL_COLOR,
+	TONE_COLOR,
 } from "./theme";
 
 const ink = (color: Color | undefined) =>
@@ -568,6 +572,24 @@ function Row({
 	);
 }
 
+/** "PR #74 checks passing" as on the card: label blue, status in its tone (ADR 0055). */
+function PrLine({ session }: { session: Session }) {
+	const pr = session.pr;
+	if (!pr)
+		return (
+			<Text color="gray" wrap="truncate">
+				{prLine(session)}
+			</Text>
+		);
+	const status = prStatus(pr);
+	return (
+		<Text wrap="truncate">
+			<Text color={PR_LABEL_COLOR}>{prLabel(pr)}</Text>
+			<Text color={TONE_COLOR[status.tone]}> {status.text}</Text>
+		</Text>
+	);
+}
+
 function PrTitle({
 	number,
 	title,
@@ -579,7 +601,7 @@ function PrTitle({
 }) {
 	return (
 		<>
-			<Text color="gray">#{number} </Text>
+			<Text color={PR_LABEL_COLOR}>#{number} </Text>
 			<Text color={selected ? "whiteBright" : undefined} bold={selected}>
 				{title}
 			</Text>
@@ -966,9 +988,7 @@ export function SessionMaster({
 				<Text color="gray">nothing else needs you</Text>
 			)}
 			<SectionHeader label="ABOUT THIS SESSION" width={inner} />
-			<Text color="gray" wrap="truncate">
-				{prLine(session)}
-			</Text>
+			<PrLine session={session} />
 			<Text color="white">{cardText(session)}</Text>
 			{suggestion ? (
 				<Box marginTop={1}>

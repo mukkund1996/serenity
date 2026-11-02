@@ -344,7 +344,7 @@ test("card row 1 shows the PR and its status word, or why it is unknown", () => 
 		baseRefName: "main",
 		files: [],
 	};
-	const text = drawTopics({
+	const canvas = drawTopics({
 		width: 140,
 		height: 30,
 		masterRow: 15,
@@ -355,8 +355,15 @@ test("card row 1 shows the PR and its status word, or why it is unknown", () => 
 		]),
 		focusId: null,
 		reply: null,
-	}).canvas.toString();
+	}).canvas;
+	const text = canvas.toString();
 	expect(text).toContain("PR #482 checks failing");
+	// The label is blue, the status word in its tone (ADR 0055).
+	const runs = canvas.rows().flat();
+	expect(runs.find((r) => r.text === "PR #482")?.style.fg).toBe("blueBright");
+	expect(runs.find((r) => r.text.startsWith(" checks failing"))?.style.fg).toBe(
+		"red",
+	);
 	expect(text).toContain("PR unknown · gh not logged in");
 	expect(text).toContain("no PR yet");
 });

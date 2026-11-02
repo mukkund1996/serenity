@@ -102,6 +102,13 @@ export function askLine(session: Session): string {
 	return session.status;
 }
 
+/**
+ * "PR #74" wherever a session's PR shows (card, attach panel, REVIEW): blue,
+ * so the PR reads at a glance apart from the status word after it (ADR 0055).
+ * Bright, as for mentions, since plain blue is hard to read on dark terminals.
+ */
+export const PR_LABEL_COLOR: Color = "blueBright";
+
 /** PR status word colours (ADR 0011). */
 export const TONE_COLOR: Record<PrTone, Color> = {
 	merged: "cyan",

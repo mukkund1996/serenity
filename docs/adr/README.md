@@ -16,7 +16,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0008](0008-master-proposes-via-mcp.md) | Master only proposes; MCP tools for the Opus chat only | Amended by 0046 |
 | [0009](0009-storage-interface-sqlite.md) | SQLite behind a swappable storage interface | Accepted |
 | [0010](0010-worktrees-beside-repo.md) | New worktrees live beside the repo | Accepted |
-| [0011](0011-pr-status-via-gh.md) | PR status via `gh`, refreshed on events | Amended by 0043 |
+| [0011](0011-pr-status-via-gh.md) | PR status via `gh`, refreshed on events | Amended by 0043, 0055 |
 | [0012](0012-ux-decisions.md) | UX decisions not covered by the canvas | Accepted |
 | [0013](0013-testing-strategy.md) | Testing strategy | Accepted |
 | [0014](0014-distribution-and-release.md) | Distribution, release, licence, telemetry | Accepted |
@@ -48,7 +48,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0040](0040-master-queue.md) | The master's queue: replies its chat wants to send wait under NEEDS YOU, one line each, Enter shows one in full; Slack drafts stay in NEEDS YOU, marked `slack` | Amended by 0050 |
 | [0041](0041-master-chat-scrolls.md) | The topics zoom's master shows four messages; `PgUp` `PgDn` (`Shift+↑↓`) scroll back and on; leaving resets it | Amended by 0042 |
 | [0042](0042-master-shows-three-eased-pulse-text-fields-edit.md) | The master shows three messages, its scroll hints grey; the pulse is one eased swell, not three blinks; text fields edit at a cursor like a terminal line | Accepted |
-| [0043](0043-dependency-retries-and-health.md) | gh, git and tmux calls retry with backoff and jitter, transient errors only, never anything unsafe twice; the map reconnects on its own (yellow, red after 15 s); dependencies failing call after call show as header badges | Accepted |
+| [0043](0043-dependency-retries-and-health.md) | gh, git and tmux calls retry with backoff and jitter, transient errors only, never anything unsafe twice; the map reconnects on its own (yellow, red after 15 s); dependencies failing call after call show as header badges | Amended by 0055 |
 | [0044](0044-claude-restarts-in-its-pane.md) | Any claude exit serenity did not cause restarts it in the same pane with `--resume`, backing off 1–16 s; a sixth exit in 10 min, or one before it started, leaves the session dead with the reason | Accepted |
 | [0045](0045-daemon-supervisor-crash-reports-recovery.md) | A supervisor restarts the daemon, crashes become deduped GitHub issues, and state survives a restart | Accepted |
 | [0046](0046-master-survives-crashes-hangs-and-restarts.md) | The master survives crashes, hangs and daemon restarts: an outbox per repo, a 5-minute watchdog, restart with `--resume` and re-send, its state in SQLite, tools that answer within 2 minutes | Accepted |
@@ -60,6 +60,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0052](0052-mention-colours.md) | `@` mentions are coloured where they resolve: a live session `blueBright`, `@new` green, `@copy` and `@handover` yellow; unknown `@word`s stay plain; in the input, the `@` list and the user's messages | Accepted |
 | [0053](0053-ctrl-q-and-ctrl-w.md) | `Ctrl+q` leaves a session for the map and `Ctrl+w` focuses the master, replacing `Ctrl+g` and `Ctrl+m`; plain control bytes, no extended keys needed; serenity's old bindings are removed | Amended by 0054 |
 | [0054](0054-agent-pane-test-compares-marker.md) | The agent-pane test in the `Ctrl+q` / `Ctrl+w` bindings compares the marker with empty (tmux reads an id starting with `0` as false); the binding check reads tmux 3.4's folded `C-q`/`C-Q` and keeps trying instead of giving up | Accepted |
+| [0055](0055-session-prs-found-kept-and-polled.md) | A session's PR is found under the head it was pushed as (worktree branch, renamed upstream, `owner:branch` for forks, else the known number); no failure blanks a known PR; rate limits back off; pushes and `gh pr` refresh it; open PRs are polled while a map is open; `PR #n` is bright blue | Accepted |
 
 ## System at a glance
 

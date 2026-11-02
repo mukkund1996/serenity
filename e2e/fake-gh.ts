@@ -3,6 +3,7 @@
  * A stand-in for `gh` in E2E tests. PRs are JSON files in
  * $SERENITY_FAKE_GH_DIR named after their branch:
  *   gh pr view <branch> --json …        → prints <branch>.json, or "no PR"
+ *   gh pr view <number> --json …        → the fixture with that number
  *   gh pr edit <n> --add-reviewer <who> → logs "<n> <who>" to edits.log and
  *                                         adds the request to that PR's file
  *   gh pr list --search … --json …      → review-requests.json, or []
@@ -30,6 +31,16 @@ if (group === "api" && command === "user") {
 }
 
 if (group === "pr" && command === "view") {
+	if (/^\d+$/.test(target ?? "")) {
+		for (const name of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
+			const text = readFileSync(join(dir, name), "utf8");
+			if (String(JSON.parse(text).number) !== target) continue;
+			process.stdout.write(text);
+			process.exit(0);
+		}
+		console.error(`no pull requests found for #${target}`);
+		process.exit(1);
+	}
 	const file = join(dir, `${target}.json`);
 	if (!existsSync(file)) {
 		console.error(`no pull requests found for branch "${target}"`);

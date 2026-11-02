@@ -1,7 +1,7 @@
 import {
 	Canvas,
 	type Color,
-	type PrTone,
+	prLabel,
 	prStatus,
 	type Session,
 	type Style,
@@ -10,7 +10,15 @@ import {
 	wrap,
 } from "@serenity/core";
 import { drawField, type Field } from "./text-input";
-import { cardText, endedText, frameColor, glyph, nameColor } from "./theme";
+import {
+	cardText,
+	endedText,
+	frameColor,
+	glyph,
+	nameColor,
+	PR_LABEL_COLOR,
+	TONE_COLOR,
+} from "./theme";
 
 /**
  * Draws one side of the topics zoom (design screen 2): every topic as a
@@ -241,15 +249,10 @@ function cardBody(s: Session, width: number): Line[] {
 	return [you];
 }
 
-const TONE: Record<PrTone, Style> = {
-	merged: { fg: "cyan" },
-	good: { fg: "green" },
-	bad: { fg: "red" },
-	warn: { fg: "yellow" },
-	quiet: { fg: "gray" },
-};
-
-/** Card row 1 (design): "PR #482 checks passing", "no PR yet", or why it is unknown. */
+/**
+ * Card row 1 (design): "PR #482 checks passing", "no PR yet", or why it is
+ * unknown. The label is blue, the status word in its tone (ADR 0055).
+ */
 function drawPrLine(
 	canvas: Canvas,
 	s: Session,
@@ -259,14 +262,10 @@ function drawPrLine(
 ): void {
 	if (s.pr) {
 		const status = prStatus(s.pr);
-		let col = canvas.text(x, y, "PR ", { fg: "gray" });
-		col = canvas.text(col, y, `#${s.pr.number}`, { underline: true });
-		canvas.text(
-			col,
-			y,
-			truncate(` ${status.text}`, width - (col - x)),
-			TONE[status.tone],
-		);
+		const col = canvas.text(x, y, prLabel(s.pr), { fg: PR_LABEL_COLOR });
+		canvas.text(col, y, truncate(` ${status.text}`, width - (col - x)), {
+			fg: TONE_COLOR[status.tone],
+		});
 	} else if (s.prError) {
 		canvas.text(x, y, truncate(`PR unknown · ${s.prError}`, width), {
 			fg: "gray",

@@ -1,5 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { type BranchFacts, remoteOwner } from "@serenity/core";
 import { run } from "./exec";
 
 export function currentBranch(dir: string): Promise<string> {
@@ -151,4 +152,58 @@ export async function addWorktree(
 			? ["-b", opts.newBranch, path, opts.base]
 			: [path, opts.branch];
 	await run(["git", "-C", repo, "worktree", "add", ...args]);
+}
+
+/** The branch checked out in `dir`; null when detached or not git. */
+export async function checkedOutBranch(dir: string): Promise<string | null> {
+	try {
+		return (
+			(await run(["git", "-C", dir, "symbolic-ref", "--short", "-q", "HEAD"], {
+				retry: true,
+			})) || null
+		);
+	} catch {
+		return null;
+	}
+}
+
+/** A local branch and what it tracks (ADR 0055); null if there is no such branch. */
+export async function branchFacts(
+	dir: string,
+	branch: string,
+): Promise<BranchFacts | null> {
+	const out = await run(
+		[
+			"git",
+			"-C",
+			dir,
+			"for-each-ref",
+			"--format=%(refname:short)%00%(upstream:remotename)%00%(upstream:remoteref)",
+			`refs/heads/${branch}`,
+		],
+		{ retry: true },
+	);
+	if (!out) return null;
+	const [name = branch, remote = "", ref = ""] =
+		out.split("\n")[0]?.split("\0") ?? [];
+	return {
+		name,
+		remote: remote || null,
+		upstream: ref.replace(/^refs\/heads\//, "") || null,
+	};
+}
+
+/** Each remote's GitHub owner, from its fetch URL. */
+export async function remoteOwners(
+	dir: string,
+): Promise<Record<string, string>> {
+	const out = await run(["git", "-C", dir, "remote", "-v"], { retry: true });
+	const owners: Record<string, string> = {};
+	for (const line of out.split("\n")) {
+		const [name, url, kind] = line.split(/\s+/);
+		if (!name || !url || kind !== "(fetch)") continue;
+		const owner = remoteOwner(url);
+		if (owner) owners[name] = owner;
+	}
+	return owners;
 }

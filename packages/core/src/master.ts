@@ -1,7 +1,7 @@
 import { PINNED, topicOf } from "./attention";
 import type { Session, Suggestion, SuggestionKind } from "./domain";
 import { type MasterCommand, masterCommands } from "./mentions";
-import { prStatus } from "./pr";
+import { prLabel, prStatus } from "./pr";
 import type { SlackItem } from "./slack";
 
 /**
@@ -17,8 +17,7 @@ const TOPIC_MAX = 20;
 
 /** "PR #482 checks passing", or what is known instead. */
 export function prLine(session: Session): string {
-	if (session.pr)
-		return `PR #${session.pr.number} ${prStatus(session.pr).text}`;
+	if (session.pr) return `${prLabel(session.pr)} ${prStatus(session.pr).text}`;
 	return session.prError ? `PR unknown (${session.prError})` : "no PR yet";
 }
 

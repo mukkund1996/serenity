@@ -19,6 +19,6 @@ test("gh errors: quiet when there is simply no PR, a reason otherwise", () => {
 });
 
 test("a missing gh binary reads as not installed", async () => {
-	const lookup = await new Gh("/nonexistent/gh").prForBranch("/tmp", "x");
+	const lookup = await new Gh("/nonexistent/gh").viewPr("/tmp", "x");
 	expect(lookup).toEqual({ pr: null, error: "gh not installed" });
 });

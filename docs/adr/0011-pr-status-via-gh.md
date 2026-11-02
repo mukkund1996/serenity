@@ -1,10 +1,10 @@
 # 0011 · PR status via `gh`, refreshed on events
 
-**Status:** Accepted · 2026-10-25 · revised 2026-10-25 (milestone 3: reviewers, merged PRs, squash merges) · revised 2026-10-26 (review requests for the master panel) · Amended by [0043](0043-dependency-retries-and-health.md): reads retry; a blip keeps the PR and reads again
+**Status:** Accepted · 2026-10-25 · revised 2026-10-25 (milestone 3: reviewers, merged PRs, squash merges) · revised 2026-10-26 (review requests for the master panel) · Amended by [0043](0043-dependency-retries-and-health.md): reads retry; a blip keeps the PR and reads again · Amended by [0055](0055-session-prs-found-kept-and-polled.md): the PR is found under the head it was pushed as, kept on any failure, refreshed after pushes and polled while open; the label is blue
 
 ## Decision
 - PR data comes from `gh pr view <branch> --json number,url,title,state,isDraft,statusCheckRollup,reviewDecision,reviewRequests,latestReviews,author,headRefOid,baseRefName,files`, run in the session's worktree.
-- Refreshed **only on events**, never polled: after each `Stop` hook (debounced), on attach and detach, when a map opens (at most once a minute per session), and right after a review request.
+- Refreshed on events (and, since 0055, polled while open and a map is open): after each `Stop` hook (debounced), on attach and detach, when a map opens (at most once a minute per session), and right after a review request.
 - Checks roll up as: any failure → failing; anything not finished → running; otherwise passing; no checks → none.
 - Status words on the card, most important first: merged · closed · draft · checks failing · changes requested · checks running · approved · checks passing · open. Colours: merged cyan, passing/approved green, failing red, changes requested yellow, the rest grey.
 - `o` opens the PR URL in the browser.
@@ -16,7 +16,7 @@
 - `SERENITY_GH_BIN` points serenity at another `gh` (the E2E fake).
 
 ## Consequences
-- A PR can look stale while its session is idle and the map is closed; acceptable for v1. Revisit with polling if it bites.
+- A PR can look stale while its session is idle and the map is closed. It bit: 0055 polls open PRs while a map is open.
 - An open map costs one `gh pr list` call every 5 minutes; review requests can be up to 5 minutes late.
 - `gh` missing or not logged in shows on the card as "PR unknown · <reason>", never a crash; "no PR yet" and repos without a GitHub remote stay quiet.
 - Teams named in CODEOWNERS (`@org/team`) can be suggested; `gh` accepts them as reviewers.

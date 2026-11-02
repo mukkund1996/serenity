@@ -89,11 +89,12 @@ export class Gh {
 		return out;
 	}
 
-	async prForBranch(cwd: string, branch: string): Promise<PrLookup> {
-		const out = await this.read(
-			["pr", "view", branch, "--json", PR_FIELDS],
-			cwd,
-		);
+	/**
+	 * The PR for `ref`: a branch, `owner:branch` (a fork's), or a number
+	 * (ADR 0055). gh finds open, merged and closed PRs alike.
+	 */
+	async viewPr(cwd: string, ref: string): Promise<PrLookup> {
+		const out = await this.read(["pr", "view", ref, "--json", PR_FIELDS], cwd);
 		if (out.ok) {
 			try {
 				return { pr: parsePr(JSON.parse(out.stdout)), error: null };
@@ -258,9 +259,18 @@ export function classifyGhError(stderr: string): string | null {
 	)
 		return null;
 	if (/command not found|ENOENT/i.test(stderr)) return "gh not installed";
+	if (isRateLimited(stderr)) return RATE_LIMITED;
 	if (/gh auth login|not logged|authentication/i.test(stderr))
 		return "gh not logged in";
 	return firstLine(stderr) || "gh failed";
+}
+
+/** What the card says while GitHub is rate limiting gh. */
+export const RATE_LIMITED = "gh rate limited";
+
+/** GitHub's primary and secondary rate limits: they pass, but not in seconds. */
+export function isRateLimited(stderr: string): boolean {
+	return /rate limit|abuse detection|submitted too quickly/i.test(stderr);
 }
 
 /** The repo's CODEOWNERS text, from the first place GitHub looks. */

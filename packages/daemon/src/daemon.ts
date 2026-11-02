@@ -35,6 +35,7 @@ import {
 	selfCommand,
 	socketPath,
 	tmuxSessionName,
+	touchesPr,
 	type Usage,
 	usageChanged,
 	WAIT_WINDOW_MS,
@@ -104,6 +105,8 @@ export interface DaemonOptions {
 	claudeConfigDir?: string;
 	/** How often review requests are polled while a map is open; SERENITY_REVIEW_POLL_MS overrides it. */
 	reviewPollMs?: number;
+	/** How often open session PRs are polled while a map is open (ADR 0055). */
+	prPollMs?: number;
 	/** The first restart's delay after claude exits; SERENITY_RESPAWN_BASE_MS overrides it (ADR 0044). */
 	respawnBaseMs?: number;
 	/** How often the panes' markers and the key bindings are checked; SERENITY_TMUX_CHECK_MS overrides it (ADR 0051). */
@@ -126,6 +129,7 @@ const DEFAULT_STARTUP_GRACE_MS = 5000;
 const DEFAULT_WORKER_DEBOUNCE_MS = 1500;
 /** Review requests fire no event, so an open map polls them this often. */
 const DEFAULT_REVIEW_POLL_MS = 5 * 60_000;
+const DEFAULT_PR_POLL_MS = 60_000;
 /** Neither do Slack messages. Each read is a model call, but a read already in flight is never doubled, so a slow one only skips ticks. */
 const DEFAULT_SLACK_POLL_MS = 60_000;
 /**
@@ -278,6 +282,10 @@ export class Daemon {
 			debounceMs:
 				opts.workerDebounceMs ??
 				envNumber("SERENITY_WORKER_DEBOUNCE_MS", DEFAULT_WORKER_DEBOUNCE_MS),
+			watching: (repo) =>
+				[...this.subscriptions.values()].some((repos) => repos.has(repo)),
+			pollMs:
+				opts.prPollMs ?? envNumber("SERENITY_PR_POLL_MS", DEFAULT_PR_POLL_MS),
 		});
 		this.reviews = new ReviewWatcher({
 			gh: this.gh,
@@ -541,10 +549,14 @@ export class Daemon {
 
 	private update(session: Session, patch: Partial<Session>): Session {
 		const now = this.now();
-		const next = { ...session, ...patch, updatedAt: now };
+		// The patch goes onto the stored row, not the caller's copy: one read
+		// before an await would otherwise put back what others wrote since,
+		// such as a PR the watcher just read (ADR 0055).
+		const base = this.opts.storage.sessions.get(session.id) ?? session;
+		const next = { ...base, ...patch, updatedAt: now };
 		// A dismissal from NEEDS YOU lasts until the session's status changes (ADR 0050).
-		if (next.status !== session.status) next.dismissedAt = null;
-		const { waitingSince, ended } = waitChange(session, next, now);
+		if (next.status !== base.status) next.dismissedAt = null;
+		const { waitingSince, ended } = waitChange(base, next, now);
 		next.waitingSince = waitingSince;
 		this.opts.storage.transaction(() => {
 			this.opts.storage.sessions.put(next);
@@ -555,9 +567,10 @@ export class Daemon {
 
 	/** Updates a session and lets the master react (summaries, suggestions). */
 	private change(session: Session, patch: Partial<Session>): Session {
-		const next = this.update(session, patch);
-		this.master.onSessionChanged(session, next);
-		if (next.lastAssistantMessage !== session.lastAssistantMessage)
+		const prev = this.opts.storage.sessions.get(session.id) ?? session;
+		const next = this.update(prev, patch);
+		this.master.onSessionChanged(prev, next);
+		if (next.lastAssistantMessage !== prev.lastAssistantMessage)
 			this.advisor.onSessionChanged(next);
 		return next;
 	}
@@ -572,6 +585,7 @@ export class Daemon {
 				void this.bindMapKeys(clientPane);
 			}
 			this.prs.refreshRepo(repo);
+			this.prs.watch(repo);
 			this.reviews.watch(repo);
 			if (this.slackRepos.has(repo)) {
 				this.slack.watch();
@@ -797,8 +811,9 @@ export class Daemon {
 				});
 				this.change(session, reduceHook(session, kind, payload));
 			});
-			// A turn ended: commits may have been pushed or a PR opened.
-			if (kind === "Stop") this.prs.schedule(session.id);
+			// A turn ended, or a push or gh pr ran: the PR may have changed.
+			if (kind === "Stop" || (kind === "PostToolUse" && touchesPr(payload)))
+				this.prs.schedule(session.id);
 			this.broadcast(session.repo);
 			return null;
 		},
