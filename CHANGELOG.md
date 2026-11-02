@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.0](https://github.com/mukkund1996/serenity/compare/v0.8.0...v0.9.0) (2026-11-02)
+
+
+### Features
+
+* **skills:** add the parallel-sessions skill and a plugin marketplace ([#73](https://github.com/mukkund1996/serenity/issues/73)) ([4433c1d](https://github.com/mukkund1996/serenity/commit/4433c1d6552b8256e1c57771fe2362655ce3460c))
+
+
+### Bug Fixes
+
+* **cli:** identify unknown commands ([#79](https://github.com/mukkund1996/serenity/issues/79)) ([c9fd381](https://github.com/mukkund1996/serenity/commit/c9fd3814bba502ead4d23907153665c7d0328c4f))
+* Ctrl+q in sessions whose id starts with 0; deterministic TUI e2e ([#76](https://github.com/mukkund1996/serenity/issues/76)) ([32b43bd](https://github.com/mukkund1996/serenity/commit/32b43bd1d8d0825aca0ced6efca97ccf2587a6d5))
+* keep a session's PR on its card, find it under the pushed head, poll while open, show the label in blue ([#80](https://github.com/mukkund1996/serenity/issues/80)) ([5b416ec](https://github.com/mukkund1996/serenity/commit/5b416ec1eefba48f6dbc13792656561fa5880492))
+* **tui:** break words wider than a map card so text stays inside it ([#75](https://github.com/mukkund1996/serenity/issues/75)) ([c14dc8d](https://github.com/mukkund1996/serenity/commit/c14dc8daace0cf5ac2fd541214fb6f9cd36f7543))
+* **tui:** keep the map up when the link opener is missing ([#71](https://github.com/mukkund1996/serenity/issues/71)) ([f9ed986](https://github.com/mukkund1996/serenity/commit/f9ed986f387a09f9510b37ae81b00f917b0cc3bd))
+* **website:** ease the story autoplay through its holds and paint every frame ([#78](https://github.com/mukkund1996/serenity/issues/78)) ([ca8c398](https://github.com/mukkund1996/serenity/commit/ca8c398e2218fa7f570d9d412581c32f8444ce2c))
+* **website:** let the owner's #toggle-goatcounter work on an open page, document the analytics opt-out ([#77](https://github.com/mukkund1996/serenity/issues/77)) ([7b277e0](https://github.com/mukkund1996/serenity/commit/7b277e06a544924f9063283ffec60ef9434911e8))
+
 ## [0.8.0](https://github.com/mukkund1996/serenity/compare/v0.7.0...v0.8.0) (2026-11-01)
 
 
