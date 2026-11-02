@@ -344,6 +344,7 @@ switch (command) {
 		console.log(USAGE);
 		break;
 	default:
+		console.error(`serenity: unknown command "${command}"`);
 		console.error(USAGE);
 		process.exit(2);
 }
