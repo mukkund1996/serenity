@@ -54,7 +54,7 @@ const releases = (
 
 const runs = ghLines(
 	`repos/${REPO}/actions/workflows/install-smoke.yml/runs?per_page=100`,
-	".workflow_runs[] | {id, event, created: .created_at, tag: (if .event == \"release\" then .head_branch else null end)}",
+	'.workflow_runs[] | {id, event, created: .created_at, tag: (if .event == "release" then .head_branch else null end)}',
 ) as Run[];
 
 /** The release that was latest at `when`. */
