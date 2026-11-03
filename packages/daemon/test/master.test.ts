@@ -1040,6 +1040,27 @@ describe("chat", () => {
 		expect(master.answerPermission(request?.id as string, true)).toBe(false);
 	});
 
+	test("x hides a permission request from NEEDS YOU without answering it", async () => {
+		let settled = false;
+		const answer = master.handleTool(REPO, "request_permission", {
+			tool_name: "Bash",
+			input: { command: "npm test" },
+		});
+		void answer.then(() => {
+			settled = true;
+		});
+		const [request] = master.permissions(REPO);
+		const id = request?.id as string;
+		expect(master.dismissPermission(id)).toBe(true);
+		expect(master.permissions(REPO)).toEqual([]);
+		await Bun.sleep(0);
+		// Neither allowed nor denied: still pending, so y or n would still settle it.
+		expect(settled).toBe(false);
+		expect(master.answerPermission(id, true)).toBe(true);
+		expect(JSON.parse((await answer).text).behavior).toBe("allow");
+		expect(master.dismissPermission(id)).toBe(false);
+	});
+
 	test("a Slack message the user confirmed in the chat is sent without asking", async () => {
 		storage.conversation.append({
 			repo: REPO,

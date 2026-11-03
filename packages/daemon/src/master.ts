@@ -166,6 +166,8 @@ interface PendingPermission {
 	permission: MasterPermission;
 	resolve: (allow: boolean) => void;
 	timer: ReturnType<typeof setTimeout>;
+	/** Hidden from NEEDS YOU with x (ADR 0057); still pending. */
+	dismissed?: boolean;
 }
 
 /**
@@ -223,10 +225,16 @@ export class MasterSupervisor {
 		};
 	}
 
+	/** The repo's pending permission requests NEEDS YOU shows: not dismissed with x. */
 	permissions(repo: string): MasterPermission[] {
 		return [...this.pending.values()]
-			.map((p) => p.permission)
-			.filter((p) => p.repo === repo);
+			.filter((p) => !p.dismissed && p.permission.repo === repo)
+			.map((p) => p.permission);
+	}
+
+	/** Whether the repo's chat waits on a permission request, shown or dismissed. */
+	private awaitsPermission(repo: string): boolean {
+		return [...this.pending.values()].some((p) => p.permission.repo === repo);
 	}
 
 	/** Messages between the master and sessions in the last few seconds (ADR 0039). */
@@ -653,7 +661,7 @@ export class MasterSupervisor {
 		chat.watchdog = setTimeout(() => {
 			chat.watchdog = null;
 			if (this.chats.get(repo) !== chat || !chat.thinking) return;
-			if (this.permissions(repo).length || this.toolCalls.get(repo)) {
+			if (this.awaitsPermission(repo) || this.toolCalls.get(repo)) {
 				this.arm(repo, chat);
 				return;
 			}
@@ -1329,6 +1337,18 @@ export class MasterSupervisor {
 		if (i === -1) return false;
 		released.splice(i, 1);
 		this.save(repo);
+		return true;
+	}
+
+	/**
+	 * x on a permission request (ADR 0057): out of NEEDS YOU, left pending.
+	 * It times out as an unanswered request does. False if it is not pending.
+	 */
+	dismissPermission(id: string): boolean {
+		const entry = this.pending.get(id);
+		if (!entry) return false;
+		entry.dismissed = true;
+		this.host.broadcast(entry.permission.repo);
 		return true;
 	}
 

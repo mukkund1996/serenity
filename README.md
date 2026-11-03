@@ -152,7 +152,7 @@ serenity is keyboard-only. The footer shows the moves; `?` opens the full list.
 | `[` `]` | Previous / next topic |
 | `N` `I` | New session · import from tmux |
 | `o` `f` `p` | Open the PR · watch · pin |
-| `r` `K` `x` | Rename · kill the agent · clean up; on a Slack item, `x` dismisses it |
+| `r` `K` `x` | Rename · kill the agent · clean up, on a session's card; on any NEEDS YOU item `x` only dismisses it (until something new happens) |
 | `/` `c` `H` | Search sessions · centre on the master · archived sessions |
 
 ## Configuration

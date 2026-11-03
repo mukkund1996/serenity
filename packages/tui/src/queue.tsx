@@ -16,7 +16,7 @@ export interface QueuedReply {
 /**
  * The master's queue (ADR 0040): replies its chat wants to send, one line
  * each, the target session and a preview. Enter shows the whole message;
- * y sends it, e edits it, n drops it.
+ * y sends it, e edits it, n or x drops it.
  */
 export function QueueSection({
 	queue,
@@ -61,7 +61,7 @@ export function QueueSection({
 								)}
 							</Text>
 							<Box flexShrink={0} marginLeft={1}>
-								<Chips keys="yen" />
+								<Chips keys="yenx" />
 							</Box>
 						</Box>
 						{on && reply !== null ? (

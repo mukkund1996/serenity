@@ -58,6 +58,7 @@ import {
 	type LinkStatus,
 	linkBadge,
 } from "./daemon-link";
+import { xAction } from "./dismiss";
 import { drawMap, type MasterItem, rowElements } from "./map";
 import { inputRows, listWindow, PROMPT_W, stepSelection } from "./master-input";
 import {
@@ -468,7 +469,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		onMaster && selected?.startsWith(PERM)
 			? (permissions.find((p) => `${PERM}${p.id}` === selected) ?? null)
 			: null;
-	/** The session that y / e / n / i / o / f / x act on: the card, or the selected NEEDS YOU item. */
+	/** The session that y / e / n / i / o / f / x act on: the card, or the selected NEEDS YOU item (where x only dismisses). */
 	const focused = onMaster
 		? (sessions.find((s) => s.id === selected) ?? null)
 		: card;
@@ -727,6 +728,56 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			() => setNotice(`dismissed ${item.author}'s message`),
 			fail,
 		);
+	};
+
+	/**
+	 * x on the selected NEEDS YOU or queue item (ADR 0057): it only leaves
+	 * the list. A Slack item is dismissed (0034), a queued reply dropped
+	 * (0040), the master's permission request hidden but left pending, and a
+	 * session hidden with its ◆ suggestion declined; it comes back when it
+	 * asks something new, changes status or gets a newer suggestion. Nothing
+	 * is cleaned up, killed, answered or archived. On the master with no
+	 * item selected x does nothing: only a card's x cleans up (xAction).
+	 */
+	const pressX = () => {
+		const x = xAction({
+			onMaster,
+			slackItem,
+			queued: queued?.suggestion ?? null,
+			permission: focusedPermission,
+			session: focused,
+		});
+		switch (x.kind) {
+			case "slack":
+				return dismissSlack(x.item, false);
+			case "queued":
+				return void call("suggestion.decline", { id: x.suggestion.id }).catch(
+					fail,
+				);
+			case "permission":
+				return void call("master.dismissPermission", {
+					id: x.permission.id,
+				}).then(
+					() =>
+						setNotice(
+							`dismissed the master's ${x.permission.toolName} request; still pending`,
+						),
+					fail,
+				);
+			case "session":
+				return void call("session.dismiss", {
+					id: x.session.id,
+					mode: "dismiss",
+				}).then(
+					() =>
+						setNotice(
+							`dismissed ${x.session.name}; back in NEEDS YOU when something new happens`,
+						),
+					fail,
+				);
+			case "cleanup":
+				return void openConfirm(x.session, null);
+		}
 	};
 
 	/**
@@ -1104,8 +1155,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				return;
 			}
 
-			// x dismisses a Slack item for good (ADR 0034).
-			if (slackItem && input === "x") return dismissSlack(slackItem, false);
+			// x dismisses a NEEDS YOU item; only a card's x cleans up (ADR 0057).
+			if (input === "x") return pressX();
 			// y e n on a Slack item act on its suggestion (ADR 0024).
 			if (slackItem && ["y", "e", "n"].includes(input)) {
 				if (slackSuggestion?.status !== "pending") return;
@@ -1120,13 +1171,13 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				return;
 			}
 
-			// y sends a queued reply, e edits it, n or x drops it, Enter shows it in full (ADR 0040).
+			// y sends a queued reply, e edits it, n (or x, above) drops it, Enter shows it in full (ADR 0040).
 			if (queued) {
 				const { suggestion } = queued;
 				if (key.return)
 					return setExpanded(expanded === suggestion.id ? null : suggestion.id);
 				if (input === "y") return void accept(suggestion, queued.session);
-				if (input === "n" || input === "x")
+				if (input === "n")
 					return void call("suggestion.decline", { id: suggestion.id }).catch(
 						fail,
 					);
@@ -1236,9 +1287,6 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							),
 						fail,
 					);
-					return;
-				case "x":
-					void openConfirm(focused, null);
 					return;
 				case "K":
 					return setOverlay({

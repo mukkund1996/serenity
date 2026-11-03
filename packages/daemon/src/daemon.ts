@@ -12,6 +12,7 @@ import {
 	handoversDir,
 	hookSettingsPath,
 	isHookKind,
+	isQueued,
 	isReservedName,
 	loadConfig,
 	type Method,
@@ -556,8 +557,14 @@ export class Daemon {
 		// such as a PR the watcher just read (ADR 0055).
 		const base = this.opts.storage.sessions.get(session.id) ?? session;
 		const next = { ...base, ...patch, updatedAt: now };
-		// A dismissal from NEEDS YOU lasts until the session's status changes (ADR 0050).
-		if (next.status !== base.status) next.dismissedAt = null;
+		// A dismissal from NEEDS YOU lasts until the session's status changes
+		// (ADR 0050), or, while it waits, until it asks something new (0057).
+		if (
+			next.status !== base.status ||
+			(next.status === "waiting" &&
+				(next.ask !== base.ask || next.waitingOn !== base.waitingOn))
+		)
+			next.dismissedAt = null;
 		const { waitingSince, ended } = waitChange(base, next, now);
 		next.waitingSince = waitingSince;
 		this.opts.storage.transaction(() => {
@@ -642,8 +649,27 @@ export class Daemon {
 			return null;
 		},
 
-		"session.dismiss": ({ id }) => {
+		"session.dismiss": ({ id, mode = "seen" }) => {
 			const session = this.requireSession(id);
+			if (mode === "dismiss") {
+				// x (ADR 0057): only out of NEEDS YOU. Its ◆ suggestion is
+				// declined; queued replies have their own section and stay.
+				const now = this.now();
+				this.opts.storage.transaction(() => {
+					for (const g of this.opts.storage.suggestions.listPending(
+						session.repo,
+					))
+						if (g.sessionId === session.id && !isQueued(g))
+							this.opts.storage.suggestions.put({
+								...g,
+								status: "declined",
+								updatedAt: now,
+							});
+				});
+				this.update(session, { dismissedAt: now });
+				this.broadcast(session.repo);
+				return null;
+			}
 			if (session.status === "waiting")
 				throw new RpcError(
 					RpcErrorCode.InvalidParams,
@@ -787,6 +813,15 @@ export class Daemon {
 
 		"master.permission": ({ id, allow }) => {
 			if (!this.master.answerPermission(id, allow))
+				throw new RpcError(
+					RpcErrorCode.InvalidParams,
+					"that request is no longer pending",
+				);
+			return null;
+		},
+
+		"master.dismissPermission": ({ id }) => {
+			if (!this.master.dismissPermission(id))
 				throw new RpcError(
 					RpcErrorCode.InvalidParams,
 					"that request is no longer pending",

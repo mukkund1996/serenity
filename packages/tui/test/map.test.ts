@@ -283,7 +283,7 @@ test("a selected Slack item shows in the master box, like any NEEDS YOU item", (
 		},
 	}).canvas.toString();
 	// It says what y does and where: the verb, the target, the text.
-	expect(suggested).toMatch(/◆ Reply in #eng thread: merged in #… +y e n/);
+	expect(suggested).toMatch(/◆ Reply in #eng thread: merged in… +y e n x/);
 	const asked = draw({
 		master: {
 			focused: true,
@@ -405,4 +405,25 @@ describe("@ mentions in the map's master are coloured (ADR 0052)", () => {
 		});
 		expect(styleAt(canvas, "@api-auth")?.fg).toBe("blueBright");
 	});
+});
+
+test("the master box's permission request says x dismisses it (ADR 0057)", () => {
+	const text = draw({
+		master: {
+			focused: true,
+			needCount: 1,
+			item: {
+				kind: "permission",
+				permission: {
+					id: "p1",
+					repo: "/repos/demo",
+					toolName: "Bash",
+					detail: "npm test",
+					at: 1,
+				},
+			},
+		},
+	}).canvas.toString();
+	expect(text).toContain("master wants to use Bash");
+	expect(text).toContain("y allow · n deny · x dismiss");
 });

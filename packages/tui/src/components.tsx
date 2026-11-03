@@ -438,7 +438,7 @@ function NeedItem({
 					</Text>
 					{i === 0 ? (
 						<Box flexShrink={0} marginLeft={1}>
-							<Chips keys="yen" />
+							<Chips keys="yenx" />
 						</Box>
 					) : null}
 				</Box>
@@ -452,7 +452,7 @@ function NeedItem({
 	);
 }
 
-/** The master asking to use a tool (ADR 0008): top of NEEDS YOU, y allow / n deny. */
+/** The master asking to use a tool (ADR 0008): top of NEEDS YOU, y allow / n deny / x dismiss (0057). */
 function PermissionItem({
 	permission,
 	selected,
@@ -475,7 +475,7 @@ function PermissionItem({
 					</Text>
 				</Text>
 				<Box flexShrink={0} marginLeft={1}>
-					<Chips keys="yn" />
+					<Chips keys="ynx" />
 				</Box>
 			</Box>
 			{needLines(permission.detail, inner).map((line, i) => (
@@ -736,7 +736,7 @@ function SlackSuggestionLine({
 						</Text>
 						{i === 0 && pending ? (
 							<Box flexShrink={0} marginLeft={1}>
-								<Chips keys="yen" />
+								<Chips keys="yenx" />
 							</Box>
 						) : null}
 					</Box>

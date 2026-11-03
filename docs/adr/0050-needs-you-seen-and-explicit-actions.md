@@ -1,6 +1,6 @@
 # 0050 · NEEDS YOU: Enter marks an item seen, ◆ says what `y` does to whom, and Slack follow-ups tell a session or start one
 
-**Status:** Accepted · 2026-10-30 · Amends 0024, 0031, 0034, 0040
+**Status:** Accepted · 2026-10-30 · Amends 0024, 0031, 0034, 0040 · Amended by [0057](0057-x-only-dismisses-needs-you-items.md): `x` dismisses any NEEDS YOU item, a waiting session too
 
 ## Context
 NEEDS YOU mixes sessions and Slack items (0031), each with a ◆ suggestion. Three things made it harder to use than it should be:
