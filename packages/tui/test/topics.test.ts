@@ -4,10 +4,13 @@ import { makeSession } from "@serenity/core/testing";
 import { splitAtNewline } from "../src/text-input";
 import { frameColor } from "../src/theme";
 import {
-	CARD_W,
+	CARD_MAX_W,
+	CARD_MIN_W,
 	drawTopics,
 	holdOrder,
 	moveFocus,
+	SIDE_MIN_W,
+	sideLanes,
 	splitSides,
 	stepTopic,
 } from "../src/topics";
@@ -57,15 +60,16 @@ describe("drawTopics", () => {
 		expect(text).toContain("infra · quiet");
 		expect(text).toContain("discovery · quiet");
 		expect(text).not.toContain("more");
+		// discovery takes the lane left beside backend; infra needs a shelf of its own.
 		expect(cards.map((c) => c.sessionId)).toEqual([
 			"a1",
 			"a2",
+			"d1",
 			"c1",
 			"c2",
 			"c3",
 			"c4",
 			"i1",
-			"d1",
 		]);
 	});
 
@@ -123,7 +127,7 @@ describe("drawTopics", () => {
 		expect(rows[15]?.endsWith("──")).toBe(true);
 		const a1 = cards.find((c) => c.sessionId === "a1");
 		// The bubble hugs the master's side: its right frame sits by the trunk.
-		expect((a1?.x ?? 0) + CARD_W).toBeGreaterThan(width - 12);
+		expect((a1?.x ?? 0) + (a1?.w ?? 0)).toBeGreaterThan(width - 12);
 		expect(rows.some((r) => r.includes("╭● backend"))).toBe(true);
 	});
 
@@ -191,13 +195,55 @@ describe("drawTopics", () => {
 		const c1 = cards.find((c) => c.sessionId === "c1");
 		// backend and discovery side by side; infra, too wide, on the next shelf.
 		expect(d1?.y).toBe(a1?.y);
-		expect(d1?.x).toBeGreaterThan((a1?.x ?? 0) + CARD_W);
+		expect(d1?.x).toBeGreaterThan((a1?.x ?? 0) + (a1?.w ?? 0));
 		expect(c1?.y).toBeGreaterThan(a1?.y ?? 0);
 		const rows = draw(null, 196).canvas.toString().split("\n");
 		const top = rows[(a1?.y ?? 0) - 2] ?? "";
 		expect(top).toContain("╭● backend");
 		expect(top).toContain("╭● discovery");
 		expect(rows[(a1?.y ?? 0) - 3]).toMatch(/┬/);
+	});
+
+	test("cards stretch to fill a side's lanes instead of leaving its outer half empty", () => {
+		for (let width = SIDE_MIN_W; width <= 300; width++) {
+			const { lanes, cardW } = sideLanes(width);
+			expect(cardW).toBeGreaterThanOrEqual(CARD_MIN_W);
+			expect(cardW).toBeLessThanOrEqual(CARD_MAX_W);
+			// A shelf of one-card bubbles, one per lane: x 5, padding 2 each side, gaps of 3.
+			const shelf = 5 + lanes * (cardW + 4) + (lanes - 1) * 3;
+			expect(shelf).toBeLessThanOrEqual(width - 1);
+			// What is left is rounding, unless the cards are already as wide as they go.
+			if (cardW < CARD_MAX_W) expect(width - 1 - shelf).toBeLessThan(lanes);
+		}
+		const { cards } = draw(null, 91);
+		expect(cards.every((c) => c.w === sideLanes(91).cardW)).toBe(true);
+	});
+
+	test("a side as wide as half a 255-column screen holds two lanes", () => {
+		expect(sideLanes(91).lanes).toBe(2);
+		const { cards } = draw(null, 91);
+		const backend = cards.filter((c) => ["a1", "a2"].includes(c.sessionId));
+		expect(new Set(backend.map((c) => c.y)).size).toBe(1);
+	});
+
+	test("one-card bubbles of different topics share a shelf, lane by lane", () => {
+		const groups = groupTopics(
+			["p", "q", "r"].map((topic) =>
+				makeSession({ id: topic, name: topic, topic }),
+			),
+		);
+		const { cards } = drawTopics({
+			width: 91,
+			height: 40,
+			masterRow: 20,
+			groups,
+			focusId: null,
+			reply: null,
+		});
+		const ys = cards.map((c) => c.y);
+		// Two lanes: two bubbles on the first shelf, the third under them.
+		expect(ys[0]).toBe(ys[1]);
+		expect(ys[2]).toBeGreaterThan(ys[0] ?? 0);
 	});
 
 	test("a card grows to fit its summary, up to four rows, and no more", () => {
@@ -221,7 +267,8 @@ describe("drawTopics", () => {
 			"Rotates refresh tokens on every use and revokes the old family when a stolen token is replayed; tests cover the replay path end to end.",
 		);
 		expect(long.h).toBe(7);
-		expect(long.text).toContain("end to end.");
+		expect(long.text).toContain("replay path");
+		expect(long.text).toContain("end.");
 		const huge = card("word ".repeat(80));
 		expect(huge.h).toBe(7);
 		expect(huge.text).toContain("…");

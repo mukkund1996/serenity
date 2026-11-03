@@ -32,7 +32,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0024](0024-slack-reply-suggestions.md) | Slack suggestions: a reply from sessions, PRs and reviews, or ask a session first; `y` posts it in the thread | Amended by 0050 |
 | [0025](0025-install-script-and-homebrew.md) | Installer and Homebrew formula install tmux, git, gh and Claude Code too; release-please and the release workflow | Amended by 0056 |
 | [0026](0026-arrows-between-nodes-enter-into-ctrl-m-master.md) | Arrow keys between nodes, Enter into a node and `w` `s` inside it, Esc out; `Ctrl+m` focuses the master from every view | Amended by 0051, 0053 |
-| [0027](0027-master-centred-in-topics-zoom.md) | The master sits in the centre of the topics zoom, topics on both sides; docks left when too narrow | Accepted |
+| [0027](0027-master-centred-in-topics-zoom.md) | The master sits in the centre of the topics zoom, topics on both sides; docks left when too narrow | Amended by 0059 |
 | [0028](0028-enter-attaches-enter-into-master-only.md) | Enter attaches a card and `i` messages it; only the master is gone into; WASD back beside the arrows; dim card frames; Slack keeps its place; MY PRS off | Accepted |
 | [0029](0029-website-on-github-pages.md) | The website: static page on GitHub Pages at getserenity.dev, release version filled in at deploy | Accepted |
 | [0030](0030-master-skill-auto-mode-confirmed-slack.md) | The master's skill, auto mode, and Slack messages sent once confirmed in the chat | Accepted |
@@ -64,6 +64,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0056](0056-ci-installs-out-of-download-counts.md) | install-smoke installs from a copy of the release taken from the release run's artifacts and checked against the release's digests (`SERENITY_DOWNLOAD_BASE`), so release download counts are people; `scripts/stats/downloads.ts` takes the older CI downloads out | Accepted |
 | [0057](0057-x-only-dismisses-needs-you-items.md) | `x` on any NEEDS YOU item only dismisses it: a session is hidden (a waiting one too, until it asks something new) with its ◆ suggestion declined, the master's permission request hidden but left pending; a card's `x` still cleans up | Accepted |
 | [0058](0058-settings-panel-and-base-branch.md) | A settings panel (`Ctrl+,`, or `,` on the map) saves a few config.json options through the daemon, applied live where it can; new worktrees branch off a per-repo or global base (repo default, the main checkout's branch, or a named one), with a fallback notice and a per-session override in the New session dialog | Accepted |
+| [0059](0059-topics-cards-fill-their-lanes.md) | Topic cards stretch to fill their side's lanes: a side holds as many lanes as fit a 36-column card, cards share one width up to 56, one-card bubbles share a shelf; padding tightened, so the master centres from about 164 columns | Accepted |
 
 ## System at a glance
 
