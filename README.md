@@ -154,16 +154,19 @@ serenity is keyboard-only. The footer shows the moves; `?` opens the full list.
 | `o` `f` `p` | Open the PR · watch · pin |
 | `r` `K` `x` | Rename · kill the agent · clean up, on a session's card; on any NEEDS YOU item `x` only dismisses it (until something new happens) |
 | `/` `c` `H` | Search sessions · centre on the master · archived sessions |
+| `Ctrl+,` | Settings: base branch, models, max topics, Slack for this repo (`,` on the map too, for terminals without extended keys) |
 
 ## Configuration
 
-Config lives in `~/.config/serenity/config.json`. Every field is optional.
+Config lives in `~/.config/serenity/config.json`. Every field is optional. `Ctrl+,` on the map (or `,`) opens a settings panel for the most-used ones. It saves each change to the file at once, keeping everything else in it, and applies it live where it can ([ADR 0058](docs/adr/0058-settings-panel-and-base-branch.md)).
 
 ```json
 {
   "models": { "chat": "opus", "summarizer": "haiku", "suggester": "sonnet" },
   "reviewers": ["teammate-login"],
   "maxTopics": 10,
+  "baseBranch": "default",
+  "repos": { "~/projects/app": { "baseBranch": { "branch": "develop" } } },
   "slack": { "repos": ["~/projects/serenity"] },
   "crashReports": { "enabled": true }
 }
@@ -174,11 +177,13 @@ Config lives in `~/.config/serenity/config.json`. Every field is optional.
 | `models` | Opus / Haiku / Sonnet | Models for the master's chat, summaries and suggestions |
 | `reviewers` | none | Who to suggest for review when CODEOWNERS names nobody |
 | `maxTopics` | `10` | How many topics the master groups sessions into |
+| `baseBranch` | `"default"` | What new session worktrees branch off: `"default"` (origin's HEAD), `"current"` (the branch the main checkout is on) or `{ "branch": "develop" }` (local first, else `origin/develop`). If it can't be followed, the repo default is used and the panel and New session dialog say why. The dialog's Base field overrides it for one session |
+| `repos.<path>.baseBranch` | none | The same, for one repo (`~` allowed); a repo without one follows `baseBranch` |
 | `slack.repos` | none | Repos whose maps show Slack mentions and DMs that need you ([ADR 0023](docs/adr/0023-slack-for-the-master.md), [0024](docs/adr/0024-slack-reply-suggestions.md), [0031](docs/adr/0031-slack-joins-needs-you.md), [0034](docs/adr/0034-dismiss-slack-items.md), [0050](docs/adr/0050-needs-you-seen-and-explicit-actions.md)); run `serenity slack login` once |
 | `crashReports.enabled` | `false` | File daemon crashes as GitHub issues through your `gh`, scrubbed of paths, tokens and emails, one issue per crash signature ([ADR 0045](docs/adr/0045-daemon-supervisor-crash-reports-recovery.md)). Reports are always kept in `crash-reports/` in the state directory |
 | `crashReports.repo` | `mukkund1996/serenity` | Where crash issues go |
 
-Model names are anything `claude --model` accepts (an alias like `sonnet` or a full model id). Config is read when the daemon starts, so run `serenity restart` after changing it.
+Model names are anything `claude --model` accepts (an alias like `sonnet` or a full model id). The daemon reads the file when it starts and again whenever the settings panel opens. From the panel, the base branch applies to new sessions; the summarizer and suggester models, max topics and Slack on the map apply at once. The master's chat model and its Slack tools change after `serenity restart`. After editing other fields by hand, run `serenity restart`.
 
 A supervisor restarts the daemon if it crashes, and it picks up where it left off (ADR 0045). State (SQLite, socket, daemon log, crash reports) lives in `~/.local/state/serenity`. Set `SERENITY_HOME` to use another directory.
 

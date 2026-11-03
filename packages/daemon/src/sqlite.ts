@@ -77,6 +77,7 @@ const SESSION_DEFAULTS: Pick<
 	| "waitingOn"
 	| "waitingSince"
 	| "ownsBranch"
+	| "base"
 	| "pr"
 	| "prError"
 	| "origin"
@@ -91,6 +92,7 @@ const SESSION_DEFAULTS: Pick<
 	waitingOn: null,
 	waitingSince: null,
 	ownsBranch: false,
+	base: null,
 	pr: null,
 	prError: null,
 	origin: "spawned",

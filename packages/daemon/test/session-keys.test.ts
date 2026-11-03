@@ -66,7 +66,7 @@ class ListKeys extends Tmux {
 const DETACH = "env SERENITY_HOME=/h /bin/bun /m.ts detach";
 const line = (key: string, sends = key, when = IN_AGENT_PANE) =>
 	`bind-key -T root ${key}                       if-shell -F "${when}" "run-shell -b \\"${DETACH} #{pane_id}\\"" "send-keys ${sends}"`;
-const SHIFT_ENTER = `bind-key -T root S-Enter                   if-shell -F "#{@serenity_map}" "send-keys Escape '[13;2u'" "send-keys S-Enter"`;
+const SHIFT_ENTER = `bind-key -T root S-Enter                   if-shell -F "#{@serenity_map}" "send-keys Escape '[13;2u'" "send-keys S-Enter"\nbind-key  -T root C-,                       if-shell -F "#{@serenity_map}" "send-keys Escape '[44;5u'" "send-keys C-,"`;
 
 test("sessionKeysBound reads tmux 3.6+'s table, where C-q and C-Q are apart", async () => {
 	const all = [line("C-Q"), line("C-W"), line("C-q"), line("C-w"), SHIFT_ENTER];
@@ -114,4 +114,13 @@ test("bindSessionKeys tests the marker against empty, which a session id startin
 		.filter((a) => a[0] === "bind-key" && /^C-[qQwW]$/.test(a[2] ?? ""))
 		.map((a) => a[5]);
 	expect(conditions).toEqual(Array(4).fill("#{!=:#{@serenity_session},}"));
+});
+
+test("sessionKeysBound wants Ctrl+, sent to the map as CSI u (ADR 0058)", async () => {
+	const all = [line("C-Q"), line("C-W"), line("C-q"), line("C-w"), SHIFT_ENTER];
+	expect(await new ListKeys(all.join("\n")).sessionKeysBound(DETACH)).toBe(
+		true,
+	);
+	const noComma = all.join("\n").replace(/\n.*C-,.*$/m, "");
+	expect(await new ListKeys(noComma).sessionKeysBound(DETACH)).toBe(false);
 });

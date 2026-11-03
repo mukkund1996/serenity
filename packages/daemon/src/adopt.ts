@@ -192,6 +192,7 @@ export class ClaudeObserver {
 				worktree: null,
 				branch: c.branch,
 				ownsBranch: false,
+				base: null,
 				pr: null,
 				prError: null,
 				tmuxPane: c.tmuxPane,

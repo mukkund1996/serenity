@@ -6,8 +6,12 @@ import {
 	type Attachment,
 	averageWait,
 	BUILD_ID,
+	baseSettingFor,
 	type CleanupPlan,
+	type Config,
+	type ConfigChange,
 	type CreateSessionParams,
+	configPath,
 	DependencyHealth,
 	handoversDir,
 	hookSettingsPath,
@@ -15,6 +19,7 @@ import {
 	isQueued,
 	isReservedName,
 	loadConfig,
+	MAX_TOPICS_RANGE,
 	type Method,
 	masterPluginPath,
 	type Params,
@@ -22,14 +27,17 @@ import {
 	RESPAWN_BASE_MS,
 	RESPAWN_WINDOW_MS,
 	type RepoState,
+	type ResolvedBase,
 	type Result,
 	RpcError,
 	RpcErrorCode,
 	RpcPeer,
 	reduceHook,
+	repoKey,
 	respawnDecision,
 	resumeArgs,
 	type Session,
+	type SettingsView,
 	SLACK_SERVER,
 	STARTUP_ASK,
 	type Storage,
@@ -42,6 +50,7 @@ import {
 	usageChanged,
 	WAIT_WINDOW_MS,
 	waitChange,
+	writeConfig,
 } from "@serenity/core";
 import { ClaudeObserver } from "./adopt";
 import { type ClaudeRunner, CliClaudeRunner } from "./claude";
@@ -58,6 +67,7 @@ import {
 	deleteBranch,
 	dirtyCount,
 	removeWorktree,
+	resolveBase,
 	siblingWorktreePath,
 } from "./git";
 import {
@@ -115,6 +125,8 @@ export interface DaemonOptions {
 	tmuxCheckMs?: number;
 	/** Repos whose map shows Slack; defaults to config (ADR 0023). */
 	slackRepos?: string[];
+	/** config.json, read at start and written by the settings panel (ADR 0058); tests point it elsewhere. */
+	configPath?: string;
 	/** How often Slack is read while such a map is open; SERENITY_SLACK_POLL_MS overrides it. */
 	slackPollMs?: number;
 }
@@ -152,6 +164,71 @@ type Handlers = {
 const envNumber = (name: string, fallback: number) =>
 	process.env[name] ? Number(process.env[name]) : fallback;
 
+/** Why the daemon refuses a change from the panel, or null. */
+function invalidChange(change: ConfigChange): string | null {
+	switch (change.key) {
+		case "model":
+			return ["chat", "summarizer", "suggester"].includes(change.role) &&
+				typeof change.value === "string" &&
+				change.value.trim()
+				? null
+				: "a model needs a role and a name";
+		case "maxTopics":
+			return Number.isInteger(change.value) &&
+				change.value >= MAX_TOPICS_RANGE[0] &&
+				change.value <= MAX_TOPICS_RANGE[1]
+				? null
+				: `max topics is a whole number from ${MAX_TOPICS_RANGE[0]} to ${MAX_TOPICS_RANGE[1]}`;
+		case "baseBranch": {
+			const v = change.value;
+			if (v === null) return change.scope === "repo" ? null : "no value";
+			if (v === "default" || v === "current") return null;
+			return typeof v === "object" &&
+				typeof v.branch === "string" &&
+				v.branch.trim()
+				? null
+				: "name a branch";
+		}
+		case "slack":
+			return typeof change.value === "boolean" ? null : "on or off";
+	}
+	return "unknown setting";
+}
+
+function describeChange(change: ConfigChange): string {
+	const value = (v: unknown) => JSON.stringify(v);
+	switch (change.key) {
+		case "baseBranch":
+			return change.scope === "repo"
+				? `base branch for ${change.repo} = ${change.value === null ? "the global setting" : value(change.value)}`
+				: `base branch = ${value(change.value)}`;
+		case "model":
+			return `${change.role} model = ${change.value}`;
+		case "maxTopics":
+			return `max topics = ${change.value}`;
+		case "slack":
+			return `Slack for ${change.repo} ${change.value ? "on" : "off"}`;
+	}
+}
+
+/** When a change takes effect, as the panel shows it after saving. */
+function applies(change: ConfigChange): string {
+	switch (change.key) {
+		case "baseBranch":
+			return "applies to new sessions";
+		case "model":
+			return change.role === "chat"
+				? "the master chat switches after serenity restart"
+				: "applies now";
+		case "maxTopics":
+			return "applies now";
+		case "slack":
+			return change.value
+				? "Slack shows on this map now; the master gets its Slack tools after serenity restart"
+				: "Slack is off on this map now; the master keeps its Slack tools until serenity restart";
+	}
+}
+
 export class Daemon {
 	private server: Server | null = null;
 	private readonly subscriptions = new Map<RpcPeer, Set<string>>();
@@ -188,6 +265,12 @@ export class Daemon {
 	private readonly slack: SlackWatcher;
 	private readonly advisor: SlackAdvisor;
 	private readonly slackRepos: Set<string>;
+	/** config.json as last read; the settings panel changes it (ADR 0058). */
+	private config: Config;
+	private readonly configFile: string;
+	/** The master's models, changed in place so every worker reads the latest. */
+	private readonly models: MasterModels;
+	private maxTopics: number;
 	/** The Slack MCP server entry, for the inbox worker and the chat. */
 	private readonly slackMcp: Record<string, unknown>;
 	private readonly observer: ClaudeObserver;
@@ -220,7 +303,12 @@ export class Daemon {
 		this.log =
 			opts.log ??
 			((line) => console.log(`${new Date().toISOString()} ${line}`));
-		const config = loadConfig();
+		this.configFile = opts.configPath ?? configPath();
+		const config = loadConfig(this.configFile);
+		this.config = config;
+		this.models = { ...(opts.models ?? config.models) };
+		this.maxTopics = opts.maxTopics ?? config.maxTopics;
+		const daemon = this;
 		this.health = new DependencyHealth(() => {
 			for (const repo of this.openRepos()) this.broadcast(repo);
 		}, this.now);
@@ -250,7 +338,7 @@ export class Daemon {
 					uploadSlackFile(
 						{
 							runner,
-							model: (opts.models ?? config.models).summarizer,
+							model: this.models.summarizer,
 							cwd: join(opts.home, "workers"),
 							mcpConfig: JSON.stringify({
 								mcpServers: { [SLACK_SERVER]: this.slackMcp },
@@ -263,8 +351,10 @@ export class Daemon {
 				slack: (repo) =>
 					this.slackRepos.has(repo) ? this.slack.state() : null,
 				workerCwd: join(opts.home, "workers"),
-				models: opts.models ?? config.models,
-				maxTopics: opts.maxTopics ?? config.maxTopics,
+				models: this.models,
+				get maxTopics() {
+					return daemon.maxTopics;
+				},
 				debounceMs:
 					opts.workerDebounceMs ??
 					envNumber("SERENITY_WORKER_DEBOUNCE_MS", DEFAULT_WORKER_DEBOUNCE_MS),
@@ -299,15 +389,19 @@ export class Daemon {
 				opts.reviewPollMs ??
 				envNumber("SERENITY_REVIEW_POLL_MS", DEFAULT_REVIEW_POLL_MS),
 		});
-		const models = opts.models ?? config.models;
+		const models = this.models;
 		const slackMcpConfig = JSON.stringify({
 			mcpServers: { [SLACK_SERVER]: this.slackMcp },
 		});
 		this.advisor = new SlackAdvisor({
 			runner,
 			storage: opts.storage,
-			model: models.suggester,
-			sendModel: models.summarizer,
+			get model() {
+				return models.suggester;
+			},
+			get sendModel() {
+				return models.summarizer;
+			},
 			cwd: join(opts.home, "workers"),
 			mcpConfig: slackMcpConfig,
 			reviews: (repo) => this.reviews.state(repo).reviewRequests,
@@ -327,7 +421,9 @@ export class Daemon {
 		});
 		this.slack = new SlackWatcher({
 			runner,
-			model: models.summarizer,
+			get model() {
+				return models.summarizer;
+			},
 			cwd: join(opts.home, "workers"),
 			mcpConfig: slackMcpConfig,
 			dismissals: opts.storage.slackDismissals,
@@ -606,6 +702,32 @@ export class Daemon {
 		},
 
 		"session.create": (params) => this.createSession(params),
+
+		"config.get": async ({ repo }) => {
+			this.reloadConfig();
+			return this.settingsView(repo);
+		},
+
+		"config.set": async ({ repo, change }) => {
+			const problem = invalidChange(change);
+			if (problem) throw new RpcError(RpcErrorCode.InvalidParams, problem);
+			try {
+				writeConfig([change], this.configFile);
+			} catch (e) {
+				throw new RpcError(RpcErrorCode.InvalidParams, (e as Error).message);
+			}
+			this.reloadConfig();
+			this.log(`settings: ${describeChange(change)}`);
+			return { view: await this.settingsView(repo), applies: applies(change) };
+		},
+
+		"base.resolve": async ({ repo, override }) => {
+			try {
+				return await this.baseFor(repo, override);
+			} catch (e) {
+				throw new RpcError(RpcErrorCode.InvalidParams, (e as Error).message);
+			}
+		},
 
 		"session.reply": async ({ id, text }) => {
 			const pane = await this.requireLivePane(this.requireSession(id));
@@ -1217,7 +1339,9 @@ export class Daemon {
 			: session.worktree
 				? 0
 				: null;
-		const base = await defaultBase(session.repo).catch(() => "HEAD");
+		const base =
+			session.base?.ref ??
+			(await defaultBase(session.repo).catch(() => "HEAD"));
 		const unmerged =
 			session.branch && session.ownsBranch
 				? await commitsNotIn(session.repo, base, session.branch).catch(
@@ -1458,6 +1582,59 @@ export class Daemon {
 		return next;
 	}
 
+	/**
+	 * Reads config.json again and applies what can change live (ADR 0058):
+	 * the models of the master's workers, max topics and Slack per repo.
+	 * Settings a test passed in as options stay as passed.
+	 */
+	private reloadConfig(): void {
+		const next = loadConfig(this.configFile);
+		this.config = next;
+		if (!this.opts.models) Object.assign(this.models, next.models);
+		if (this.opts.maxTopics === undefined) this.maxTopics = next.maxTopics;
+		if (!this.opts.slackRepos) {
+			const before = new Set(this.slackRepos);
+			this.slackRepos.clear();
+			for (const repo of next.slack.repos) this.slackRepos.add(repo);
+			for (const repo of this.openRepos()) {
+				const on = this.slackRepos.has(repo);
+				if (on === before.has(repo)) continue;
+				if (on) {
+					this.slack.watch();
+					const { items, error } = this.slack.state();
+					if (!error) this.advisor.onInbox(repo, items);
+				}
+				this.broadcast(repo);
+			}
+		}
+	}
+
+	/** Where a new worktree in `repo` branches off now (ADR 0058). */
+	private baseFor(repo: string, override?: string): Promise<ResolvedBase> {
+		return resolveBase(repo, baseSettingFor(this.config, repo), override);
+	}
+
+	private async settingsView(repo: string): Promise<SettingsView> {
+		const resolved = await this.baseFor(repo).catch(
+			(e: Error): ResolvedBase => ({
+				ref: "HEAD",
+				branch: "HEAD",
+				notice: e.message,
+			}),
+		);
+		return {
+			path: this.configFile,
+			baseBranch: {
+				global: this.config.baseBranch,
+				repo: this.config.repos[repoKey(repo)]?.baseBranch ?? null,
+				resolved,
+			},
+			models: { ...this.models },
+			maxTopics: this.maxTopics,
+			slack: this.slackRepos.has(repo),
+		};
+	}
+
 	private async createSession(params: CreateSessionParams): Promise<Session> {
 		const { repo, mode } = params;
 		const name = this.freeName(repo, params.name);
@@ -1465,6 +1642,7 @@ export class Daemon {
 		const branch = params.branch?.trim() || name;
 		let cwd = params.cwd;
 		let worktree: string | null = null;
+		let base: ResolvedBase | null = null;
 		if (mode === "worktree") {
 			if (await branchExists(repo, branch)) {
 				throw new RpcError(
@@ -1472,10 +1650,16 @@ export class Daemon {
 					`branch ${branch} exists; use existing branch`,
 				);
 			}
+			try {
+				base = await this.baseFor(repo, params.base);
+			} catch (e) {
+				throw new RpcError(RpcErrorCode.InvalidParams, (e as Error).message);
+			}
+			if (base.notice) this.log(`${name}: ${base.notice}`);
 			worktree = siblingWorktreePath(repo, name);
 			await addWorktree(repo, worktree, {
 				newBranch: branch,
-				base: await defaultBase(repo),
+				base: base.ref,
 			});
 			cwd = worktree;
 		} else if ((await currentBranch(params.cwd)) !== branch) {
@@ -1497,6 +1681,7 @@ export class Daemon {
 			worktree,
 			branch,
 			ownsBranch: mode === "worktree",
+			base: base ? { ref: base.ref, branch: base.branch } : null,
 			pr: null,
 			prError: null,
 			tmuxPane: null,

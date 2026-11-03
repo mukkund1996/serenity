@@ -1,4 +1,5 @@
 import { connect as netConnect, type Socket } from "node:net";
+import type { BaseSetting, Config, ConfigChange } from "./config";
 import type {
 	HookKind,
 	HookPayload,
@@ -25,6 +26,38 @@ export interface CreateSessionParams {
 	branch?: string;
 	/** Sent to the agent as its first prompt. */
 	prompt?: string;
+	/**
+	 * A branch to start this one worktree from instead of the setting
+	 * (ADR 0058); refused if it exists neither locally nor on origin.
+	 */
+	base?: string;
+}
+
+/** Where a new worktree would branch off, and why (ADR 0058). */
+export interface ResolvedBase {
+	/** What `git worktree add` starts from, e.g. "origin/main" or "develop". */
+	ref: string;
+	/** The branch a PR would target, e.g. "main". */
+	branch: string;
+	/** Set when the setting could not be followed and the repo default was used. */
+	notice: string | null;
+}
+
+/** What the settings panel shows (ADR 0058). */
+export interface SettingsView {
+	/** The config file, as shown in the panel's title. */
+	path: string;
+	baseBranch: {
+		global: BaseSetting;
+		/** This repo's own setting; null when it follows the global one. */
+		repo: BaseSetting | null;
+		/** Where a new session in this repo would branch off now. */
+		resolved: ResolvedBase;
+	};
+	models: Config["models"];
+	maxTopics: number;
+	/** Slack on this repo's map. */
+	slack: boolean;
 }
 
 /** What cleaning up a session would do, computed by serenity, not the model (ADR 0008). */
@@ -140,6 +173,21 @@ export interface Methods {
 	"master.tool": {
 		params: { repo: string; name: string; args: Record<string, unknown> };
 		result: MasterToolResult;
+	};
+	/** The settings panel's values for this repo (Ctrl+, ADR 0058). */
+	"config.get": { params: { repo: string }; result: SettingsView };
+	/**
+	 * Saves one change to config.json and applies it. `applies` says when it
+	 * takes effect, e.g. "applies to new sessions".
+	 */
+	"config.set": {
+		params: { repo: string; change: ConfigChange };
+		result: { view: SettingsView; applies: string };
+	};
+	/** Where a new worktree would branch off; `override` as the dialog's Base field. */
+	"base.resolve": {
+		params: { repo: string; override?: string };
+		result: ResolvedBase;
 	};
 	"daemon.shutdown": { params: Record<string, never>; result: null };
 }

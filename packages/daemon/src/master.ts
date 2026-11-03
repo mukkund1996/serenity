@@ -1130,7 +1130,7 @@ export class MasterSupervisor {
 			});
 		this.host.broadcast(repo);
 		return {
-			text: `Started ${session.name} on branch ${session.branch}${topic ? ` under ${topic}` : ""}. It shows in your snapshot from now on.`,
+			text: `Started ${session.name} on branch ${session.branch}${session.base ? ` off ${session.base.ref}` : ""}${topic ? ` under ${topic}` : ""}. It shows in your snapshot from now on.`,
 		};
 	}
 

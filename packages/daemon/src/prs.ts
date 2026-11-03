@@ -303,9 +303,12 @@ export async function resolveHeads(session: Session): Promise<string[]> {
 			},
 		);
 	const [base, owners] = await Promise.all([
-		defaultBase(session.repo)
-			.then((b) => b.replace(/^[^/]+\//, ""))
-			.catch(() => null),
+		// The branch it started from (ADR 0058); older sessions recorded none.
+		session.base
+			? Promise.resolve(session.base.branch)
+			: defaultBase(session.repo)
+					.then((b) => b.replace(/^[^/]+\//, ""))
+					.catch(() => null),
 		remoteOwners(dir).catch(() => ({})),
 	]);
 	return prHeads({ branches, base, owners });

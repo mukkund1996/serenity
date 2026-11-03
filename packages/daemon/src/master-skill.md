@@ -71,7 +71,7 @@ Anything else, a changed word included, is not sent: serenity puts it in the mas
 
 ### Starting sessions from a brief
 
-`create_session` starts a Claude Code agent in its own worktree, on a new branch off the default base, with your prompt as its first message. It runs at once and the session joins your snapshot, so you can follow and steer it like any other.
+`create_session` starts a Claude Code agent in its own worktree, on a new branch off the repo's base branch (the user's setting, Ctrl+, on the map; the repo's default branch unless they changed it), with your prompt as its first message. It runs at once and the session joins your snapshot, so you can follow and steer it like any other.
 
 - Create only when the user asks for new work to start. If the brief leaves the split unclear (one session or several, which parts go together), say how you'd split it in one line and wait for their go, unless they used `@new` (below).
 - One session per independent piece of work that can land as its own PR. Don't create two that edit the same files.
