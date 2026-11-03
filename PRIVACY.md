@@ -25,7 +25,7 @@ You can change the models with `models` in `~/.config/serenity/config.json`.
 
 ## What is stored on your machine
 
-The state directory is `~/.local/state/serenity`. If they are set, `$XDG_STATE_HOME/serenity` or `$SERENITY_HOME` is used instead. It holds:
+The state directory is `~/.local/state/serenity`. If they are set, `$XDG_STATE_HOME/serenity` or `$SERENITY_HOME` is used instead. Only you can read it: serenity makes the folder `0700` and the files below `0600`. It holds:
 
 - `serenity.db` (SQLite): your sessions and their summaries, prompts and last replies, the master chat conversation, suggestions, and how long sessions waited on you. For Slack it keeps only the messages you dismissed, as a channel ID and timestamp ([ADR 0034](docs/adr/0034-dismiss-slack-items.md)). The Slack inbox and Slack suggestions stay in memory.
 - `daemon.log`, `crash-reports/`, and `handovers/` (handover docs copied out of session worktrees).

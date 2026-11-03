@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { storageContract } from "@serenity/core/testing";
@@ -78,4 +78,18 @@ test("recovery state survives reopening", () => {
 	const second = createSqliteStorage(path);
 	expect(second.recovery.get("usage")).toEqual(usage);
 	second.close();
+});
+
+test("the database and its WAL files are the user's alone", () => {
+	const mode = (p: string) => statSync(p).mode & 0o777;
+	const path = join(dir, "private.db");
+	const fresh = createSqliteStorage(path);
+	fresh.events.append({ sessionId: "s1", kind: "Stop", payload: {}, at: 1 });
+	expect(mode(path)).toBe(0o600);
+	expect(mode(`${path}-wal`)).toBe(0o600);
+	fresh.close();
+	// One an older version created readable is tightened when it opens.
+	chmodSync(path, 0o644);
+	createSqliteStorage(path).close();
+	expect(mode(path)).toBe(0o600);
 });

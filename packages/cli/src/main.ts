@@ -9,6 +9,7 @@ import {
 	daemonCrashPath,
 	doctorMarkerPath,
 	ensureDaemon,
+	ensurePrivateDir,
 	isHookKind,
 	loadConfig,
 	SLACK_SERVER,
@@ -42,7 +43,7 @@ const home = serenityHome();
 
 /** Records that the first-run doctor passed, so `serenity` skips it next time. */
 function markDoctorOk(): void {
-	mkdirSync(home, { recursive: true });
+	ensurePrivateDir(home);
 	writeFileSync(doctorMarkerPath(home), `${new Date().toISOString()}\n`);
 }
 
@@ -200,7 +201,7 @@ async function runDaemon(): Promise<void> {
 		"@serenity/daemon"
 	);
 	const { dbPath } = await import("@serenity/core");
-	mkdirSync(home, { recursive: true });
+	ensurePrivateDir(home);
 	const crash = (error: unknown) => {
 		console.error(`serenityd crashed: ${(error as Error)?.stack ?? error}`);
 		recordCrash(daemonCrashPath(home), error);
@@ -233,7 +234,7 @@ async function runDaemon(): Promise<void> {
 /** `serenity daemon`: supervises the worker, restarting it when it crashes (ADR 0045). */
 async function superviseDaemon(): Promise<void> {
 	const { runSupervisor } = await import("@serenity/daemon");
-	mkdirSync(home, { recursive: true });
+	ensurePrivateDir(home);
 	process.exit(await runSupervisor(home));
 }
 

@@ -5,6 +5,7 @@ import {
 	mkdtempSync,
 	readFileSync,
 	rmSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1528,6 +1529,8 @@ describe("handovers (ADR 0049)", () => {
 		const path = /handover doc: (\S+)/.exec(told)?.[1] as string;
 		expect(path.startsWith(handovers)).toBe(true);
 		expect(readFileSync(path, "utf8")).toBe("# Goal\nRotate tokens.");
+		expect(statSync(path).mode & 0o777).toBe(0o600);
+		expect(statSync(handovers).mode & 0o777).toBe(0o700);
 
 		const started = await master.handleTool(REPO, "create_session", {
 			name: "docs-page",

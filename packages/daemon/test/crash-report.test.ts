@@ -1,5 +1,11 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import {
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -139,6 +145,11 @@ test("off: the report stays on disk and nothing reaches GitHub", async () => {
 	expect(files).toHaveLength(1);
 	expect(readFileSync(join(dir, "off", files[0] as string), "utf8")).toContain(
 		"Crash: TypeError",
+	);
+	// Reports hold the log tail, so only the user may read them.
+	expect(statSync(join(dir, "off")).mode & 0o777).toBe(0o700);
+	expect(statSync(join(dir, "off", files[0] as string)).mode & 0o777).toBe(
+		0o600,
 	);
 });
 
