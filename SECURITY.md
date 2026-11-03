@@ -30,7 +30,7 @@ Please give a fix the chance to ship before you share details publicly. If you h
 
 ## Scope
 
-serenity runs entirely on your machine, as your user. These are the parts where a security problem would most likely live:
+serenity runs entirely on your machine, as your user. [PRIVACY.md](PRIVACY.md) says what it reads, stores and sends, and how to delete it. These are the parts where a security problem would most likely live:
 
 - **The daemon socket.** The daemon listens on a Unix socket, `serenity.sock`, in serenity's state directory (`~/.local/state/serenity`, or `$XDG_STATE_HOME/serenity`, or `$SERENITY_HOME`). The JSON-RPC on it has no authentication of its own: it relies on filesystem permissions, so anything that can connect to it can drive your sessions. A way for another local user, a web page or a remote host to reach it is in scope.
 - **State on disk.** The same directory holds the SQLite database `serenity.db` (sessions, summaries, the master's conversation, Slack items you dismissed), `daemon.log`, crash reports, and the hook settings and plugin the daemon writes. Configuration is in `~/.config/serenity/config.json`, which holds no secrets.
