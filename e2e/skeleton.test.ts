@@ -173,7 +173,9 @@ async function newSession(name: string): Promise<void> {
 				.split("\n")
 				.includes(name),
 		`a window for ${name}`,
-	);
+	).catch((e: Error) => {
+		throw new Error(`${e.message}; screen was:\n${screen()}`);
+	});
 	// The window appears before the dialog closes; keys typed earlier land in it.
 	await until(() => !screen().includes("Working dir"), "the dialog to close");
 }
