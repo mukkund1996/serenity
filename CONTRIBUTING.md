@@ -84,6 +84,8 @@ Visits from `localhost`, `127.*`, LAN addresses (`192.168.*`, `10.*`, `172.16–
 
 ### Reading install numbers
 
+For every analytics source in one place (release downloads and website GoatCounter, with the scripts and caveats), see [docs/analytics.md](docs/analytics.md).
+
 GitHub release download counts include CI, and `git clone` and traffic numbers are mostly CI checkouts: every job runs `actions/checkout`. Don't read either as adoption. Since ADR 0056, install-smoke installs from a copy and no longer adds to download counts. For an estimate of real installs per release and asset, with the older smoke runs' downloads taken out, run:
 
 ```bash
