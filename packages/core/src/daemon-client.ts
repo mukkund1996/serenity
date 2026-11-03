@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, openSync } from "node:fs";
+import { existsSync, fchmodSync, openSync } from "node:fs";
 import { BUILD_ID } from "./domain";
 import { daemonLockPath, daemonLogPath, socketPath } from "./paths";
+import { ensurePrivateDir, PRIVATE_FILE } from "./private";
 import { connectRpc, type RpcPeer } from "./rpc";
 import { selfCommand } from "./self";
 
@@ -47,8 +48,10 @@ export async function connectDaemon(home: string): Promise<RpcPeer | null> {
 
 /** Spawns `serenity daemon` in the background, logging to daemon.log. */
 export function startDaemonProcess(home: string): void {
-	mkdirSync(home, { recursive: true });
-	const log = openSync(daemonLogPath(home), "a");
+	ensurePrivateDir(home);
+	const log = openSync(daemonLogPath(home), "a", PRIVATE_FILE);
+	// A log from an older version keeps its mode; open does not change it.
+	fchmodSync(log, PRIVATE_FILE);
 	const [command, ...args] = selfCommand();
 	const child = spawn(command as string, [...args, "daemon"], {
 		detached: true,

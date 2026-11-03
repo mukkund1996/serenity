@@ -3,7 +3,6 @@ import {
 	closeSync,
 	existsSync,
 	fstatSync,
-	mkdirSync,
 	openSync,
 	readdirSync,
 	readFileSync,
@@ -13,6 +12,7 @@ import {
 } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
+import { ensurePrivateDir, PRIVATE_FILE } from "@serenity/core";
 
 /** How a daemon worker ended, and the error it left behind if it had one (ADR 0045). */
 export interface CrashInfo {
@@ -249,6 +249,7 @@ export function recordCrash(path: string, error: unknown): void {
 		writeFileSync(
 			path,
 			JSON.stringify({ name: e.name, message: e.message, stack: e.stack }),
+			{ mode: PRIVATE_FILE },
 		);
 	} catch {}
 }
@@ -326,13 +327,17 @@ export class CrashReporter {
 	}
 
 	private save(state: ReporterState): void {
-		writeFileSync(this.statePath, JSON.stringify(state, null, 2));
+		writeFileSync(this.statePath, JSON.stringify(state, null, 2), {
+			mode: PRIVATE_FILE,
+		});
 	}
 
 	/** Writes the report to disk, so the user can see what is (or would be) sent. */
 	private keepLocal(signature: string, body: string): void {
 		const stamp = new Date(this.now()).toISOString().replace(/[:.]/g, "-");
-		writeFileSync(join(this.opts.dir, `${stamp}-${signature}.md`), body);
+		writeFileSync(join(this.opts.dir, `${stamp}-${signature}.md`), body, {
+			mode: PRIVATE_FILE,
+		});
 		const files = readdirSync(this.opts.dir)
 			.filter((f) => f.endsWith(".md"))
 			.sort();
@@ -341,7 +346,7 @@ export class CrashReporter {
 	}
 
 	async report(info: CrashInfo, logTail: string): Promise<ReportOutcome> {
-		mkdirSync(this.opts.dir, { recursive: true });
+		ensurePrivateDir(this.opts.dir);
 		const signature = crashSignature(info);
 		const title = crashTitle(info, signature);
 		const body = issueBody(info, this.opts.env, logTail, signature);

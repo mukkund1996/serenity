@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+	chmodSync,
 	copyFileSync,
 	existsSync,
 	mkdirSync,
@@ -18,6 +19,7 @@ import {
 	confirmedFileShare,
 	confirmedReply,
 	confirmedSlackSend,
+	ensurePrivateDir,
 	findSessionByName,
 	freshHandover,
 	HANDOVER_DIR,
@@ -44,6 +46,7 @@ import {
 	normalizeTopic,
 	PINNED,
 	type Ping,
+	PRIVATE_FILE,
 	parseSuggestion,
 	parseSummary,
 	type Session,
@@ -365,9 +368,11 @@ export class MasterSupervisor {
 			if (!existsSync(draft) || statSync(draft).mtimeMs < since) return null;
 			const at = this.host.now();
 			const dir = this.host.handoversDir(session.repo);
-			mkdirSync(dir, { recursive: true });
+			ensurePrivateDir(dir);
 			const path = join(dir, handoverFileName(session, at));
 			copyFileSync(draft, path);
+			// The copy takes the draft's mode, readable by all in the worktree.
+			chmodSync(path, PRIVATE_FILE);
 			const doc: HandoverDoc = {
 				sessionId: session.id,
 				sessionName: session.name,

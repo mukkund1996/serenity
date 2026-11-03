@@ -30,8 +30,9 @@ export function claudeConfigDir(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 /** Handover docs copied out of session worktrees (ADR 0049), one folder per repo. */
+export const handoversRoot = (home: string) => join(home, "handovers");
 export const handoversDir = (home: string, repo: string) =>
-	join(home, "handovers", repoSlug(repo));
+	join(handoversRoot(home), repoSlug(repo));
 
 export const doctorMarkerPath = (home: string) => join(home, ".doctor-ok");
 

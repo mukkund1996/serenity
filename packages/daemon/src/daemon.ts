@@ -32,6 +32,7 @@ import {
 	SLACK_SERVER,
 	STARTUP_ASK,
 	type Storage,
+	securePrivateState,
 	selfCommand,
 	socketPath,
 	tmuxSessionName,
@@ -365,6 +366,7 @@ export class Daemon {
 	}
 
 	async start(): Promise<void> {
+		securePrivateState(this.opts.home);
 		mkdirSync(join(this.opts.home, "workers"), { recursive: true });
 		writeHookSettings(hookSettingsPath(this.opts.home), this.self);
 		writeMasterPlugin(masterPluginPath(this.opts.home));

@@ -1,15 +1,17 @@
 import { Database } from "bun:sqlite";
-import type {
-	HookEvent,
-	HookKind,
-	HookPayload,
-	MasterMessage,
-	MasterRecord,
-	Session,
-	SlackDismissal,
-	Storage,
-	Suggestion,
-	Wait,
+import { chmodSync, closeSync, existsSync, openSync } from "node:fs";
+import {
+	type HookEvent,
+	type HookKind,
+	type HookPayload,
+	type MasterMessage,
+	type MasterRecord,
+	PRIVATE_FILE,
+	type Session,
+	type SlackDismissal,
+	type Storage,
+	type Suggestion,
+	type Wait,
 } from "@serenity/core";
 
 /** Forward-only migrations; index + 1 is the schema version (PRAGMA user_version). */
@@ -163,8 +165,16 @@ interface EventRow {
 }
 
 export function createSqliteStorage(path: string): Storage {
+	if (path !== ":memory:") {
+		// Created 0600, or tightened if an older version left it readable.
+		closeSync(openSync(path, "a", PRIVATE_FILE));
+		chmodSync(path, PRIVATE_FILE);
+	}
 	const db = new Database(path, { create: true, strict: true });
 	db.run("PRAGMA journal_mode = WAL");
+	// SQLite gives -wal and -shm the database's mode; older ones may predate it.
+	for (const side of [`${path}-wal`, `${path}-shm`])
+		if (existsSync(side)) chmodSync(side, PRIVATE_FILE);
 	db.run("PRAGMA busy_timeout = 2000");
 	migrate(db);
 
