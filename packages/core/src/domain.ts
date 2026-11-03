@@ -34,6 +34,12 @@ export interface Session {
 	branch: string | null;
 	/** serenity created the branch, so cleanup may delete it once merged. */
 	ownsBranch: boolean;
+	/**
+	 * What a new worktree's branch started from (ADR 0058): the ref, e.g.
+	 * "origin/develop", and the branch a PR would target, "develop". Null for
+	 * sessions made before it was recorded, and on an existing branch.
+	 */
+	base: { ref: string; branch: string } | null;
 	/** The branch's pull request, from gh (ADR 0011); null when there is none. */
 	pr: PrInfo | null;
 	/** Why PR status could not be read (gh missing, not logged in), or null. */

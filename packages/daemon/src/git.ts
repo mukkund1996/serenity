@@ -1,6 +1,11 @@
 import { existsSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { type BranchFacts, remoteOwner } from "@serenity/core";
+import {
+	type BaseSetting,
+	type BranchFacts,
+	type ResolvedBase,
+	remoteOwner,
+} from "@serenity/core";
 import { run } from "./exec";
 
 export function currentBranch(dir: string): Promise<string> {
@@ -72,6 +77,92 @@ export async function defaultBase(repo: string): Promise<string> {
 	} catch {
 		return currentBranch(repo);
 	}
+}
+
+/** Whether origin has `branch`, as of the last fetch. */
+export async function originBranchExists(
+	repo: string,
+	branch: string,
+): Promise<boolean> {
+	try {
+		await run(
+			[
+				"git",
+				"-C",
+				repo,
+				"rev-parse",
+				"--verify",
+				"--quiet",
+				`refs/remotes/origin/${branch}`,
+			],
+			{ retry: true },
+		);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/** The repo's default branch as a base: origin's HEAD, else its current branch. */
+export async function repoDefaultBase(
+	repo: string,
+): Promise<Omit<ResolvedBase, "notice">> {
+	const ref = await defaultBase(repo);
+	const remote = await run(
+		["git", "-C", repo, "symbolic-ref", "-q", "refs/remotes/origin/HEAD"],
+		{ retry: true },
+	).catch(() => "");
+	return {
+		ref,
+		branch: remote && ref.startsWith("origin/") ? ref.slice(7) : ref,
+	};
+}
+
+/** A branch named in a setting or the dialog: local first, else origin's. */
+async function namedBase(
+	repo: string,
+	branch: string,
+): Promise<Omit<ResolvedBase, "notice"> | null> {
+	if (await branchExists(repo, branch)) return { ref: branch, branch };
+	if (await originBranchExists(repo, branch))
+		return { ref: `origin/${branch}`, branch };
+	return null;
+}
+
+/**
+ * Where a new worktree branches off (ADR 0058). A setting that cannot be
+ * followed (a branch that is gone, a detached main checkout) falls back to
+ * the repo's default with a notice; an override from the dialog is refused
+ * instead, since the user typed it just now.
+ */
+export async function resolveBase(
+	repo: string,
+	setting: BaseSetting,
+	override?: string,
+): Promise<ResolvedBase> {
+	const wanted = override?.trim();
+	if (wanted) {
+		const named = await namedBase(repo, wanted);
+		if (!named)
+			throw new Error(`no branch ${wanted} here or on origin to start from`);
+		return { ...named, notice: null };
+	}
+	if (setting === "default")
+		return { ...(await repoDefaultBase(repo)), notice: null };
+	const fallback = async (why: string) => {
+		const base = await repoDefaultBase(repo);
+		return { ...base, notice: `${why}; using ${base.ref}` };
+	};
+	if (setting === "current") {
+		const branch = await checkedOutBranch(repo);
+		return branch
+			? { ref: branch, branch, notice: null }
+			: fallback("the main checkout is on no branch");
+	}
+	const named = await namedBase(repo, setting.branch);
+	return named
+		? { ...named, notice: null }
+		: fallback(`no branch ${setting.branch} here or on origin`);
 }
 
 /** `<parent>/<repo>-<name>`, with a numeric suffix if that path is taken (ADR 0010). */

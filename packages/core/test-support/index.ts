@@ -12,6 +12,7 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
 		worktree: "/repos/demo-api-auth",
 		branch: "api-auth",
 		ownsBranch: true,
+		base: null,
 		pr: null,
 		prError: null,
 		tmuxPane: "%1",

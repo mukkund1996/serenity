@@ -10,6 +10,8 @@ export const IN_AGENT_PANE = "#{!=:#{@serenity_session},}";
 
 /** Shift+Enter as a CSI u key, after its Escape; Ink reads it as Enter with shift. */
 const SHIFT_ENTER_CSI_U = "[13;2u";
+/** Ctrl+, as a CSI u key, after its Escape; Ink reads it as "," with ctrl (ADR 0058). */
+const CTRL_COMMA_CSI_U = "[44;5u";
 
 /** tmux commands that leave the same result however often they run. */
 const IDEMPOTENT = new Set([
@@ -263,7 +265,8 @@ export class Tmux {
 	 * then focuses the master. Anywhere else, the map pane included, both
 	 * pass through: the map reads Ctrl+w itself. Shift+Enter reaches the map
 	 * pane as a CSI u key, a new line in the master input (ADR 0038); other
-	 * panes get it unchanged.
+	 * panes get it unchanged. Ctrl+, does the same, opening the map's
+	 * settings (ADR 0058).
 	 * Agent panes carry the @serenity_session option, the map pane @serenity_map.
 	 * A terminal sending extended keys may report Ctrl+q with Caps Lock on as
 	 * Ctrl+Q, which tmux keeps apart, so both cases are bound (ADR 0051, 0053).
@@ -306,6 +309,19 @@ export class Tmux {
 			`send-keys Escape '${SHIFT_ENTER_CSI_U}'`,
 			"send-keys S-Enter",
 		]);
+		// Ctrl+, opens the settings panel (ADR 0058). It has no control byte,
+		// so it only arrives from a terminal sending extended keys; without
+		// them the map gets "," or nothing, and "," opens the panel too.
+		await this.cmd([
+			"bind-key",
+			"-n",
+			"C-,",
+			"if-shell",
+			"-F",
+			"#{@serenity_map}",
+			`send-keys Escape '${CTRL_COMMA_CSI_U}'`,
+			"send-keys C-,",
+		]);
 	}
 
 	/**
@@ -334,7 +350,9 @@ export class Tmux {
 		return (
 			["C-q", "C-Q", "C-w", "C-W"].every(
 				(key) => bound(key, detachCommand) && bound(key, IN_AGENT_PANE),
-			) && bound("S-Enter", "@serenity_map")
+			) &&
+			bound("S-Enter", "@serenity_map") &&
+			bound("C-,", "@serenity_map")
 		);
 	}
 

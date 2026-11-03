@@ -15,9 +15,9 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0007](0007-master-roles-and-models.md) | Master = Opus stream + Haiku/Sonnet one-shot workers via the claude CLI | Amended by 0046, 0047 |
 | [0008](0008-master-proposes-via-mcp.md) | Master only proposes; MCP tools for the Opus chat only | Amended by 0046 |
 | [0009](0009-storage-interface-sqlite.md) | SQLite behind a swappable storage interface | Accepted |
-| [0010](0010-worktrees-beside-repo.md) | New worktrees live beside the repo | Accepted |
+| [0010](0010-worktrees-beside-repo.md) | New worktrees live beside the repo | Amended by 0058 |
 | [0011](0011-pr-status-via-gh.md) | PR status via `gh`, refreshed on events | Amended by 0043, 0055 |
-| [0012](0012-ux-decisions.md) | UX decisions not covered by the canvas | Accepted |
+| [0012](0012-ux-decisions.md) | UX decisions not covered by the canvas | Amended by 0058 |
 | [0013](0013-testing-strategy.md) | Testing strategy | Accepted |
 | [0014](0014-distribution-and-release.md) | Distribution, release, licence, telemetry | Accepted |
 | [0015](0015-workflow-and-milestones.md) | Workflow and milestones | Accepted |
@@ -63,6 +63,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0055](0055-session-prs-found-kept-and-polled.md) | A session's PR is found under the head it was pushed as (worktree branch, renamed upstream, `owner:branch` for forks, else the known number); no failure blanks a known PR; rate limits back off; pushes and `gh pr` refresh it; open PRs are polled while a map is open; `PR #n` is bright blue | Accepted |
 | [0056](0056-ci-installs-out-of-download-counts.md) | install-smoke installs from a copy of the release taken from the release run's artifacts and checked against the release's digests (`SERENITY_DOWNLOAD_BASE`), so release download counts are people; `scripts/stats/downloads.ts` takes the older CI downloads out | Accepted |
 | [0057](0057-x-only-dismisses-needs-you-items.md) | `x` on any NEEDS YOU item only dismisses it: a session is hidden (a waiting one too, until it asks something new) with its ◆ suggestion declined, the master's permission request hidden but left pending; a card's `x` still cleans up | Accepted |
+| [0058](0058-settings-panel-and-base-branch.md) | A settings panel (`Ctrl+,`, or `,` on the map) saves a few config.json options through the daemon, applied live where it can; new worktrees branch off a per-repo or global base (repo default, the main checkout's branch, or a named one), with a fallback notice and a per-session override in the New session dialog | Accepted |
 
 ## System at a glance
 

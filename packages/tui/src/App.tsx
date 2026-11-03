@@ -81,6 +81,7 @@ import {
 } from "./overlays";
 import { PULSE_FRAME_MS, pulseEnd, pulsing } from "./pulse";
 import { QUEUE_ROW, QueueSection } from "./queue";
+import { SettingsPanel } from "./settings";
 import {
 	editField,
 	type Field,
@@ -129,6 +130,7 @@ type Overlay =
 	| { kind: "replies"; selected: number }
 	| { kind: "import"; candidates: ImportCandidate[] }
 	| { kind: "rename"; sessionId: string }
+	| { kind: "settings" }
 	| null;
 
 /** The two zooms drawn here; the session zoom is an attached pane (design 1, 2, 3). */
@@ -939,6 +941,9 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				setReplyEdit(null);
 				return focusNode(MASTER);
 			}
+			// Ctrl+, opens the settings from any view, a text field's too (ADR 0058).
+			if (key.ctrl && input === "," && !busy)
+				return setOverlay({ kind: "settings" });
 
 			if (overlay?.kind === "confirm") {
 				if (overlay.busy) return;
@@ -1202,6 +1207,9 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					return exit();
 				case "?":
 					return setOverlay({ kind: "help" });
+				// Where Ctrl+, cannot arrive (no extended keys), it is a plain ",".
+				case ",":
+					return setOverlay({ kind: "settings" });
 				// z zooms out to the map; Z zooms in to topics, and from a
 				// card in topics on into its session.
 				case "z":
@@ -1313,7 +1321,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			isActive:
 				overlay?.kind !== "new" &&
 				overlay?.kind !== "import" &&
-				overlay?.kind !== "rename",
+				overlay?.kind !== "rename" &&
+				overlay?.kind !== "settings",
 		},
 	);
 
@@ -1470,7 +1479,17 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				<Centered rows={rows}>
 					<NewSessionDialog
 						repo={repo}
+						resolveBase={() => call("base.resolve", { repo })}
 						onSubmit={createSession}
+						onClose={() => setOverlay(null)}
+					/>
+				</Centered>
+			) : null}
+			{overlay?.kind === "settings" ? (
+				<Centered rows={rows}>
+					<SettingsPanel
+						repo={repo}
+						call={call}
 						onClose={() => setOverlay(null)}
 					/>
 				</Centered>

@@ -1524,6 +1524,91 @@ step(
 	STEP_TIMEOUT,
 );
 
+step(
+	"Ctrl+, opens the settings; a repo's base branch is saved to config.json and new sessions branch off it (ADR 0058)",
+	async () => {
+		const git = (...args: string[]) =>
+			spawnSync(
+				"git",
+				[
+					"-C",
+					repo,
+					"-c",
+					"user.name=e2e",
+					"-c",
+					"user.email=e2e@example.com",
+					...args,
+				],
+				{ encoding: "utf8" },
+			);
+		// develop has a commit main lacks, so a worktree off it shows the file.
+		git("switch", "-q", "-c", "develop");
+		writeFileSync(join(repo, "DEVELOP.md"), "develop\n");
+		git("add", "DEVELOP.md");
+		git("commit", "-q", "-m", "develop only");
+		git("switch", "-q", "main");
+
+		tmux("select-window", "-t", MAP);
+		const client = withClient();
+		try {
+			await until(
+				() => tmux("list-clients").includes("serenity-demo"),
+				"the client to attach",
+			);
+			// Ctrl+, as a terminal sends it under extended keys (xterm
+			// modifyOtherKeys); serenity's binding hands it to the map as CSI u.
+			client.typeHex("1b 5b 32 37 3b 35 3b 34 34 7e");
+			await waitFor(/Settings/);
+		} finally {
+			client.close();
+		}
+		await waitFor(/as all repos \(repo default\)/);
+		// ← from "as all repos" wraps to a named branch, which asks for its name.
+		keys("Left");
+		await waitFor(/Enter save/);
+		type("develop");
+		await Bun.sleep(100);
+		keys("Enter");
+		await waitFor(/saved · applies to new sessions/);
+		await waitFor(/new sessions here branch off develop/);
+		const config = JSON.parse(
+			readFileSync(join(dir, "config", "serenity", "config.json"), "utf8"),
+		);
+		// Unknown and earlier keys are kept.
+		expect(config.slack.repos.length).toBe(1);
+		expect(Object.values(config.repos)).toEqual([
+			{ baseBranch: { branch: "develop" } },
+		]);
+		keys("Escape");
+		await until(() => !screen().includes("Settings"), "the panel to close");
+
+		keys("N");
+		await waitFor(/develop \(settings: Ctrl\+,\)/);
+		keys("Escape");
+		await until(() => !screen().includes("Working dir"), "the dialog to close");
+		await newSession("based");
+		expect(existsSync(join(dir, "repos", "demo-based", "DEVELOP.md"))).toBe(
+			true,
+		);
+
+		// "," opens it too, for terminals without extended keys; → wraps the
+		// repo back to the global setting.
+		keys(",");
+		await waitFor(/Settings/);
+		keys("Right");
+		await waitFor(/as all repos \(repo default\)/);
+		await waitFor(/new sessions here branch off main/);
+		expect(
+			JSON.parse(
+				readFileSync(join(dir, "config", "serenity", "config.json"), "utf8"),
+			).repos,
+		).toBeUndefined();
+		keys("Escape");
+		await until(() => !screen().includes("Settings"), "the panel to close");
+	},
+	STEP_TIMEOUT,
+);
+
 // Last: the dismissed request stays pending, so the master's chat waits on it.
 step(
 	"x on the master's permission request hides it without allowing or denying it",

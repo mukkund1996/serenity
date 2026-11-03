@@ -3,11 +3,12 @@ import {
 	type CleanupPlan,
 	type CreateSessionParams,
 	type ImportCandidate,
+	type ResolvedBase,
 	type Session,
 	type SessionMode,
 } from "@serenity/core";
 import { Box, Text, useInput } from "ink";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Key, TitledBox } from "./components";
 import {
 	CURSOR,
@@ -19,7 +20,7 @@ import {
 import { cardText, glyph } from "./theme";
 
 const DIALOG_W = 64;
-const FIELDS = ["name", "prompt", "cwd", "branch", "mode"] as const;
+const FIELDS = ["name", "prompt", "cwd", "branch", "base", "mode"] as const;
 type FieldName = (typeof FIELDS)[number];
 type TextFieldName = Exclude<FieldName, "mode">;
 /** A dialog's text field: its width, less the frame, padding and the label's 13 columns. */
@@ -60,14 +61,18 @@ function DialogField({
 
 /**
  * New session dialog (design 4d): name, an optional first prompt, working
- * dir, new worktree or existing branch.
+ * dir, the branch and what a new one branches off, new worktree or
+ * existing branch. Base shows the setting's branch (ADR 0058); a branch
+ * typed there is used for this session only.
  */
 export function NewSessionDialog({
 	repo,
+	resolveBase,
 	onSubmit,
 	onClose,
 }: {
 	repo: string;
+	resolveBase: () => Promise<ResolvedBase>;
 	onSubmit: (params: CreateSessionParams) => Promise<void>;
 	onClose: () => void;
 }) {
@@ -76,7 +81,13 @@ export function NewSessionDialog({
 		prompt: fieldAt(""),
 		cwd: fieldAt(repo),
 		branch: fieldAt(""),
+		base: fieldAt(""),
 	});
+	const [base, setBase] = useState<ResolvedBase | null>(null);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: read once, when the dialog opens
+	useEffect(() => {
+		resolveBase().then(setBase, () => {});
+	}, []);
 	const [mode, setMode] = useState<SessionMode>("worktree");
 	const [field, setField] = useState<FieldName>("name");
 	const [error, setError] = useState<string | null>(null);
@@ -102,6 +113,8 @@ export function NewSessionDialog({
 					cwd: v.cwd.text,
 					mode,
 					branch: v.branch.text || undefined,
+					base:
+						mode === "worktree" ? v.base.text.trim() || undefined : undefined,
 					prompt: v.prompt.text.trim() || undefined,
 				}).catch((e: Error) => {
 					setBusy(false);
@@ -154,6 +167,23 @@ export function NewSessionDialog({
 			{row("First prompt", "prompt", "optional")}
 			{row("Working dir", "cwd")}
 			{row("Branch", "branch", "same as name")}
+			{row(
+				"Base",
+				"base",
+				mode === "branch"
+					? "not used for an existing branch"
+					: base
+						? `${base.ref} (settings: Ctrl+,)`
+						: "…",
+			)}
+			{mode === "worktree" && base?.notice && !values.base.text ? (
+				<Box>
+					<Box width={13} flexShrink={0} />
+					<Text color="yellow" wrap="wrap">
+						{base.notice}
+					</Text>
+				</Box>
+			) : null}
 			<Box marginTop={1}>
 				<Box width={13}>
 					<Text color="gray"> </Text>
@@ -198,7 +228,7 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 		"MAP",
 		[
 			["[ ] Ctrl+w", "topic · master"],
-			["N I", "new session · import"],
+			["N I Ctrl+,", "new session · import · settings"],
 			["Tab Esc H", "next need · zoom out · archived"],
 			["y e n x", "run ◆ · edit · decline · dismiss"],
 			["PgUp PgDn", "master chat back · on (Shift+↑↓)"],
