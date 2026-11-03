@@ -22,26 +22,48 @@ import {
 
 /**
  * Draws one side of the topics zoom (design screen 2): every topic as a
- * bubble of 40-col cards, neediest first, side by side in shelves that fill
- * the width, all linked back to the master at the inner edge (the left edge
- * of the right side, the right edge of the left side, ADR 0027). When they
+ * bubble of cards, neediest first, side by side in shelves that fill the
+ * width, all linked back to the master at the inner edge (the left edge of
+ * the right side, the right edge of the left side, ADR 0027). The side is cut
+ * into as many lanes as fit a CARD_MIN_W card, and the cards stretch to fill
+ * their lanes, so the width is used whatever it is (ADR 0059). When they
  * don't fit, the shelves scroll to the focused card.
  */
 
-export const CARD_W = 40;
+/** The narrowest a card gets; a side holds as many lanes of these as fit. */
+export const CARD_MIN_W = 36;
+/** The widest a card stretches to fill a lane. */
+export const CARD_MAX_W = 56;
 /** Text rows under a card's PR line: as many as its text needs, up to 4. */
 const BODY_MAX = 4;
-const CARD_INNER = CARD_W - 4;
-const CARD_GAP_X = 4;
+const CARD_GAP_X = 3;
 const CARD_GAP_Y = 1;
-const PAD_X = 3;
+const PAD_X = 2;
 const TRUNK_X = 2;
 const BUBBLE_X = 5;
-const BUBBLE_GAP_X = 5;
+const BUBBLE_GAP_X = 3;
+/** A one-card bubble's width beyond its card, with the gap to the next bubble. */
+const LANE_EXTRA = PAD_X * 2 + BUBBLE_GAP_X;
 /** Blank rows between a shelf's bubbles and the next shelf's bus. */
 const SHELF_GAP_Y = 1;
 /** The narrowest side that still fits a one-card bubble. */
-export const SIDE_MIN_W = BUBBLE_X + CARD_W + PAD_X * 2 + 1;
+export const SIDE_MIN_W = BUBBLE_X + CARD_MIN_W + PAD_X * 2 + 1;
+
+/**
+ * How a side of `width` columns is cut into lanes: as many one-card bubbles
+ * as fit side by side at CARD_MIN_W, and the card width that fills them
+ * (up to CARD_MAX_W). A bubble of k cards is narrower than k one-card
+ * bubbles, so any mix of bubbles whose cards add up to `lanes` fits a shelf.
+ */
+export function sideLanes(width: number): { lanes: number; cardW: number } {
+	const room = width - 1 - BUBBLE_X + BUBBLE_GAP_X;
+	const lanes = Math.max(1, Math.floor(room / (CARD_MIN_W + LANE_EXTRA)));
+	const cardW = Math.max(
+		CARD_MIN_W,
+		Math.min(CARD_MAX_W, Math.floor(room / lanes) - LANE_EXTRA),
+	);
+	return { lanes, cardW };
+}
 
 export interface CardBox {
 	sessionId: string;
@@ -84,8 +106,9 @@ function cardHeight(
 	s: Session,
 	focused: boolean,
 	suggestion: string | null,
+	cardW: number,
 ): number {
-	const body = Math.max(1, cardBody(s, CARD_INNER).length);
+	const body = Math.max(1, cardBody(s, cardW - 4).length);
 	return 3 + body + (focused ? 1 + (suggestion ? 1 : 0) : 0);
 }
 
@@ -287,15 +310,16 @@ function drawCard(
 	s: Session,
 	x: number,
 	y: number,
+	cardW: number,
 	focus: CardFocus | null,
 	lit: Color | null,
 ): number {
 	const focused = focus !== null;
-	const h = cardHeight(s, focused, focus?.suggestion ?? null);
+	const h = cardHeight(s, focused, focus?.suggestion ?? null, cardW);
 	canvas.frame(
 		x,
 		y,
-		CARD_W,
+		cardW,
 		h,
 		focused ? "heavy" : "light",
 		lit
@@ -311,7 +335,7 @@ function drawCard(
 			bold: focused,
 			dim: !focused,
 		});
-	col = canvas.text(col, y, truncate(s.name, CARD_W - 18), {
+	col = canvas.text(col, y, truncate(s.name, cardW - 18), {
 		fg: focused ? "whiteBright" : nameColor(s.status),
 		bold: true,
 	});
@@ -325,13 +349,13 @@ function drawCard(
 			text: " WAITING ",
 			style: { fg: "black", bg: "yellow", bold: true },
 		});
-	let right = x + CARD_W - 2;
+	let right = x + cardW - 2;
 	for (const chip of chips.reverse()) {
 		right -= [...chip.text].length;
 		canvas.text(right, y, chip.text, chip.style);
 	}
 
-	const inner = CARD_INNER;
+	const inner = cardW - 4;
 	const body = cardBody(s, inner);
 	drawPrLine(canvas, s, x + 2, y + 1, inner);
 	body.forEach((line, i) => {
@@ -364,6 +388,7 @@ function drawCard(
 interface Placed {
 	group: TopicGroup;
 	cols: number;
+	cardW: number;
 	rowHeights: number[];
 	x: number;
 	w: number;
@@ -382,8 +407,7 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 		mirrored ? input.width - dist - w : dist;
 	const trunkX = xOf(TRUNK_X, 1);
 	const right = input.width - 1;
-	const room = right - BUBBLE_X - PAD_X * 2 + CARD_GAP_X;
-	const maxCols = Math.max(1, Math.floor(room / (CARD_W + CARD_GAP_X)));
+	const { lanes, cardW } = sideLanes(input.width);
 
 	// Bubbles fill shelves left to right, neediest first, so the canvas's
 	// width is used: each goes on the first shelf with room for it. A shelf
@@ -392,7 +416,7 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 	const shelves: Placed[][] = [];
 	const ends: number[] = [];
 	for (const group of input.groups) {
-		const cols = Math.min(maxCols, group.sessions.length);
+		const cols = Math.min(lanes, group.sessions.length);
 		const rowHeights: number[] = [];
 		group.sessions.forEach((s, i) => {
 			const row = Math.floor(i / cols);
@@ -400,13 +424,14 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 				s,
 				s.id === input.focusId,
 				input.focusSuggestion ?? null,
+				cardW,
 			);
 			rowHeights[row] = Math.max(rowHeights[row] ?? 0, h);
 		});
 		const cardsH =
 			rowHeights.reduce((a, b) => a + b, 0) +
 			Math.max(0, rowHeights.length - 1) * CARD_GAP_Y;
-		const w = cols * CARD_W + (cols - 1) * CARD_GAP_X + PAD_X * 2;
+		const w = cols * cardW + (cols - 1) * CARD_GAP_X + PAD_X * 2;
 		let shelf = ends.findIndex((end) => end + w <= right);
 		if (shelf < 0) {
 			shelf = shelves.push([]) - 1;
@@ -416,6 +441,7 @@ export function drawTopics(input: TopicsInput): TopicsLayout {
 		(shelves[shelf] as Placed[]).push({
 			group,
 			cols,
+			cardW,
 			rowHeights,
 			x: xOf(dist, w),
 			w,
@@ -508,12 +534,13 @@ function drawBubble(
 		for (let c = 0; c < b.cols; c++) {
 			const s = b.group.sessions[row * b.cols + c];
 			if (!s) continue;
-			const cx = b.x + PAD_X + c * (CARD_W + CARD_GAP_X);
+			const cx = b.x + PAD_X + c * (b.cardW + CARD_GAP_X);
 			const h = drawCard(
 				canvas,
 				s,
 				cx,
 				rowY,
+				b.cardW,
 				s.id === input.focusId
 					? {
 							element: input.focusElement ?? "card",
@@ -523,7 +550,7 @@ function drawBubble(
 					: null,
 				input.pulse?.get(s.id) ?? null,
 			);
-			cards.push({ sessionId: s.id, x: cx, y: rowY, w: CARD_W, h });
+			cards.push({ sessionId: s.id, x: cx, y: rowY, w: b.cardW, h });
 		}
 		rowY += rowH + CARD_GAP_Y;
 	});
