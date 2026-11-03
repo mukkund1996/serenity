@@ -1,6 +1,6 @@
 # Contributing to serenity
 
-Thanks for helping out. This page covers how the repo works and what a pull request needs.
+Thanks for helping out. This page covers how the repo works and what a pull request needs. Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md); report a violation privately as it describes.
 
 ## Questions, ideas and bugs
 

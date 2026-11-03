@@ -227,7 +227,7 @@ A new build replaces a running daemon by itself.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks, ADRs and pull requests. Ask questions and share ideas in [Discussions](https://github.com/mukkund1996/serenity/discussions). Report bugs as [issues](https://github.com/mukkund1996/serenity/issues).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks, ADRs and pull requests. Ask questions and share ideas in [Discussions](https://github.com/mukkund1996/serenity/discussions). Report bugs as [issues](https://github.com/mukkund1996/serenity/issues). Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md). [PRIVACY.md](PRIVACY.md) says what serenity reads, stores and sends.
 
 ## License
 
