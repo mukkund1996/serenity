@@ -1402,3 +1402,146 @@ step(
 	},
 	STEP_TIMEOUT,
 );
+
+// x on a NEEDS YOU item only dismisses it (ADR 0057); x on a card cleans up.
+
+/** The master panel's columns only; the cards beside it keep their own text. */
+const masterPanel = () =>
+	screen()
+		.split("\n")
+		.map((line) => line.slice(MASTER_W, MASTER_W + 72))
+		.join("\n");
+
+/** No cleanup was offered: x on a NEEDS YOU item never opens the confirm. */
+const noCleanupConfirm = () => expect(screen()).not.toMatch(/Clean up \S+\?/);
+
+step(
+	"x on a session waiting on a permission prompt hides it; the prompt stays; a new one shows it again",
+	async () => {
+		await newSession("xwait");
+		typeInAgent("xwait", "needs permission");
+		await waitFor(/wants to run touch x/);
+		await waitFor(/◆ Approve in xwait/);
+		const before = needCount();
+		await selectNeed("xwait");
+		keys("x");
+		await waitFor(/dismissed xwait; back in NEEDS YOU/);
+		await until(() => needCount() === before - 1, "xwait to leave");
+		noCleanupConfirm();
+		expect(masterPanel()).not.toContain("xwait");
+		// Not answered, denied or cleaned up: the prompt still waits in its pane.
+		expect(screen("serenity-demo:xwait")).toContain("Do you want to proceed?");
+		expect(screen("serenity-demo:xwait")).not.toContain("approved");
+		expect(existsSync(join(dir, "repos", "demo-xwait"))).toBe(true);
+		// Answered in its pane, then a new prompt: back in NEEDS YOU.
+		tmux("send-keys", "-t", "serenity-demo:xwait", "-l", "1");
+		await waitFor(/approved/, "serenity-demo:xwait");
+		typeInAgent("xwait", "needs permission again");
+		await waitFor(/wants to run touch x/);
+		await until(() => needCount() === before, "xwait to come back");
+		keys("Escape");
+	},
+	STEP_TIMEOUT,
+);
+
+step(
+	"x on a session's ◆ cleanup suggestion declines it and dismisses; nothing is cleaned up",
+	async () => {
+		await newSession("xtidy");
+		keys("i");
+		type("finish\r");
+		await waitFor(/◆ Clean up xtidy/);
+		const before = needCount();
+		await selectNeed("xtidy");
+		keys("x");
+		await waitFor(/dismissed xtidy; back in NEEDS YOU/);
+		await until(() => needCount() === before - 1, "xtidy to leave");
+		noCleanupConfirm();
+		expect(masterPanel()).not.toContain("xtidy");
+		await Bun.sleep(500);
+		expect(existsSync(join(dir, "repos", "demo-xtidy"))).toBe(true);
+		expect(hasBranch("xtidy")).toBe(true);
+		// Its card stays on the map.
+		expect(screen()).toContain("xtidy");
+		keys("Escape");
+	},
+	STEP_TIMEOUT,
+);
+
+step(
+	"x on a session's card still asks to clean it up",
+	async () => {
+		keys("/");
+		await waitFor(/name, topic or branch/);
+		type("xtidy");
+		await waitFor(/1 of 1/);
+		keys("Enter");
+		await until(() => !screen().includes("1 of 1"), "the search to close");
+		keys("x");
+		await waitFor(/Clean up xtidy\?/);
+		keys("Escape");
+		await until(
+			() => !/Clean up xtidy\?/.test(screen()),
+			"the confirm to close",
+		);
+		expect(existsSync(join(dir, "repos", "demo-xtidy"))).toBe(true);
+	},
+	STEP_TIMEOUT,
+);
+
+step(
+	"x on an ended session in NEEDS YOU dismisses it; it stays on the map, ended",
+	async () => {
+		await newSession("c-untrusted");
+		const ended = endedCards();
+		typeInAgent("c-untrusted", "n");
+		await until(() => endedCards() === ended + 1, "c-untrusted to end");
+		const before = needCount();
+		await selectNeed("c-untrusted");
+		keys("x");
+		await waitFor(/dismissed c-untrusted; back in NEEDS YOU/);
+		await until(() => needCount() === before - 1, "c-untrusted to leave");
+		noCleanupConfirm();
+		expect(endedCards()).toBe(ended + 1);
+		keys("Escape");
+	},
+	STEP_TIMEOUT,
+);
+
+step(
+	"x on a queued reply drops it",
+	async () => {
+		await openMasterInput();
+		type("suggest a reply to api-auth\r");
+		await waitFor(/QUEUE 1/);
+		await closeMasterInput();
+		await selectNeed("→ api-auth");
+		keys("x");
+		await until(() => !screen().includes("QUEUE 1"), "the queued reply to go");
+		noCleanupConfirm();
+		keys("Escape");
+	},
+	STEP_TIMEOUT,
+);
+
+// Last: the dismissed request stays pending, so the master's chat waits on it.
+step(
+	"x on the master's permission request hides it without allowing or denying it",
+	async () => {
+		await openMasterInput();
+		type("ask permission\r");
+		await waitFor(/master wants to use Bash/);
+		await closeMasterInput();
+		await selectNeed("master wants to use Bash");
+		keys("x");
+		await waitFor(/dismissed the master's Bash request; still pending/);
+		await until(
+			() => !screen().includes("master wants to use Bash"),
+			"the request to leave NEEDS YOU",
+		);
+		await Bun.sleep(500);
+		expect(screen()).not.toMatch(/Permission: (allow|deny)/);
+		keys("Escape");
+	},
+	STEP_TIMEOUT,
+);

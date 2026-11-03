@@ -31,14 +31,15 @@ describe("needsYou", () => {
 		expect(list).toEqual([]);
 	});
 
-	test("a dismissed session stays out until a newer suggestion; a waiting one never leaves", () => {
+	test("a dismissed session stays out until a newer suggestion, a waiting one too (x, ADR 0057)", () => {
 		const dead = makeSession({ id: "dead", status: "dead", dismissedAt: 10 });
 		const wait = makeSession({
 			id: "wait",
 			status: "waiting",
 			dismissedAt: 10,
 		});
-		expect(needsYou([dead, wait]).map((s) => s.id)).toEqual(["wait"]);
+		const open = makeSession({ id: "open", status: "waiting" });
+		expect(needsYou([dead, wait, open]).map((s) => s.id)).toEqual(["open"]);
 		const old = makeSuggestion({ sessionId: "dead", createdAt: 5 });
 		expect(needsYou([dead], [old])).toEqual([]);
 		const newer = makeSuggestion({ sessionId: "dead", createdAt: 11 });

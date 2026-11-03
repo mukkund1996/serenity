@@ -191,7 +191,7 @@ const SHORTCUTS: Array<[string, Array<[string, string]>]> = [
 			["Enter i", "attach · message · chat"],
 			["Enter Esc", "into the master, mark ▸ seen · leave"],
 			["o f p", "open PR · watch · pin"],
-			["r K x", "rename · kill agent · clean up"],
+			["r K x", "rename · kill agent · clean up card"],
 		],
 	],
 	[

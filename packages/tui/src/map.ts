@@ -485,7 +485,7 @@ function drawMaster(
 			truncate(m.item.permission.detail, iw - 2),
 			DIM,
 		);
-		canvas.text(ix + 2, body + 2, "y allow · n deny", DIM);
+		canvas.text(ix + 2, body + 2, "y allow · n deny · x dismiss", DIM);
 	} else if (m.item?.kind === "session") {
 		const { session, suggestion, reply } = m.item;
 		cursor(body);
@@ -501,7 +501,7 @@ function drawMaster(
 		if (reply !== null) {
 			drawField(canvas, ix + 2, body + 2, iw - 2, reply);
 		} else if (suggestion) {
-			const chips = " y e n";
+			const chips = " y e n x";
 			const c = canvas.text(ix + 2, body + 2, "◆ ", { fg: "magenta" });
 			canvas.text(c, body + 2, truncate(suggestion, iw - 4 - chips.length));
 			canvas.text(ix + iw - chips.length, body + 2, chips, DIM);
@@ -534,7 +534,7 @@ function drawMaster(
 			drawField(canvas, ix + 2, body + 2, iw - 2, reply);
 		} else if (suggestion) {
 			const pending = suggestion.status === "pending";
-			const chips = pending ? " y e n" : "";
+			const chips = pending ? " y e n x" : "";
 			const d = canvas.text(ix + 2, body + 2, "◆ ", { fg: "magenta" });
 			canvas.text(
 				d,
@@ -547,7 +547,7 @@ function drawMaster(
 	} else if (m.item?.kind === "queued") {
 		const { session, text, reply } = m.item;
 		cursor(body);
-		const chips = " y e n";
+		const chips = " y e n x";
 		const col = canvas.text(ix, body, "→ ", { fg: QUEUE_COLOR });
 		canvas.text(
 			col,

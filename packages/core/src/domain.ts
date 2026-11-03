@@ -89,9 +89,10 @@ export interface Session {
 	 */
 	exitNote: string | null;
 	/**
-	 * When the user dismissed it from NEEDS YOU with Enter (ADR 0050): it
-	 * stays out until its status changes or a newer suggestion comes. A
-	 * session waiting on the user is never dismissed. Null otherwise.
+	 * When the user dismissed it from NEEDS YOU, with Enter (ADR 0050) or x
+	 * (ADR 0057): it stays out until its status changes, a newer suggestion
+	 * comes, or, while it waits, its prompt or question changes. Enter never
+	 * dismisses a waiting session; x does. Null otherwise.
 	 */
 	dismissedAt: number | null;
 	createdAt: number;

@@ -52,13 +52,14 @@ export function masterQueue(
 }
 
 /**
- * Whether the user dismissed a session from NEEDS YOU with Enter (ADR 0050)
- * and nothing new has come since: a waiting session always shows, and so
- * does one with a suggestion newer than the dismissal.
+ * Whether the user dismissed a session from NEEDS YOU, with Enter (ADR 0050)
+ * or x (ADR 0057), and nothing new has come since: a suggestion newer than
+ * the dismissal brings it back. The daemon clears `dismissedAt` when its
+ * status changes, or when a waiting session's prompt or question changes.
  */
 function dismissed(s: Session, suggestions: Suggestion[]): boolean {
 	const at = s.dismissedAt;
-	if (at === null || s.status === "waiting") return false;
+	if (at === null) return false;
 	return !suggestions.some((g) => g.sessionId === s.id && g.createdAt > at);
 }
 

@@ -94,11 +94,17 @@ export interface Methods {
 	"session.rename": { params: { id: string; name: string }; result: Session };
 	"session.watch": { params: { id: string; watched: boolean }; result: null };
 	/**
-	 * Enter on a session in NEEDS YOU (ADR 0050): seen. A watched, finished
-	 * one loses its watch; it stays out of NEEDS YOU until its status changes.
-	 * Refused for a session waiting on the user.
+	 * Takes a session out of NEEDS YOU until something new happens.
+	 * `seen` (Enter, ADR 0050, the default): a watched, finished one also
+	 * loses its watch; refused for a session waiting on the user.
+	 * `dismiss` (x, ADR 0057): only hides it. Its pending ◆ suggestion is
+	 * declined, its watch is kept, and a waiting one's prompt stays
+	 * unanswered in its pane.
 	 */
-	"session.dismiss": { params: { id: string }; result: null };
+	"session.dismiss": {
+		params: { id: string; mode?: "seen" | "dismiss" };
+		result: null;
+	};
 	"session.pin": { params: { id: string; pinned: boolean }; result: null };
 	"session.cleanupPlan": { params: { id: string }; result: CleanupPlan };
 	"session.cleanup": { params: { id: string }; result: null };
@@ -126,6 +132,11 @@ export interface Methods {
 	"map.typing": { params: { repo: string; typing: boolean }; result: null };
 	"master.message": { params: { repo: string; text: string }; result: null };
 	"master.permission": { params: { id: string; allow: boolean }; result: null };
+	/**
+	 * x on the master's permission request (ADR 0057): hidden from NEEDS YOU,
+	 * neither allowed nor denied. It still times out as an unanswered one does.
+	 */
+	"master.dismissPermission": { params: { id: string }; result: null };
 	"master.tool": {
 		params: { repo: string; name: string; args: Record<string, unknown> };
 		result: MasterToolResult;
