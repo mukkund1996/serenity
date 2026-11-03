@@ -8,6 +8,12 @@
 #
 # The script method defaults to the install.sh on main. SERENITY_EXPECT_VERSION
 # (e.g. 0.7.0) pins the version `serenity version` must report.
+#
+# SERENITY_DOWNLOAD_BASE (a file:/// or https:// URL to a copy of a release's
+# assets) makes both methods install from that copy instead of the GitHub
+# release, so CI runs don't count as release downloads (ADR 0056). The script
+# method passes it to install.sh; the brew method rewrites the tap formula's
+# URLs to it and keeps the formula's checksums.
 set -u
 
 method="${1:-script}"
@@ -42,6 +48,19 @@ script)
 	status=$?
 	;;
 brew)
+	if [ -n "${SERENITY_DOWNLOAD_BASE:-}" ]; then
+		# The tap's own formula, its release URLs pointed at the copy. No auto
+		# update, which would reset the tap.
+		export HOMEBREW_NO_AUTO_UPDATE=1
+		brew tap mukkund1996/tap >/dev/null 2>&1
+		formula="$(brew --repository mukkund1996/tap)/Formula/serenity.rb"
+		sed -i.orig "s#https://github.com/mukkund1996/serenity/releases/download/v[^/]*#${SERENITY_DOWNLOAD_BASE%/}#" "$formula"
+		if grep -q "github.com/mukkund1996/serenity/releases" "$formula" || ! grep -q "url \"${SERENITY_DOWNLOAD_BASE%/}/" "$formula"; then
+			fail "tap formula points at SERENITY_DOWNLOAD_BASE"
+		else
+			pass "tap formula points at SERENITY_DOWNLOAD_BASE"
+		fi
+	fi
 	# The README's steps: the cask only when Claude Code is missing, then the formula.
 	{ command -v claude >/dev/null 2>&1 || brew install --cask claude-code; brew install mukkund1996/tap/serenity && brew test serenity; } >"$log" 2>&1
 	status=$?
@@ -54,6 +73,9 @@ brew)
 esac
 sed 's/^/  │ /' "$log"
 [ "$status" -eq 0 ] && pass "installer exits 0" || fail "installer exits 0 (exit $status)"
+if [ "$method" = script ] && [ -n "${SERENITY_DOWNLOAD_BASE:-}" ]; then
+	check "installed from SERENITY_DOWNLOAD_BASE, not the release" grep -q "(SERENITY_DOWNLOAD_BASE)" "$log"
+fi
 
 # ── binary and PATH guidance ────────────────────────────────────────────────
 check "binary at $bin_dir/serenity" test -x "$bin_dir/serenity"

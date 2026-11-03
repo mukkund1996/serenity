@@ -30,7 +30,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0022](0022-pinned-sessions.md) | `p` pins a session for reuse: a `pinned` topic, never done or cleaned up, resumed on attach | Amended by 0044 |
 | [0023](0023-slack-for-the-master.md) | Slack for the master: threads and mentions waiting on you, per repo, read through Slack's MCP server; `[` `]` cycle them | Amended by 0031 |
 | [0024](0024-slack-reply-suggestions.md) | Slack suggestions: a reply from sessions, PRs and reviews, or ask a session first; `y` posts it in the thread | Amended by 0050 |
-| [0025](0025-install-script-and-homebrew.md) | Installer and Homebrew formula install tmux, git, gh and Claude Code too; release-please and the release workflow | Accepted |
+| [0025](0025-install-script-and-homebrew.md) | Installer and Homebrew formula install tmux, git, gh and Claude Code too; release-please and the release workflow | Amended by 0056 |
 | [0026](0026-arrows-between-nodes-enter-into-ctrl-m-master.md) | Arrow keys between nodes, Enter into a node and `w` `s` inside it, Esc out; `Ctrl+m` focuses the master from every view | Amended by 0051, 0053 |
 | [0027](0027-master-centred-in-topics-zoom.md) | The master sits in the centre of the topics zoom, topics on both sides; docks left when too narrow | Accepted |
 | [0028](0028-enter-attaches-enter-into-master-only.md) | Enter attaches a card and `i` messages it; only the master is gone into; WASD back beside the arrows; dim card frames; Slack keeps its place; MY PRS off | Accepted |
@@ -61,6 +61,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0053](0053-ctrl-q-and-ctrl-w.md) | `Ctrl+q` leaves a session for the map and `Ctrl+w` focuses the master, replacing `Ctrl+g` and `Ctrl+m`; plain control bytes, no extended keys needed; serenity's old bindings are removed | Amended by 0054 |
 | [0054](0054-agent-pane-test-compares-marker.md) | The agent-pane test in the `Ctrl+q` / `Ctrl+w` bindings compares the marker with empty (tmux reads an id starting with `0` as false); the binding check reads tmux 3.4's folded `C-q`/`C-Q` and keeps trying instead of giving up | Accepted |
 | [0055](0055-session-prs-found-kept-and-polled.md) | A session's PR is found under the head it was pushed as (worktree branch, renamed upstream, `owner:branch` for forks, else the known number); no failure blanks a known PR; rate limits back off; pushes and `gh pr` refresh it; open PRs are polled while a map is open; `PR #n` is bright blue | Accepted |
+| [0056](0056-ci-installs-out-of-download-counts.md) | install-smoke installs from a copy of the release taken from the release run's artifacts and checked against the release's digests (`SERENITY_DOWNLOAD_BASE`), so release download counts are people; `scripts/stats/downloads.ts` takes the older CI downloads out | Accepted |
 
 ## System at a glance
 
