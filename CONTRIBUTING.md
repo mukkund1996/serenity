@@ -82,6 +82,16 @@ getserenity.dev counts page views and a few events (copy, scroll, star and outbo
 
 Visits from `localhost`, `127.*`, LAN addresses (`192.168.*`, `10.*`, `172.16–31.*`) and `file://` are never counted. Most ad blockers block `gc.zgo.at`, so a browser with one may already send nothing. Don't rely on that, because blocker lists change.
 
+### Reading install numbers
+
+GitHub release download counts include CI, and `git clone` and traffic numbers are mostly CI checkouts: every job runs `actions/checkout`. Don't read either as adoption. Since ADR 0056, install-smoke installs from a copy and no longer adds to download counts. For an estimate of real installs per release and asset, with the older smoke runs' downloads taken out, run:
+
+```bash
+bun scripts/stats/downloads.ts
+```
+
+`SHA256SUMS` downloads are curl-installer installs. Homebrew installs fetch a binary but no `SHA256SUMS`. Release downloads you make yourself (`gh release download`, the browser) count too.
+
 ## License
 
 By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).

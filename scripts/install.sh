@@ -9,6 +9,11 @@
 #   SERENITY_VERSION      release to install, e.g. 0.5.0 (default: latest)
 #   SERENITY_INSTALL_DIR  where the binary goes (default: ~/.local/bin)
 #   SERENITY_NO_DEPS=1    only install serenity, leave the tools alone
+#   SERENITY_DOWNLOAD_BASE  where to fetch serenity-<os>-<arch> and SHA256SUMS
+#                         from instead of the GitHub release, as an https:// or
+#                         file:/// URL to a directory. For CI and mirrors (ADR 0056):
+#                         the checksums come from the same place, so only point
+#                         it at a copy you trust.
 set -eu
 
 REPO="mukkund1996/serenity"
@@ -124,7 +129,14 @@ sha256() {
 
 install_serenity() {
 	asset="serenity-$os-$arch"
-	if [ -n "${SERENITY_VERSION:-}" ]; then
+	if [ -n "${SERENITY_DOWNLOAD_BASE:-}" ]; then
+		base="${SERENITY_DOWNLOAD_BASE%/}"
+		case "$base" in
+			https://* | file:///*) ;;
+			*) die "SERENITY_DOWNLOAD_BASE must be an https:// or file:/// URL, not: $base" ;;
+		esac
+		say "Using serenity from $base (SERENITY_DOWNLOAD_BASE)"
+	elif [ -n "${SERENITY_VERSION:-}" ]; then
 		base="https://github.com/$REPO/releases/download/v${SERENITY_VERSION#v}"
 	else
 		base="https://github.com/$REPO/releases/latest/download"

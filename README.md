@@ -77,6 +77,7 @@ The install script reads these environment variables:
 | `SERENITY_VERSION` | latest release | Install a specific version |
 | `SERENITY_INSTALL_DIR` | `~/.local/bin` | Where the binary goes |
 | `SERENITY_NO_DEPS` | unset | Set to `1` to skip installing dependencies |
+| `SERENITY_DOWNLOAD_BASE` | the GitHub release | An `https://` or `file:///` URL to a directory holding a copy of a release's binaries and `SHA256SUMS`, for mirrors and CI. The checksums come from the same place, so only use a copy you trust |
 
 ## Install the skill
 

@@ -7,6 +7,11 @@
 # user with passwordless sudo, or "brew" for Homebrew on Linux. With no cases,
 # runs the default matrix below. The installer under test is this checkout's
 # scripts/install.sh, piped into sh the way `curl | sh` does.
+#
+# SERENITY_ASSETS_DIR: a directory holding a release's serenity-* binaries and
+# SHA256SUMS (from `gh release download`). It is mounted into each container
+# and the installs read it via SERENITY_DOWNLOAD_BASE instead of downloading
+# the release, so smoke runs don't count as release downloads (ADR 0056).
 set -u
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -52,6 +57,12 @@ EOF
 	extra=""
 	# sudo drops the environment, so the pin goes in the command.
 	pin="SERENITY_EXPECT_VERSION=${SERENITY_EXPECT_VERSION:-}"
+	if [ -n "${SERENITY_ASSETS_DIR:-}" ]; then
+		pin="$pin SERENITY_DOWNLOAD_BASE=file:///smoke/assets"
+		mount_assets="-v $(cd "$SERENITY_ASSETS_DIR" && pwd):/smoke/assets:ro"
+	else
+		mount_assets=""
+	fi
 	run="cd; export $pin; sh /smoke/check.sh script /smoke/install.sh"
 	case "$mode" in
 	sudo) extra=sudo ;;
@@ -67,7 +78,7 @@ EOF
 	if [ "$mode" = root ]; then as="sh -c"; else as="sudo -u smoke -H sh -c"; fi
 	printf '%-55s ' "$case"
 	docker run --rm --platform "$platform" \
-		-v "$here/check.sh:/smoke/check.sh:ro" -v "$installer:/smoke/install.sh:ro" \
+		-v "$here/check.sh:/smoke/check.sh:ro" -v "$installer:/smoke/install.sh:ro" $mount_assets \
 		-e MODE="$mode" -e EXTRA="$extra" \
 		"$image" sh -c "$prep
 $as '$run'" >"$logdir/$name.log" 2>&1

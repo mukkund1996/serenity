@@ -6,6 +6,11 @@ name: install-smoke
 
 on:
   workflow_dispatch:
+    inputs:
+      allow_release_download:
+        description: Download the release's assets if the run that built them has expired (adds one download per asset to its counts)
+        type: boolean
+        default: false
   release:
     types: [published]
   pull_request:
@@ -16,20 +21,25 @@ on:
 
 permissions:
   contents: read
-
-env:
-  # On a release, `serenity version` must report it.
-  SERENITY_EXPECT_VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+  actions: read # mirror.sh reads release.yml's artifacts
 
 jobs:
-  # The release is published before its binaries and the tap bump land
-  # (release.yml's publish job), so wait for both.
-  ready:
+  # Copies the release's assets from the release.yml run that built them,
+  # checked against the release's digests, and hands them to the install jobs
+  # as a workflow artifact (scripts/install-smoke/mirror.sh, ADR 0056). The
+  # jobs install from that copy via SERENITY_DOWNLOAD_BASE: GitHub counts every
+  # release asset download, the API's too, so the smoke test must not fetch
+  # them. On a release it first waits for the binaries and the tap bump
+  # (release.yml's publish job lands them after the release is published).
+  mirror:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.fetch.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - if: github.event_name == 'release'
         env:
-          GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
         run: |
           for i in $(seq 60); do
@@ -41,9 +51,23 @@ jobs:
           done
           echo "::error::$TAG binaries or tap formula did not appear within 30 minutes"
           exit 1
+      - uses: actions/checkout@v4
+      - id: fetch
+        env:
+          TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+          MIRROR_ALLOW_DOWNLOAD: ${{ inputs.allow_release_download && '1' || '' }}
+        run: |
+          tag=${TAG:-$(gh release view -R "$GITHUB_REPOSITORY" --json tagName -q .tagName)}
+          scripts/install-smoke/mirror.sh "$tag" mirror
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: mirror/
+          retention-days: 1
 
   linux:
-    needs: ready
+    needs: mirror
     strategy:
       fail-fast: false
       matrix:
@@ -51,23 +75,37 @@ jobs:
         arch: [amd64, arm64]
         user: [sudo, root]
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    env:
+      SERENITY_EXPECT_VERSION: ${{ needs.mirror.outputs.tag }}
+      SERENITY_ASSETS_DIR: ${{ github.workspace }}/mirror
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: mirror
       - run: scripts/install-smoke/docker.sh -o logs "${{ matrix.image }},linux/${{ matrix.arch }},${{ matrix.user }}"
       - if: always()
         run: cat logs/*.log
 
   linuxbrew:
-    needs: ready
+    needs: mirror
     runs-on: ubuntu-latest
+    env:
+      SERENITY_EXPECT_VERSION: ${{ needs.mirror.outputs.tag }}
+      SERENITY_ASSETS_DIR: ${{ github.workspace }}/mirror
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: mirror
       - run: scripts/install-smoke/docker.sh -o logs "ubuntu:24.04,linux/amd64,brew"
       - if: always()
         run: cat logs/*.log
 
   macos:
-    needs: ready
+    needs: mirror
     strategy:
       fail-fast: false
       matrix:
@@ -79,8 +117,15 @@ jobs:
           # only tell the user to get tmux elsewhere.
           - { os: macos-15-intel, method: script-nobrew }
     runs-on: ${{ matrix.os }}
+    env:
+      SERENITY_EXPECT_VERSION: ${{ needs.mirror.outputs.tag }}
+      SERENITY_DOWNLOAD_BASE: file://${{ github.workspace }}/mirror
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: mirror
       - if: matrix.method == 'script-nobrew'
         run: |
           NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)"
