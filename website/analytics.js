@@ -1,7 +1,7 @@
 // GoatCounter events shared by every page of the website (no cookies, no personal data).
 // count.js loads async and may be blocked, so every call is optional. Events:
 //   star-<page>-nav, star-landing-install   Star on GitHub (data-goatcounter-click in the markup)
-//   story-watch                             the landing story's WATCH button (same)
+//   story-<play|pause|replay|restart>       the reader pressed a landing story control (site.js)
 //   install-copy-<quick|curl|brew>          a landing copy button (site.js)
 //   docs-copy: <command>                    a docs copy button (docs/docs.js)
 //   reached-install                         the landing #install section came into view (site.js)

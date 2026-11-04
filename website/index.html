@@ -41,31 +41,26 @@ a:hover{color:#ffffff}
 .srn-cur{animation:srn-blink 1.05s steps(1) infinite}
 .srn-pulse{animation:srn-pulse 1.8s ease-in-out infinite}
 .srn-busy{animation:srn-pulse 0.9s ease-in-out infinite}
-/* the SCROLL hint's arrow bobs gently so it reads as "scroll down" */
-.srn-bob{display:inline-block;color:#7fc77f;animation:srn-bob 1.8s ease-in-out infinite}
 @keyframes srn-blink{50%{opacity:0}}
 @keyframes srn-pulse{0%,100%{opacity:1}50%{opacity:.35}}
-@keyframes srn-bob{0%,100%{transform:translateY(-1px);opacity:.75}50%{transform:translateY(4px);opacity:1}}
 /* the Clarity card's master: @ list rows, and the session its @copy starts */
 .srn-at-list{position:absolute;left:0;right:0;bottom:0;background:#161a1f}
 .srn-at-list div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .srn-at-at{color:#c792ea}
 .srn-at-node{transition:opacity .5s ease,transform .5s ease}
 .srn-at-node.is-off{opacity:0;transform:translateY(-8px);visibility:hidden}
-/* autoplay for readers who don't scroll: the Watch link beside the hint, and the play/pause pill */
-.srn-watch{display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:0 10px;border:0;border-radius:999px;background:transparent;color:#d0d4da;font:inherit;letter-spacing:inherit;cursor:pointer}
-.srn-watch:hover,.srn-watch:focus-visible{background:#161a1f;color:#ffffff}
-#srn-tour{position:fixed;left:50%;bottom:20px;z-index:40;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:4px 18px 4px 4px;background:rgba(15,18,22,.94);border:1px solid #3a3f47;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.45);font:500 12px/1 'JetBrains Mono',Menlo,monospace;letter-spacing:.1em;color:#d0d4da;transition:opacity .3s ease,transform .3s ease,visibility .3s}
-#srn-tour.is-off{opacity:0;visibility:hidden;pointer-events:none;transform:translate(-50%,8px)}
-#srn-tour button{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border:0;border-radius:999px;background:transparent;color:inherit;font:inherit;letter-spacing:inherit;cursor:pointer}
-#srn-tour button:hover,#srn-tour button:focus-visible{background:#161a1f;color:#ffffff}
-#srn-tour .srn-ico-play,#srn-tour.is-paused .srn-ico-pause{display:none}
-#srn-tour.is-paused .srn-ico-play{display:inline}
-.srn-tour-bar{width:88px;height:2px;border-radius:2px;background:#23272e;overflow:hidden}
-.srn-tour-bar span{display:block;height:100%;background:#7fc77f;transform-origin:0 50%;transform:scaleX(0)}
+/* the story's player at the bottom of the stage: play/pause, restart and progress (site.js) */
+.srn-player{position:absolute;left:50%;bottom:12px;z-index:20;transform:translateX(-50%);margin:0;min-width:0;display:flex;align-items:center;gap:2px;padding:3px 12px 3px 3px;background:rgba(15,18,22,.82);border:1px solid #2a2e35;border-radius:999px}
+.srn-player button{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:0;border-radius:50%;background:transparent;color:#858c97;cursor:pointer}
+.srn-player button:hover{background:#161a1f;color:#ffffff}
+.srn-player button:focus-visible{outline:2px solid #7fc77f;outline-offset:1px;background:#161a1f;color:#ffffff}
+.srn-player .srn-ico-play,.srn-player .srn-ico-replay,.srn-player[data-mode="play"] .srn-ico-pause,.srn-player[data-mode="replay"] .srn-ico-pause{display:none}
+.srn-player[data-mode="play"] .srn-ico-play,.srn-player[data-mode="replay"] .srn-ico-replay{display:block}
+.srn-player-bar{width:64px;height:2px;margin-left:8px;border-radius:2px;background:#23272e;overflow:hidden}
+.srn-player-bar span{display:block;height:100%;background:#7fc77f;transform-origin:0 50%;transform:scaleX(0)}
 .srn-vis{min-height:320px}
 @media (min-width: 1100px){.srn-vis{min-height:400px}}
-@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}.srn-cur,.srn-pulse,.srn-busy,.srn-bob{animation:none}.srn-at-node{transition:none}#srn-tour{transition:none}}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}.srn-cur,.srn-pulse,.srn-busy{animation:none}.srn-at-node{transition:none}}
 /* phones: drop the Install nav link so logo, Docs, GitHub and the version pill fit on one line */
 @media (max-width: 639px){.srn-wide{display:none}}
 /* phones: the pill keeps BETA and drops the version, so Docs never touches the logo */
@@ -87,10 +82,9 @@ a:hover{color:#ffffff}
 <body>
 <div id="top" style="background: #0d0f12; color: #d0d4da; font-family: 'Inter', system-ui, -apple-system, sans-serif; font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased">
 
-<!-- ============ SCROLL STORY ============ -->
-<div id="srn-track" style="position: relative; height: 8400px">
-<div id="srn-stage" style="position: sticky; top: 0; height: 100vh; height: 100dvh; overflow: hidden">
-<!-- soft sage glow: rises from the bottom as you scroll, then settles behind serenity at centre stage -->
+<!-- ============ STORY (plays by itself; site.js) ============ -->
+<div id="srn-stage" style="position: relative; height: 100vh; height: 100svh; min-height: 520px; max-height: 1000px; overflow: hidden">
+<!-- soft sage glow: rises from the bottom as the story plays, then settles behind serenity at centre stage -->
 <div aria-hidden="true" style="position: absolute; pointer-events: none; border-radius: 50%; background: radial-gradient(closest-side, rgba(127,199,127,.38), rgba(127,199,127,.14) 55%, rgba(127,199,127,0) 100%)" data-st="position: absolute; pointer-events: none; border-radius: 50%; background: radial-gradient(closest-side, rgba(127,199,127,.38), rgba(127,199,127,.14) 55%, rgba(127,199,127,0) 100%); {{glow}}"></div>
 
 <!-- top bar -->
@@ -407,13 +401,14 @@ a:hover{color:#ffffff}
 <span style="position: absolute" data-st="position: absolute; {{side2}}">Distraction</span>
 <span style="position: absolute" data-st="position: absolute; {{side3}}">Noise</span>
 </div>
-<div style="position: absolute; left: 0; right: 0; display: flex; align-items: center; justify-content: center; gap: 6px; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; line-height: 1; letter-spacing: .1em; color: #858c97" data-st="position: absolute; left: 0; right: 0; display: flex; align-items: center; justify-content: center; gap: 6px; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; line-height: 1; letter-spacing: .1em; color: #858c97; {{hint}}"><span>SCROLL <span class="srn-bob">↓</span></span><span aria-hidden="true" style="color: #3a3f47">·</span><button type="button" class="srn-watch" data-tour="watch" data-goatcounter-click="story-watch" data-goatcounter-title="Watched the story"><svg width="9" height="10" viewBox="0 0 9 10" fill="#7fc77f" aria-hidden="true"><path d="M0 0l9 5-9 5z"/></svg>WATCH</button></div>
+<fieldset class="srn-player" aria-label="Story playback" data-story="player" data-mode="play">
+<button type="button" data-story="toggle" aria-label="Play the story"><svg class="srn-ico-pause" width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><rect x="1" y="0" width="3" height="10"/><rect x="6" y="0" width="3" height="10"/></svg><svg class="srn-ico-play" width="10" height="10" viewBox="0 0 9 10" fill="#7fc77f" aria-hidden="true"><path d="M0 0l9 5-9 5z"/></svg><svg class="srn-ico-replay" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7fc77f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></button>
+<button type="button" data-story="restart" aria-label="Restart the story from the beginning"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4v16"/><path d="M19 5 9 12l10 7z" fill="currentColor"/></svg></button>
+<span class="srn-player-bar" aria-hidden="true"><span data-story="fill"></span></span>
+</fieldset>
 
 </div>
-</div>
-<!-- /scroll story -->
-<!-- autoplay control: shown once the story plays by itself or from WATCH (site.js) -->
-<div id="srn-tour" class="is-off"><button type="button" data-tour="toggle" aria-label="Pause the story"><svg class="srn-ico-pause" width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><rect x="1" y="0" width="3" height="10"/><rect x="6" y="0" width="3" height="10"/></svg><svg class="srn-ico-play" width="10" height="10" viewBox="0 0 9 10" fill="#7fc77f" aria-hidden="true"><path d="M0 0l9 5-9 5z"/></svg><span data-tour="label">PAUSE</span></button><span class="srn-tour-bar" aria-hidden="true"><span data-tour="fill"></span></span></div>
+<!-- /story -->
 
 <!-- ============ QUICK INSTALL (right after the story) ============ -->
 <section style="max-width: 860px; margin: 0 auto; padding: 96px 24px 8px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center">
