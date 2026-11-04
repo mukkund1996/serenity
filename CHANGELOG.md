@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.10.0](https://github.com/mukkund1996/serenity/compare/v0.9.0...v0.10.0) (2026-11-04)
+
+
+### Features
+
+* settings panel (Ctrl+,) and a per-repo base branch for new sessions ([#95](https://github.com/mukkund1996/serenity/issues/95)) ([2f1dc97](https://github.com/mukkund1996/serenity/commit/2f1dc97ab716c65299d677ad48768ebfcc0628ef))
+* **tui:** topic cards stretch to fill their side's lanes (ADR 0059) ([#96](https://github.com/mukkund1996/serenity/issues/96)) ([c1d89c2](https://github.com/mukkund1996/serenity/commit/c1d89c25e68b4e037533117b5a656dc6204b8b92))
+* **website:** the hero story plays by itself, the page scrolls normally ([#99](https://github.com/mukkund1996/serenity/issues/99)) ([5f2fc67](https://github.com/mukkund1996/serenity/commit/5f2fc6708eec8fcd0c525b18bf320ec0e24baa82))
+
+
+### Bug Fixes
+
+* **cli:** quiet restart when no daemon is running ([#89](https://github.com/mukkund1996/serenity/issues/89)) ([9040f5b](https://github.com/mukkund1996/serenity/commit/9040f5b1715a5dfe0efe9c58dd01454cfb389e21))
+* keep serenity's state readable only by the user ([#92](https://github.com/mukkund1996/serenity/issues/92)) ([b89fd09](https://github.com/mukkund1996/serenity/commit/b89fd09e2ce192c63885585008ad795e443346b1))
+* **tui:** x on any NEEDS YOU item only dismisses it (ADR 0057) ([#94](https://github.com/mukkund1996/serenity/issues/94)) ([19c7595](https://github.com/mukkund1996/serenity/commit/19c75952e8711204d50c9e7fcc2471fd740cb9b7))
+* **website:** give the story's opening line time to be read ([#100](https://github.com/mukkund1996/serenity/issues/100)) ([e95a917](https://github.com/mukkund1996/serenity/commit/e95a9177521105038b257199ae5fea9234216a20))
+
 ## [0.9.0](https://github.com/mukkund1996/serenity/compare/v0.8.0...v0.9.0) (2026-11-02)
 
 
