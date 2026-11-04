@@ -50,7 +50,7 @@ a:hover{color:#ffffff}
 .srn-at-node{transition:opacity .5s ease,transform .5s ease}
 .srn-at-node.is-off{opacity:0;transform:translateY(-8px);visibility:hidden}
 /* the story's player at the bottom of the stage: play/pause, restart and progress (site.js) */
-.srn-player{position:absolute;left:50%;bottom:12px;z-index:20;transform:translateX(-50%);display:flex;align-items:center;gap:2px;padding:3px 12px 3px 3px;background:rgba(15,18,22,.82);border:1px solid #2a2e35;border-radius:999px}
+.srn-player{position:absolute;left:50%;bottom:12px;z-index:20;transform:translateX(-50%);margin:0;min-width:0;display:flex;align-items:center;gap:2px;padding:3px 12px 3px 3px;background:rgba(15,18,22,.82);border:1px solid #2a2e35;border-radius:999px}
 .srn-player button{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:0;border-radius:50%;background:transparent;color:#858c97;cursor:pointer}
 .srn-player button:hover{background:#161a1f;color:#ffffff}
 .srn-player button:focus-visible{outline:2px solid #7fc77f;outline-offset:1px;background:#161a1f;color:#ffffff}
@@ -401,11 +401,11 @@ a:hover{color:#ffffff}
 <span style="position: absolute" data-st="position: absolute; {{side2}}">Distraction</span>
 <span style="position: absolute" data-st="position: absolute; {{side3}}">Noise</span>
 </div>
-<div class="srn-player" role="group" aria-label="Story playback" data-story="player" data-mode="play">
+<fieldset class="srn-player" aria-label="Story playback" data-story="player" data-mode="play">
 <button type="button" data-story="toggle" aria-label="Play the story"><svg class="srn-ico-pause" width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><rect x="1" y="0" width="3" height="10"/><rect x="6" y="0" width="3" height="10"/></svg><svg class="srn-ico-play" width="10" height="10" viewBox="0 0 9 10" fill="#7fc77f" aria-hidden="true"><path d="M0 0l9 5-9 5z"/></svg><svg class="srn-ico-replay" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7fc77f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></button>
 <button type="button" data-story="restart" aria-label="Restart the story from the beginning"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4v16"/><path d="M19 5 9 12l10 7z" fill="currentColor"/></svg></button>
 <span class="srn-player-bar" aria-hidden="true"><span data-story="fill"></span></span>
-</div>
+</fieldset>
 
 </div>
 <!-- /story -->

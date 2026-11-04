@@ -55,38 +55,9 @@ function paint(p) {
 	}
 }
 
-// pAll is the story's own clock, 0..0.6: the window story uses it all and ends at serenity
-// centre stage. Holds: at each [point, length] the story rests for that length before the
-// next animation; a short rest follows the end. Progress p runs 0..1 over all of it.
-const HOLDS = [
-	[0.03, 0.03],
-	[0.048, 0.03],
-	[0.096, 0.025],
-	[0.145, 0.025],
-	[0.21, 0.03],
-	[0.285, 0.025],
-	[0.345, 0.02],
-	[0.405, 0.02],
-	[0.51, 0.025],
-];
-const STORY_END = 0.6;
-const TAIL_REST = 0.04;
-const STORY_LEN = STORY_END + HOLDS.reduce((a, h) => a + h[1], 0) + TAIL_REST;
-
-// progress (0..1) to the story's own clock, pAll
-function storyClock(raw) {
-	const x = raw * STORY_LEN;
-	let acc = 0;
-	for (const [a, d] of HOLDS) {
-		if (x <= a + acc) return x - acc;
-		if (x <= a + acc + d) return a;
-		acc += d;
-	}
-	return Math.min(STORY_END, x - acc);
-}
-
+// draws the story at progress st.p, 0..1 (serenity centre stage); the player sets the pace
 function render(st) {
-	const p = Math.min(1, storyClock(st.p) / STORY_END);
+	const p = Math.min(1, Math.max(0, st.p));
 
 	const cl = (x) => Math.min(1, Math.max(0, x));
 	const seg = (a, b) => cl((p - a) / (b - a));
@@ -649,12 +620,25 @@ if (atCard) {
 // a story they paused stays paused when it scrolls back into view. Under reduced motion
 // it doesn't start by itself: the stage shows the last frame until the reader presses play.
 //
-// The clock runs through the story in legs: a move up to each hold, eased in and out,
-// then a rest across the hold. Every frame takes its place from the time elapsed, so a
-// late frame catches up rather than slowing the story.
+// The pace is one smooth speed curve. At each beat [point, extra] (in story progress) the
+// story slows down to give that beat extra time, spread over a raised-cosine bump, and
+// never stops: animations that run across a beat (the glow grows all story long) ease
+// through it instead of halting and lurching on.
 {
-	const STORY_MS = 25000; // the whole story, holds included
-	const RAMP_MS = 350; // how long a move takes to reach full speed, and to stop
+	const STORY_MS = 24000; // the whole story, beats included
+	const RAMP_MS = 400; // after a start or a resume, how long to come up to speed
+	const BEATS = [
+		[0.05, 0.05],
+		[0.08, 0.05],
+		[0.16, 0.042],
+		[0.242, 0.042],
+		[0.35, 0.05],
+		[0.475, 0.042],
+		[0.575, 0.033],
+		[0.675, 0.033],
+		[0.85, 0.042],
+	];
+	const WIDTH = 0.02; // half-width of a beat's slow-down, in progress
 	const el = (k) => document.querySelector(`[data-story="${k}"]`);
 	const player = el("player");
 	const toggle = el("toggle");
@@ -662,50 +646,35 @@ if (atCard) {
 	const fill = el("fill");
 	const quiet = window.matchMedia?.("(prefers-reduced-motion: reduce)");
 
-	// the legs, in progress: a move up to each hold, then a rest across it
-	const legs = [];
-	{
-		let x = 0;
-		let acc = 0;
-		const add = (to, move) => {
-			legs.push({ from: x / STORY_LEN, to: to / STORY_LEN, move });
-			x = to;
-		};
-		for (const [a, d] of HOLDS) {
-			add(a + acc, true);
-			add(a + acc + d, false);
-			acc += d;
+	// time per unit of progress: 1, plus each beat's bump (whose area is its extra)
+	const density = (x) => {
+		let f = 1;
+		for (const [a, d] of BEATS) {
+			const u = (x - a) / WIDTH;
+			if (u > -1 && u < 1) f += (d * (1 + Math.cos(Math.PI * u))) / (2 * WIDTH);
 		}
-		add(STORY_END + acc, true);
-		add(STORY_LEN, false);
-		let t = 0;
-		for (const l of legs) {
-			l.t0 = t;
-			l.ms = (l.to - l.from) * STORY_MS;
-			t += l.ms;
-		}
-	}
-	const END = legs[legs.length - 1].t0 + legs[legs.length - 1].ms;
-
-	// the share of a move of d ms done after ms: speed rises on a half sine over r,
-	// stays level, and falls the same way over the last r
-	const ease = (ms, d) => {
-		if (ms <= 0) return 0;
-		if (ms >= d) return 1;
-		const r = Math.min(RAMP_MS, d / 3);
-		const v = 1 / (d - r);
-		const ramp = (u) =>
-			v * (u / 2 - (r / (2 * Math.PI)) * Math.sin((Math.PI * u) / r));
-		if (ms < r) return ramp(ms);
-		if (ms > d - r) return 1 - ramp(d - ms);
-		return v * (ms - r / 2);
+		return f;
 	};
+	// tabulate time at progress, scaled to STORY_MS; progressAt reads it backwards
+	const N = 2400;
+	const times = new Float64Array(N + 1);
+	for (let i = 1; i <= N; i++) {
+		const x = i / N;
+		times[i] = times[i - 1] + ((density(x - 1 / N) + density(x)) / 2) * (1 / N);
+	}
+	for (let i = 1; i <= N; i++) times[i] *= STORY_MS / times[N];
+	const END = STORY_MS;
 	const progressAt = (ms) => {
-		let l = legs[0];
-		for (const k of legs) if (k.t0 <= ms) l = k;
-		const u = ms - l.t0;
-		const share = l.move ? ease(u, l.ms) : Math.min(1, Math.max(0, u / l.ms));
-		return l.from + (l.to - l.from) * share;
+		if (ms <= 0) return 0;
+		if (ms >= END) return 1;
+		let lo = 0;
+		let hi = N;
+		while (hi - lo > 1) {
+			const mid = (lo + hi) >> 1;
+			if (times[mid] <= ms) lo = mid;
+			else hi = mid;
+		}
+		return (lo + (ms - times[lo]) / (times[hi] - times[lo])) / N;
 	};
 
 	let clock = quiet?.matches ? END : 0; // ms into the story
@@ -719,11 +688,7 @@ if (atCard) {
 	const draw = () => {
 		paint(progressAt(clock));
 		fill.style.transform = `scaleX(${(clock / END).toFixed(4)})`;
-		const mode = playing
-			? "pause"
-			: clock >= END && !still
-				? "replay"
-				: "play";
+		const mode = playing ? "pause" : clock >= END && !still ? "replay" : "play";
 		if (player.dataset.mode !== mode) {
 			player.dataset.mode = mode;
 			toggle.setAttribute(
