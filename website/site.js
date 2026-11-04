@@ -1,8 +1,9 @@
-// The scroll story and the copy buttons. Ported from the Design canvas's Main.dc.html:
-// render() is its renderVals() unchanged; elements carry their style as a data-st
-// template whose {{holes}} are filled from render()'s result on every scroll frame.
+// The story, the copy buttons and the Clarity card. The story is ported from the Design
+// canvas's Main.dc.html: render() is its renderVals(), cut down to the part the story
+// plays. Elements carry their style as a data-st template whose {{holes}} are filled from
+// render()'s result on every frame. The story plays by itself on a clock (the player at
+// the bottom of this file); the page scrolls normally past it.
 
-const track = document.getElementById("srn-track");
 const stage = document.getElementById("srn-stage");
 
 const lookup = (vals, path) =>
@@ -19,8 +20,7 @@ const texts = Array.from(document.querySelectorAll("[data-t]"), (el) => ({
 	last: el.textContent,
 }));
 
-const state = { p: 0, vw: 1280, vh: 900 };
-let raf = 0;
+const state = { p: -1, vw: 0, vh: 0 };
 
 function apply() {
 	const vals = render(state);
@@ -43,46 +43,21 @@ function apply() {
 	}
 }
 
-// how far the track scrolls while the stage is pinned, and where that starts on the page
-function trackSpan() {
-	const r = track.getBoundingClientRect();
-	return {
-		top: r.top + window.scrollY,
-		span: Math.max(1, r.height - stage.offsetHeight),
-	};
-}
-
-// draw the story at scroll progress p, skipping changes smaller than eps
-function paint(p, eps) {
-	const sh = stage.offsetHeight;
+// draw the story at progress p (0..1, holds included), laid out for the stage's size
+function paint(p) {
 	const sw = stage.offsetWidth;
-	// lay out for the part of the stage that is actually on screen
-	const vis = Math.min(sh, window.innerHeight || sh);
-	if (Math.abs(p - state.p) > eps || sw !== state.vw || vis !== state.vh) {
+	const sh = stage.offsetHeight;
+	if (p !== state.p || sw !== state.vw || sh !== state.vh) {
 		state.p = p;
 		state.vw = sw;
-		state.vh = vis;
+		state.vh = sh;
 		apply();
 	}
 }
 
-function tick() {
-	raf = 0;
-	const { top, span } = trackSpan();
-	// the threshold (about 2px of scroll) also keeps the autoplay's exact frames: its
-	// scrollTo lands on a whole (device) pixel, less than that from the progress it painted
-	paint(Math.min(1, Math.max(0, (window.scrollY - top) / span)), 0.0003);
-}
-
-function onScroll() {
-	if (!raf) raf = requestAnimationFrame(tick);
-}
-
-// pAll runs the whole scroll; the window story (p) uses the first 60%, the word pairs the rest.
-// Pauses: at each [point, length] the story holds still for that much scroll before the next
-// animation. The scroll story ends at serenity centre stage (pAll 0.6), then rests briefly;
-// the later node pull-out / word-pair act is skipped (its code stays inert past 0.6).
-// The autoplay below paces itself on the same table.
+// pAll is the story's own clock, 0..0.6: the window story uses it all and ends at serenity
+// centre stage. Holds: at each [point, length] the story rests for that length before the
+// next animation; a short rest follows the end. Progress p runs 0..1 over all of it.
 const HOLDS = [
 	[0.03, 0.03],
 	[0.048, 0.03],
@@ -98,7 +73,7 @@ const STORY_END = 0.6;
 const TAIL_REST = 0.04;
 const STORY_LEN = STORY_END + HOLDS.reduce((a, h) => a + h[1], 0) + TAIL_REST;
 
-// scroll progress (0..1) to the story's own clock, pAll
+// progress (0..1) to the story's own clock, pAll
 function storyClock(raw) {
 	const x = raw * STORY_LEN;
 	let acc = 0;
@@ -111,12 +86,10 @@ function storyClock(raw) {
 }
 
 function render(st) {
-	const pAll = storyClock(st.p);
-	const p = Math.min(1, pAll / 0.6);
+	const p = Math.min(1, storyClock(st.p) / STORY_END);
 
 	const cl = (x) => Math.min(1, Math.max(0, x));
 	const seg = (a, b) => cl((p - a) / (b - a));
-	const segA = (a, b) => cl((pAll - a) / (b - a));
 	const ss = (t) => t * t * (3 - 2 * t);
 	const eo = (t) => 1 - (1 - t) ** 3;
 	const eio = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
@@ -127,21 +100,17 @@ function render(st) {
 	// story: viewBox x 90..1190, y 10..720; centre stage: zoom to serenity's window (x 100..1180, y 70..710)
 	const vw = st.vw || 1280;
 	const vh = st.vh || 900;
-	// phones get their own framing: tighter crops, stack under serenity, nodes pulled out below it
+	// phones get their own framing: tighter crops, the pile stacked under serenity
 	const mob = vw < 640;
 	const top = 64;
 	const capH = vw < 640 ? 100 : 64;
 	const gap = vw < 640 ? 16 : 24;
-	// once serenity shrinks (sh), room is made at the bottom for the word pairs and their subtitles;
-	// the staggered problem words sit in the top headline spot and run into the empty top of the scene
-	const sh = eio(segA(0.62, 0.67));
+	// the bottom 52px stay clear for the player's controls
 	const avail = vh - top - gap - capH - 52;
-	const tcS = eio(seg(0.86, 0.94)) * (1 - sh);
+	const tcS = eio(seg(0.86, 0.94));
 	// while the stack sits to the right of serenity, the view widens to x -70..1350 (same centre)
 	const pmS = ss(seg(0.38, 0.46));
-	const wFit = mob
-		? L(L(720, 920, pmS), 600, sh)
-		: L(1100, 1420, pmS * (1 - sh));
+	const wFit = mob ? L(720, 920, pmS) : L(1100, 1420, pmS);
 	const s0 = Math.max(0.2, Math.min(1.1, (vw * 0.94) / wFit, avail / 710));
 	const sF = Math.max(
 		0.2,
@@ -208,31 +177,16 @@ function render(st) {
 	// serenity window pose: docked in the middle (scale .82), then centre stage (scale 1)
 	const ta = ss(seg(0.42, 0.5));
 	const tc = eio(seg(0.86, 0.94));
-	// after centre stage (pAll .62–.67) serenity shrinks to the top-left third
-	const tsc = L(L(0.82, 1, tc), 0.5, sh);
+	const tsc = L(0.82, 1, tc);
 	const se = tsc * (0.96 + 0.04 * ta);
-	const tx = L(L(197.2, 100, tc), mob ? 370 : 160, sh) + 540 * (tsc - se);
-	const ty = L(L(mob ? 20 : 40, 70, tc), 20, sh) + 320 * (tsc - se);
+	const tx = L(197.2, 100, tc) + 540 * (tsc - se);
+	const ty = L(mob ? 20 : 40, 70, tc) + 320 * (tsc - se);
 	const tui = `opacity:${n(ta, 3)};visibility:${ta <= 0.001 ? "hidden" : "visible"};transform:translate(${n(tx, 1)}px,${n(ty, 1)}px) scale(${n(se, 4)})`;
 	const node = (r) => ({
 		x: tx + r.x * se,
 		y: ty + r.y * se,
 		w: r.w * se,
 		h: r.h * se,
-	});
-
-	// nodes pulled out to the right, enlarged, one at a time: agent, waiting, master
-	const out1 = eio(segA(0.67, 0.72)) * (1 - eio(segA(0.78, 0.82)));
-	const out2 = eio(segA(0.78, 0.83)) * (1 - eio(segA(0.89, 0.93)));
-	const out3 = eio(segA(0.89, 0.94));
-	const spot = { vs: out1, c2: out2, sl: out3 };
-	const spotCx = mob ? 640 : 990;
-	const spotCy = mob ? 520 : 180;
-	const spotRect = (r, k2) => ({
-		w: r.w * k2,
-		h: r.h * k2,
-		x: spotCx - (r.w * k2) / 2,
-		y: spotCy - (r.h * k2) / 2,
 	});
 
 	// A = window in the pile (scene px), N = its node inside serenity (serenity px)
@@ -292,14 +246,10 @@ function render(st) {
 		const t = seg(d.pull[0], d.pull[1]);
 		const tp = eio(t);
 		const tz = eio(cl((t - 0.15) / 0.85));
-		const cx = L(P.x + P.w / 2, N.x + N.w / 2, tp);
-		const cy = L(P.y + P.h / 2, N.y + N.h / 2, tp);
-		const u = spot[k] || 0;
-		const S = spotRect(d.N, k === "sl" ? 1.05 : 1.5);
-		const w = L(L(P.w, N.w, tz), S.w, u);
-		const h = L(L(P.h, N.h, tz), S.h, u);
-		const x = L(cx, S.x + S.w / 2, u) - w / 2;
-		const y = L(cy, S.y + S.h / 2, u) - h / 2;
+		const w = L(P.w, N.w, tz);
+		const h = L(P.h, N.h, tz);
+		const x = L(P.x + P.w / 2, N.x + N.w / 2, tp) - w / 2;
+		const y = L(P.y + P.h / 2, N.y + N.h / 2, tp) - h / 2;
 		const rot = L(d.A.r + (1 - ex) * 2 * (d.A.r < 0 ? -1 : 1), 0, tp);
 		const dy = (1 - ex) * 120;
 		const sc = 0.96 + 0.04 * ex;
@@ -307,7 +257,7 @@ function render(st) {
 		const bOp = ss(cl((t - 0.5) / 0.45));
 		const sa = Math.min(w / d.A.w, h / d.A.h);
 		const sb = Math.min(w / d.N.w, h / d.N.h);
-		const z = (t > 0 && t < 1) || u > 0.001 ? 9 : d.z;
+		const z = t > 0 && t < 1 ? 9 : d.z;
 		const box = `left:${n(x, 1)}px;top:${n(y, 1)}px;width:${n(w, 1)}px;height:${n(h, 1)}px;z-index:${z};opacity:${n(op, 3)};visibility:${op <= 0.001 ? "hidden" : "visible"};transform:translateY(${n(dy, 1)}px) rotate(${n(rot, 2)}deg) scale(${n(sc, 3)})`;
 		const a = `width:${d.A.w}px;height:${d.A.h}px;opacity:${n(aOp, 3)};visibility:${aOp <= 0.001 ? "hidden" : "visible"};transform:translate(${n((w - d.A.w * sa) / 2, 1)}px,${n((h - d.A.h * sa) / 2, 1)}px) scale(${n(sa, 4)})`;
 		const b = `width:${d.N.w}px;height:${d.N.h}px;opacity:${n(bOp, 3)};visibility:${bOp <= 0.001 ? "hidden" : "visible"};transform:translate(${n((w - d.N.w * sb) / 2, 1)}px,${n((h - d.N.h * sb) / 2, 1)}px) scale(${n(sb, 4)})`;
@@ -424,8 +374,6 @@ function render(st) {
 		cap2: fade(c2),
 		// phones: tighter nav so logo, GitHub and the version pill fit on one line
 		navGap: mob ? "16px" : "24px",
-		// the hint row holds the WATCH button, so once it has faded it stops taking clicks
-		hint: `top:${n(vh - 50, 1)}px;opacity:${n(1 - ss(seg(0, 0.03)), 3)};${seg(0, 0.03) >= 1 ? "visibility:hidden" : ""}`,
 	};
 }
 
@@ -694,35 +642,27 @@ if (atCard) {
 	});
 }
 
-// ---- autoplay for readers who don't scroll ----
-// After 4s idle at the top, or at once from WATCH, the page plays itself through the
-// story; the pill pauses and resumes it. Any wheel, touch or key press hands control
-// straight back. Under reduced motion it never starts by itself, only from WATCH.
+// ---- the story player ----
+// The story plays by itself on a clock while the stage is on screen and the tab is
+// visible, and pauses otherwise. It plays once and holds its last frame (serenity centre
+// stage); play then replays it, and restart always starts it over. Pause is the reader's:
+// a story they paused stays paused when it scrolls back into view. Under reduced motion
+// it doesn't start by itself: the stage shows the last frame until the reader presses play.
 //
-// The tour runs on the story's clock rather than at a steady scroll speed. At a steady
-// speed the pinned stage stopped dead at every hold and lurched back to full speed after
-// it. Here each move between two holds eases in and out, and each hold rests for its share
-// of the time. Every frame takes its place from the time elapsed (so a late frame catches
-// up), scrolls the page there and paints the story in that same frame, at the exact
-// progress rather than the whole pixel the scroll lands on.
-const tourPill = document.getElementById("srn-tour");
-if (tourPill) {
-	const TOUR_MS = 25000; // the whole story, holds included
+// The clock runs through the story in legs: a move up to each hold, eased in and out,
+// then a rest across the hold. Every frame takes its place from the time elapsed, so a
+// late frame catches up rather than slowing the story.
+{
+	const STORY_MS = 25000; // the whole story, holds included
 	const RAMP_MS = 350; // how long a move takes to reach full speed, and to stop
-	const IDLE_MS = 4000;
-	const el = (k) => document.querySelector(`[data-tour="${k}"]`);
+	const el = (k) => document.querySelector(`[data-story="${k}"]`);
+	const player = el("player");
 	const toggle = el("toggle");
-	const label = el("label");
+	const restart = el("restart");
 	const fill = el("fill");
 	const quiet = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-	let playing = false;
-	let started = false;
-	let clock = 0; // ms into the tour
-	let last = 0;
-	let since = 0;
-	let idleTimer = 0;
 
-	// the tour's legs, in scroll progress: a move up to each hold, then a rest across it
+	// the legs, in progress: a move up to each hold, then a rest across it
 	const legs = [];
 	{
 		let x = 0;
@@ -741,10 +681,11 @@ if (tourPill) {
 		let t = 0;
 		for (const l of legs) {
 			l.t0 = t;
-			l.ms = (l.to - l.from) * TOUR_MS;
+			l.ms = (l.to - l.from) * STORY_MS;
 			t += l.ms;
 		}
 	}
+	const END = legs[legs.length - 1].t0 + legs[legs.length - 1].ms;
 
 	// the share of a move of d ms done after ms: speed rises on a half sine over r,
 	// stays level, and falls the same way over the last r
@@ -759,41 +700,39 @@ if (tourPill) {
 		if (ms > d - r) return 1 - ramp(d - ms);
 		return v * (ms - r / 2);
 	};
-	const share = (l, ms) =>
-		l.move ? ease(ms, l.ms) : Math.min(1, Math.max(0, ms / l.ms));
 	const progressAt = (ms) => {
 		let l = legs[0];
 		for (const k of legs) if (k.t0 <= ms) l = k;
-		return l.from + (l.to - l.from) * share(l, ms - l.t0);
+		const u = ms - l.t0;
+		const share = l.move ? ease(u, l.ms) : Math.min(1, Math.max(0, u / l.ms));
+		return l.from + (l.to - l.from) * share;
 	};
-	// the inverse, to resume from wherever the reader left the page
-	const timeAt = (p) => {
-		const l = legs.find((k) => p <= k.to) ?? legs[legs.length - 1];
-		const want = Math.min(1, Math.max(0, (p - l.from) / (l.to - l.from)));
-		let lo = 0;
-		let hi = l.ms;
-		for (let i = 0; i < 30; i++) {
-			const mid = (lo + hi) / 2;
-			if (share(l, mid) < want) lo = mid;
-			else hi = mid;
-		}
-		return l.t0 + hi;
-	};
-	const tourEnd = legs[legs.length - 1].t0 + legs[legs.length - 1].ms;
 
-	const show = () => {
-		const { top, span } = trackSpan();
-		const end = top + span;
-		const y = window.scrollY;
-		fill.style.transform = `scaleX(${Math.min(1, Math.max(0, y / end)).toFixed(4)})`;
-		tourPill.classList.toggle("is-paused", !playing);
-		tourPill.classList.toggle("is-off", !started || (!playing && y >= end - 2));
-		const text = playing ? "PAUSE" : "PLAY";
-		if (label.textContent !== text) {
-			label.textContent = text;
+	let clock = quiet?.matches ? END : 0; // ms into the story
+	let held = Boolean(quiet?.matches); // paused by the reader (or by reduced motion)
+	let still = held; // showing the last frame without having played: play, not replay
+	let inView = !window.IntersectionObserver;
+	let playing = false;
+	let last = 0;
+	let since = 0;
+
+	const draw = () => {
+		paint(progressAt(clock));
+		fill.style.transform = `scaleX(${(clock / END).toFixed(4)})`;
+		const mode = playing
+			? "pause"
+			: clock >= END && !still
+				? "replay"
+				: "play";
+		if (player.dataset.mode !== mode) {
+			player.dataset.mode = mode;
 			toggle.setAttribute(
 				"aria-label",
-				playing ? "Pause the story" : "Play the story",
+				mode === "pause"
+					? "Pause the story"
+					: mode === "replay"
+						? "Replay the story"
+						: "Play the story",
 			);
 		}
 	};
@@ -805,86 +744,74 @@ if (tourPill) {
 		last = t;
 		// after a start or a resume, come up to speed over RAMP_MS rather than at once
 		const w = Math.min(1, (t - since) / RAMP_MS);
-		clock = Math.min(tourEnd, clock + dt * w * w * (3 - 2 * w));
-		const p = progressAt(clock);
-		const { top, span } = trackSpan();
-		window.scrollTo({ top: top + p * span, behavior: "instant" });
-		paint(p, 0);
-		if (clock >= tourEnd) {
-			playing = false;
-			show();
-			return;
-		}
-		requestAnimationFrame(step);
+		clock = Math.min(END, clock + dt * w * w * (3 - 2 * w));
+		if (clock >= END) playing = false;
+		draw();
+		if (playing) requestAnimationFrame(step);
 	};
 
-	const start = () => {
-		clearTimeout(idleTimer);
-		if (playing) return;
-		const { top, span } = trackSpan();
-		// from the end (or past it) a fresh play starts the story over
-		if (window.scrollY >= top + span - 2) {
-			clock = 0;
-			window.scrollTo({ top: 0, behavior: "instant" });
+	// play whenever nothing holds the story back, pause as soon as something does
+	const sync = () => {
+		const go = inView && !document.hidden && !held && clock < END;
+		if (go === playing) return;
+		playing = go;
+		if (go) {
+			still = false;
+			last = 0;
+			since = 0;
+			requestAnimationFrame(step);
+		}
+		draw();
+	};
+
+	toggle.addEventListener("click", () => {
+		if (playing) {
+			held = true;
+			window.srnEvent?.("story-pause", "Paused the story");
 		} else {
-			clock = timeAt(Math.max(0, (window.scrollY - top) / span));
+			const replay = clock >= END && !still;
+			if (clock >= END) clock = 0;
+			held = false;
+			window.srnEvent?.(
+				replay ? "story-replay" : "story-play",
+				replay ? "Replayed the story" : "Played the story",
+			);
 		}
-		playing = true;
-		started = true;
-		last = 0;
-		since = 0;
-		show();
-		requestAnimationFrame(step);
-	};
-	const pause = () => {
-		if (!playing) return;
-		playing = false;
-		show();
-	};
+		sync();
+		draw();
+	});
+	restart.addEventListener("click", () => {
+		clock = 0;
+		held = false;
+		window.srnEvent?.("story-restart", "Restarted the story");
+		sync();
+		draw();
+	});
 
-	el("watch")?.addEventListener("click", start);
-	toggle.addEventListener("click", () => (playing ? pause() : start()));
-
-	// the reader takes over: stop playing, and never start by itself after that
-	const handBack = (e) => {
-		if (e.target?.closest?.("#srn-tour, [data-tour]")) return;
-		if (
-			e.type === "keydown" &&
-			["Tab", "Shift", "Control", "Alt", "Meta"].includes(e.key)
-		)
-			return;
-		clearTimeout(idleTimer);
-		pause();
-	};
-	for (const type of ["wheel", "touchstart", "keydown", "pointerdown"]) {
-		window.addEventListener(type, handBack, { passive: true });
+	if (window.IntersectionObserver) {
+		// on screen while at least a third of the stage shows
+		new IntersectionObserver(
+			([e]) => {
+				inView = e.intersectionRatio >= 0.34;
+				sync();
+			},
+			{ threshold: [0, 0.34, 0.67, 1] },
+		).observe(stage);
 	}
-	document.addEventListener(
-		"scroll",
-		() => {
-			// a scroll we didn't make (scrollbar drag, anchor link) also cancels the idle start
-			if (!playing && window.scrollY > 4) clearTimeout(idleTimer);
-			if (started) show();
-		},
-		{ passive: true },
-	);
+	document.addEventListener("visibilitychange", sync);
+	// switching reduced motion on mid-story stops it on the last frame
+	quiet?.addEventListener?.("change", () => {
+		if (!quiet.matches) return;
+		held = true;
+		still = true;
+		clock = END;
+		sync();
+		draw();
+	});
+	const relayout = () => paint(state.p);
+	window.addEventListener("resize", relayout);
+	if (window.ResizeObserver) new ResizeObserver(relayout).observe(stage);
 
-	const arm = () => {
-		idleTimer = setTimeout(() => {
-			if (window.scrollY > 4) return;
-			if (document.hidden) {
-				document.addEventListener("visibilitychange", arm, { once: true });
-				return;
-			}
-			start();
-		}, IDLE_MS);
-	};
-	if (!quiet?.matches && window.scrollY <= 4) arm();
+	draw();
+	sync();
 }
-
-document.addEventListener("scroll", onScroll, { passive: true, capture: true });
-window.addEventListener("resize", onScroll);
-if (window.ResizeObserver) new ResizeObserver(onScroll).observe(stage);
-// first frame: force a render even when the measured state equals the defaults
-state.p = -1;
-tick();
