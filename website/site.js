@@ -625,9 +625,11 @@ if (atCard) {
 // never stops: animations that run across a beat (the glow grows all story long) ease
 // through it instead of halting and lurching on.
 {
-	const STORY_MS = 24000; // the whole story, beats included
+	const STORY_MS = 26000; // the whole story, beats included
 	const RAMP_MS = 400; // after a start or a resume, how long to come up to speed
+	// the first beat is a lead-in: time to read the opening line before it fades
 	const BEATS = [
+		[0.015, 0.12],
 		[0.05, 0.05],
 		[0.08, 0.05],
 		[0.16, 0.042],
