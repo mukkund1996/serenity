@@ -163,9 +163,12 @@ async function crashAndWaitForRestart(name: string): Promise<void> {
 async function newSession(name: string): Promise<void> {
 	// N, not n: n declines a suggestion on the focused node (ADR 0012).
 	keys("N");
-	await waitFor(/New session/);
+	// The dialog's title bar: a fresh card on the map also reads "New session.",
+	// and keys typed before the dialog opens go to the map instead.
+	await waitFor(/═ New session ═/);
 	type(name);
-	await Bun.sleep(100);
+	// Enter only once the name is in the field, or it submits an empty one.
+	await waitFor(new RegExp(`Name +${name} *█`));
 	keys("Enter");
 	await until(
 		() =>
@@ -331,9 +334,9 @@ step(
 	"n creates a session in a worktree beside the repo",
 	async () => {
 		keys("n");
-		await waitFor(/New session/);
+		await waitFor(/═ New session ═/);
 		type("api-auth");
-		await Bun.sleep(100);
+		await waitFor(/Name +api-auth *█/);
 		keys("Enter");
 		await waitFor(/Press i to send a first/);
 		expect(screen()).toContain("api-auth");
@@ -1196,9 +1199,9 @@ step(
 	async () => {
 		// N, not n: polish may have a cleanup suggestion by now, which n declines.
 		keys("N");
-		await waitFor(/New session/);
+		await waitFor(/═ New session ═/);
 		type("docs");
-		await Bun.sleep(100);
+		await waitFor(/Name +docs *█/);
 		keys("Tab");
 		await Bun.sleep(100);
 		type("write the docs");
