@@ -230,7 +230,8 @@ function fresh(): void {
 		SERENITY_GH_BIN: join(bin, "gh"),
 		SERENITY_FAKE_GH_LOGIN: "sam-demo",
 		SERENITY_FAKE_GH_LOGIN_MS: "1500",
-		SERENITY_FAKE_SLACK_LOGIN: "sam",
+		SERENITY_FAKE_SLACK_LOGIN: "Sam (Acme)",
+		SERENITY_FAKE_MCP_LOGIN_MS: "2000",
 		PATH: `${bin}:${process.env.PATH}`,
 	}).map(([k, v]) => `export ${k}=${JSON.stringify(v)}`);
 	writeFileSync(

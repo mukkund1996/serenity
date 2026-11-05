@@ -13,6 +13,7 @@ import {
 import { Box, Text, useInput } from "ink";
 import { useEffect, useState } from "react";
 import { Key, TitledBox } from "./components";
+import { type RunStep, runStepInPopup, StepStatus, useSetup } from "./setup";
 import { CURSOR, editField, type Field, fieldAt } from "./text-input";
 
 const PANEL_W = 64;
@@ -33,6 +34,8 @@ export type SettingsRow =
 	| "model:summarizer"
 	| "model:suggester"
 	| "maxTopics"
+	| "github"
+	| "slackLogin"
 	| "slack";
 
 export const SETTINGS_ROWS: SettingsRow[] = [
@@ -42,6 +45,8 @@ export const SETTINGS_ROWS: SettingsRow[] = [
 	"model:summarizer",
 	"model:suggester",
 	"maxTopics",
+	"github",
+	"slackLogin",
 	"slack",
 ];
 
@@ -87,11 +92,15 @@ export function SettingsPanel({
 	repo,
 	call,
 	onClose,
+	runStep = runStepInPopup,
 }: {
 	repo: string;
 	call: Call;
 	onClose: () => void;
+	/** How a login runs; a popup over the map (ADR 0065). */
+	runStep?: RunStep;
 }) {
+	const setup = useSetup(call, repo, runStep);
 	const [view, setView] = useState<SettingsView | null>(null);
 	const [row, setRow] = useState<SettingsRow>("baseRepo");
 	const [editing, setEditing] = useState<Editing | null>(null);
@@ -164,6 +173,19 @@ export function SettingsPanel({
 			return;
 		}
 		if (row === "slack") save({ key: "slack", repo, value: !view.slack });
+		if ((row === "github" || row === "slackLogin") && enter) {
+			// The login runs in a popup; Slack's also turns it on for this repo.
+			setBusy(true);
+			void setup.run(row === "github" ? "github" : "slack").then(() =>
+				call("config.get", { repo }).then(
+					(next) => {
+						setView(next);
+						setBusy(false);
+					},
+					() => setBusy(false),
+				),
+			);
+		}
 	};
 
 	const finishEdit = (edit: Editing) => {
@@ -247,6 +269,29 @@ export function SettingsPanel({
 		</Box>
 	);
 
+	/** A login row: its status, Enter to log in (again). */
+	const login = (r: "github" | "slackLogin") => {
+		const id = r === "github" ? "github" : "slack";
+		const status = setup.steps?.find((s) => s.id === id);
+		const selected = r === row;
+		return (
+			<Box>
+				<Box width={LABEL_W} flexShrink={0}>
+					<Text color={selected ? "whiteBright" : "white"}>
+						{selected ? "› " : "  "}
+						{LABELS[r]}
+					</Text>
+				</Box>
+				<Box backgroundColor={selected ? "gray" : undefined} flexGrow={1}>
+					<StepStatus
+						status={status && { ...status, on: undefined }}
+						running={setup.running === id}
+					/>
+				</Box>
+			</Box>
+		);
+	};
+
 	const resolved = view?.baseBranch.resolved;
 	return (
 		<TitledBox
@@ -284,7 +329,10 @@ export function SettingsPanel({
 					{value("model:suggester", view.models.suggester)}
 					{heading("TOPICS")}
 					{value("maxTopics", String(view.maxTopics))}
+					{heading("GITHUB")}
+					{login("github")}
 					{heading("SLACK")}
+					{login("slackLogin")}
 					{value(
 						"slack",
 						view.slack ? "on" : "off",
@@ -293,8 +341,11 @@ export function SettingsPanel({
 				</>
 			) : null}
 			<Box marginTop={1}>
-				<Text color={status?.error ? "red" : "green"} wrap="wrap">
-					{status?.text ?? " "}
+				<Text
+					color={status?.error || setup.error ? "red" : "green"}
+					wrap="wrap"
+				>
+					{setup.error ?? status?.text ?? " "}
 				</Text>
 			</Box>
 			<Text color="white">
@@ -320,5 +371,7 @@ const LABELS: Record<SettingsRow, string> = {
 	"model:summarizer": "Summarizer",
 	"model:suggester": "Suggester",
 	maxTopics: "Max topics",
+	github: "Login",
+	slackLogin: "Login",
 	slack: "This repo",
 };

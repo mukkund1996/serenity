@@ -8,6 +8,7 @@
  *                                         adds the request to that PR's file
  *   gh pr list --search … --json …      → review-requests.json, or []
  *   gh api user --jq .login             → "me"
+ *   gh --version                        → a version line
  *   gh auth status                      → logged in as "me", unless the
  *                                         file logged-out exists
  *   gh auth login …                     → a device-flow look-alike: waits
@@ -32,6 +33,11 @@ const [group, command, target, ...rest] = process.argv.slice(2);
 
 const loggedOut = () => existsSync(join(dir, "logged-out"));
 const login = () => process.env.SERENITY_FAKE_GH_LOGIN ?? "me";
+
+if (group === "--version") {
+	console.log("gh version 2.0.0 (fake)");
+	process.exit(0);
+}
 
 if (group === "auth" && command === "status") {
 	if (loggedOut()) {

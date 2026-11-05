@@ -45,12 +45,16 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { fakeMcp } from "./fake-mcp";
+
 const args = process.argv.slice(2);
 const flag = (name: string) => {
 	const at = args.indexOf(name);
 	return at === -1 ? undefined : args[at + 1];
 };
 const emit = (msg: unknown) => process.stdout.write(`${JSON.stringify(msg)}\n`);
+
+if (args[0] === "mcp") await fakeMcp(args.slice(1));
 
 if (args.includes("--version")) {
 	console.log("0.0.0 (fake claude)");
@@ -89,7 +93,12 @@ function answerSchema(prompt: string, schema: string): unknown {
 		try {
 			if (fixture) items = JSON.parse(readFileSync(fixture, "utf8"));
 		} catch {}
-		return { access: "ok", problem: null, items };
+		return {
+			access: "ok",
+			problem: null,
+			me: process.env.SERENITY_FAKE_SLACK_LOGIN ?? null,
+			items,
+		};
 	}
 	if (schema.includes('"finished"')) {
 		const reply = line("The agent's last reply:");

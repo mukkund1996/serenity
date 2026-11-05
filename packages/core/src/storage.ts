@@ -89,6 +89,8 @@ export interface RecoveryState {
 	offeredReviews: string[];
 	/** The first-boot tutorial ran, or was skipped; it never runs again (ADR 0062). */
 	onboarding: Onboarded;
+	/** The first-boot Setup panel was closed; it doesn't open again (ADR 0065). */
+	setup: { at: number };
 }
 
 /** When and where the first-boot tutorial started (ADR 0062). */

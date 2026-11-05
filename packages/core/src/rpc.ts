@@ -8,6 +8,7 @@ import type {
 	Session,
 } from "./domain";
 import type { HistoryFilter, HistoryResult } from "./history";
+import type { SetupStatus } from "./setup";
 
 /**
  * JSON-RPC 2.0 over a unix socket, one JSON message per line (ADR 0005).
@@ -210,6 +211,12 @@ export interface Methods {
 		params: { repo: string; change: ConfigChange };
 		result: { view: SettingsView; applies: string };
 	};
+	/** Each setup step's status (ADR 0065), checked now by asking gh and claude. */
+	"setup.status": { params: { repo: string }; result: SetupStatus[] };
+	/** Whether the first-boot Setup panel should open (ADR 0065); cheap, asked when a map opens. */
+	"setup.pending": { params: Record<string, never>; result: boolean };
+	/** The first-boot Setup panel was closed; it won't open by itself again. */
+	"setup.done": { params: Record<string, never>; result: null };
 	/** Where a new worktree would branch off; `override` as the dialog's Base field. */
 	"base.resolve": {
 		params: { repo: string; override?: string };

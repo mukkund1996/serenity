@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, writeFileSync } from "node:fs";
 import {
 	BUILD_ID,
 	connectDaemon,
@@ -10,8 +9,6 @@ import {
 	ensureDaemon,
 	ensurePrivateDir,
 	isHookKind,
-	loadConfig,
-	SLACK_SERVER,
 	selfCommand,
 	serenityHome,
 	tmuxSessionName,
@@ -20,15 +17,8 @@ import {
 } from "@serenity/core";
 import { printChecks, runChecks } from "./doctor";
 import { runImport } from "./import";
-import {
-	askYes,
-	gitRoot,
-	runSlackCommand,
-	SLACK_USAGE,
-	setSlack,
-	slackIsOn,
-	turnOnHint,
-} from "./slack";
+import { accountLines, setupGithub, setupSlack } from "./setup";
+import { gitRoot, runSlackCommand, SLACK_USAGE } from "./slack";
 import {
 	runUserStatusLine,
 	type StatusLineInput,
@@ -41,8 +31,9 @@ usage:
   serenity            open the map for the git repo you are in
   serenity import     bring in the Claude Code sessions you already have
                       (serenity import --help for options)
-  serenity doctor     check tmux, claude, git and gh
-  serenity slack login  sign in to Slack for the master (once)
+  serenity doctor     check tmux, claude, git, and the GitHub and Slack logins
+  serenity setup github  log in to GitHub with gh (PRs, reviewers)
+  serenity setup slack   log in to Slack and show it on this repo's map
   serenity slack on|off|status [repo]
                       show Slack on a repo's map (default: the repo you are in)
   serenity stop       stop the background daemon
@@ -269,50 +260,6 @@ async function stopDaemon(
 	return true;
 }
 
-/**
- * `serenity slack login` (ADR 0023): the master reads Slack through its MCP
- * server, isolated from the user's own MCP config, so it signs in apart. The
- * server is registered only for serenity's workers folder, then `claude mcp
- * login` runs the OAuth flow; later `claude -p` calls reuse the token.
- */
-async function slackLogin(): Promise<void> {
-	const claude = process.env.SERENITY_CLAUDE_BIN ?? "claude";
-	const config = loadConfig();
-	const cwd = join(home, "workers");
-	mkdirSync(cwd, { recursive: true });
-	const run = (args: string[], stdio: "inherit" | "pipe" = "inherit") =>
-		spawnSync(claude, args, { cwd, stdio, encoding: "utf8" });
-	// Replaced, so a changed `slack.mcp` in the config takes effect.
-	run(["mcp", "remove", "-s", "local", SLACK_SERVER], "pipe");
-	const added = run([
-		"mcp",
-		"add-json",
-		"-s",
-		"local",
-		SLACK_SERVER,
-		JSON.stringify(config.slack.mcp),
-	]);
-	if (added.status !== 0) fail("could not register Slack's MCP server");
-	if (config.slack.mcp.type === "stdio")
-		console.log("A stdio server signs in through its own settings.");
-	else if (run(["mcp", "login", SLACK_SERVER]).status !== 0)
-		fail("Slack login did not finish");
-	// Logged in from inside a repo: offer to turn Slack on for it right away.
-	const repo = gitRoot();
-	if (repo && slackIsOn(repo)) {
-		console.log(`Slack is on for ${basename(repo)}.`);
-		return;
-	}
-	if (repo && (await askYes(`Show Slack on ${basename(repo)}'s map now?`))) {
-		const applies = await setSlack(home, repo, true).catch((e: Error) =>
-			fail(e.message),
-		);
-		console.log(`Slack is on for ${basename(repo)}: ${applies}.`);
-		return;
-	}
-	console.log(turnOnHint(repo, true));
-}
-
 const [command, arg] = process.argv.slice(2);
 switch (command) {
 	case undefined:
@@ -356,11 +303,34 @@ switch (command) {
 	case "doctor": {
 		const ok = printChecks(runChecks());
 		if (ok) markDoctorOk();
+		// The logins are optional (ADR 0065): shown, never failing the doctor.
+		for (const { status, line } of await accountLines(home, gitRoot()))
+			printChecks([
+				{
+					name: status.id,
+					ok: status.connected,
+					required: false,
+					detail: line,
+				},
+			]);
 		process.exit(ok ? 0 : 1);
 		break;
 	}
+	case "setup": {
+		const opts = {
+			home,
+			repo: gitRoot(),
+			popup: process.argv.includes("--popup"),
+		};
+		if (arg === "github") process.exit(await setupGithub(opts));
+		if (arg === "slack") process.exit(await setupSlack(opts));
+		fail("usage: serenity setup github|slack");
+		break;
+	}
 	case "slack":
-		if (arg === "login") await slackLogin();
+		// `slack login` is `setup slack`, its older name.
+		if (arg === "login")
+			process.exit(await setupSlack({ home, repo: gitRoot(), popup: false }));
 		else if (arg === "on" || arg === "off" || arg === "status")
 			process.exit(await runSlackCommand(home, arg, process.argv[4]));
 		else {

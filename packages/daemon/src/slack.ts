@@ -61,6 +61,7 @@ export class SlackWatcher {
 	private retryTimer: ReturnType<typeof setTimeout> | null = null;
 	/** slackMessageKey of every dismissed message. */
 	private readonly dismissed: Set<string>;
+	private me: string | null = null;
 
 	constructor(private readonly host: SlackHost) {
 		this.dismissed = new Set(host.dismissals.list().map(slackMessageKey));
@@ -68,6 +69,19 @@ export class SlackWatcher {
 
 	state(): SlackInbox {
 		return this.current;
+	}
+
+	/** The user's Slack name, from the last read that knew it (ADR 0065). */
+	user(): string | null {
+		return this.me;
+	}
+
+	/**
+	 * Reads again now, whatever the last read was: Slack was just logged in to
+	 * or turned on, and its "needs a login" should go at once.
+	 */
+	refreshNow(): void {
+		void this.refresh();
 	}
 
 	/** A map of a repo with Slack on opened. */
@@ -99,10 +113,11 @@ export class SlackWatcher {
 			});
 			const inbox = parseSlackInbox(raw);
 			if (!inbox) throw new Error("unusable answer");
+			if (inbox.me) this.me = inbox.me;
 			// The worker is told to skip dismissed messages; this makes sure.
 			next = {
-				...inbox,
 				items: this.undismissed(inbox.items),
+				error: inbox.error,
 				checkedAt: this.host.now(),
 			};
 		} catch (error) {
