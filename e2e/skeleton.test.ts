@@ -1271,6 +1271,66 @@ step(
 );
 
 step(
+	"r checks the name in the dialog: a command word or a taken name is refused; Esc cancels (ADR 0063)",
+	async () => {
+		// The card the rename above left focused; its branch is still oldname.
+		keys("r");
+		const dialog = await waitFor(/Rename newname/);
+		expect(dialog).toContain("renames its tmux window too");
+		expect(dialog).toContain(
+			"branch oldname and its worktree keep their names",
+		);
+		keys("C-u");
+		type("Move");
+		await waitFor(/Name +Move *█/);
+		keys("Enter");
+		await waitFor(/Move is reserved for @move in the master/);
+		keys("C-u");
+		type("API-AUTH");
+		await waitFor(/Name +API-AUTH *█/);
+		keys("Enter");
+		await waitFor(/a session named api-auth already exists/);
+		keys("Escape");
+		await until(() => !screen().includes("Rename newname"), "Esc to close");
+		expect(screen()).toContain("newname");
+		expect(
+			tmux("list-windows", "-t", "=serenity-demo", "-F", "#{window_name}")
+				.trim()
+				.split("\n"),
+		).toContain("newname");
+	},
+	STEP_TIMEOUT,
+);
+
+step(
+	"@move from the master input moves a session to a new topic; the master says so (ADR 0063)",
+	async () => {
+		await openMasterInput();
+		type("@mo");
+		await waitFor(/▸ @move move sessions to a topic/);
+		keys("Tab");
+		await waitFor(/› @move █/);
+		type("@newn");
+		await waitFor(/▸ @newname/);
+		keys("Tab");
+		await waitFor(/› @move @newname █/);
+		type("to release");
+		await Bun.sleep(200);
+		keys("Enter");
+		// Moved at once, or held for the moment the map still said it was typing.
+		await waitFor(
+			/Moved newname to release\.|newname moves to release once they stop/,
+		);
+		await closeMasterInput();
+		await until(
+			() => /release/.test(mapSide()),
+			"the release topic to show on the map",
+		);
+	},
+	STEP_TIMEOUT,
+);
+
+step(
 	"arrows and WASD move between nodes; Enter goes into the master, Esc leaves it",
 	async () => {
 		keys("c");

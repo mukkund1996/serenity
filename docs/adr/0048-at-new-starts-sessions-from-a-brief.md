@@ -1,6 +1,6 @@
 # 0048 · `@new <brief>` starts sessions at once; command words are never session names
 
-**Status:** Accepted · 2026-10-30 · Amends 0036
+**Status:** Accepted · 2026-10-30 · Amends 0036 · Amended by [0063](0063-rename-checks-and-at-move.md): `@move` joins the command words; a name clash is checked in any case
 
 ## Context
 `create_session` lets the master start work from a brief, but the skill tells it to propose a split ("one session or two?") and wait whenever the split is unclear. Usually the user only wants the work started. The extra round trip slows them down and tells the master nothing new. `@session` (0036) already gives the user a typed signal that means "act now". Other `@`-words could carry other requests, as long as no session can share their names.

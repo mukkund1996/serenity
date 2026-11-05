@@ -12,13 +12,13 @@ import {
 	type Config,
 	type ConfigChange,
 	type CreateSessionParams,
+	checkSessionName,
 	configPath,
 	DependencyHealth,
 	handoversDir,
 	hookSettingsPath,
 	isHookKind,
 	isQueued,
-	isReservedName,
 	loadConfig,
 	MAX_TOPICS_RANGE,
 	type Method,
@@ -137,7 +137,6 @@ export interface DaemonOptions {
 	slackPollMs?: number;
 }
 
-const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,39}$/i;
 /** Width of the agent pane when attached: the right ⅔ (ADR 0004). */
 const ATTACH_PERCENT = 67;
 /**
@@ -1604,34 +1603,16 @@ export class Daemon {
 		this.broadcast(fresh.repo);
 	}
 
-	/** A valid session name no live session in the repo uses; throws otherwise. */
+	/** A valid session name no live session in the repo uses; throws otherwise (ADR 0063). */
 	private freeName(repo: string, raw: string, self?: string): string {
-		const name = raw.trim();
-		if (!NAME_PATTERN.test(name)) {
-			throw new RpcError(
-				RpcErrorCode.InvalidParams,
-				"name: letters, digits, . _ - (max 40)",
-			);
-		}
-		if (isReservedName(name))
-			throw new RpcError(
-				RpcErrorCode.InvalidParams,
-				`${name} is reserved for @${name.toLowerCase()} in the master; pick another name`,
-			);
-		const clash = this.opts.storage.sessions.listByRepo(repo).find(
-			(s) =>
-				s.id !== self &&
-				s.name === name &&
-				s.status !== "archived" &&
-				// An ended pinned session keeps its name; attaching resumes it.
-				(s.status !== "dead" || s.pinned),
+		const checked = checkSessionName(
+			raw,
+			this.opts.storage.sessions.listByRepo(repo),
+			self,
 		);
-		if (clash)
-			throw new RpcError(
-				RpcErrorCode.InvalidParams,
-				`a session named ${name} already exists`,
-			);
-		return name;
+		if ("error" in checked)
+			throw new RpcError(RpcErrorCode.InvalidParams, checked.error);
+		return checked.name;
 	}
 
 	/**

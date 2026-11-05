@@ -55,7 +55,7 @@ export const MCP_TOOLS = [
 	{
 		name: "set_topic",
 		description:
-			"Move a session to another topic. Use only when the user asks.",
+			"Move a session to another topic, creating it if there are fewer than maxTopics. Use only when the user asks, or for their @move (once per session). A session that is working, or any while the user types, moves once that stops; the result says which happened.",
 		inputSchema: {
 			type: "object",
 			properties: {

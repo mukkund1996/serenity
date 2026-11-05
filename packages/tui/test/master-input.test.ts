@@ -128,13 +128,15 @@ describe("mention colours (ADR 0052)", () => {
 		makeSession({ id: "o", name: "old", status: "archived" }),
 	];
 
-	test("a session blue, @new green, @copy and @handover yellow", () => {
+	test("a session blue, @new green, @copy and @handover yellow, @move cyan", () => {
 		expect(MENTION_COLOR).toEqual({
 			session: "blueBright",
 			new: "green",
 			copy: "yellow",
 			handover: "yellow",
+			move: "cyan",
 		});
+		expect(listColor("move")).toBe("cyan");
 		expect(listColor("api-auth")).toBe("blueBright");
 		expect(listColor("new")).toBe("green");
 		expect(listColor("copy")).toBe("yellow");

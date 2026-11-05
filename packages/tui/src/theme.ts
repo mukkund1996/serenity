@@ -18,14 +18,16 @@ export const QUEUE_COLOR: Color = "#ff875f";
 
 /**
  * `@` mentions in the master's input, @ list and chat (ADR 0052): a session
- * blue, `@new` green, `@copy` and `@handover` (the handover-doc pair) yellow.
- * Bright blue, since plain blue is hard to read on dark terminals.
+ * blue, `@new` green, `@copy` and `@handover` (the handover-doc pair) yellow,
+ * `@move` cyan (ADR 0063; magenta is the master's own). Bright blue, since
+ * plain blue is hard to read on dark terminals.
  */
 export const MENTION_COLOR: Record<MentionKind, Color> = {
 	session: "blueBright",
 	new: "green",
 	copy: "yellow",
 	handover: "yellow",
+	move: "cyan",
 };
 
 /** The only three status glyphs (design handover, "Status language"). */

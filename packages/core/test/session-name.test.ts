@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { findSessionByName } from "../src/session-name";
+import { checkSessionName, findSessionByName } from "../src/session-name";
 import { makeSession } from "../test-support";
 
 describe("findSessionByName", () => {
@@ -39,5 +39,58 @@ describe("findSessionByName", () => {
 	test("falls back to the archived session when none is live", () => {
 		const archived = makeSession({ id: "a", status: "archived" });
 		expect(findSessionByName([archived], "api-auth")?.id).toBe("a");
+	});
+});
+
+describe("checkSessionName (ADR 0063)", () => {
+	const live = makeSession({ id: "live", name: "api-auth", status: "idle" });
+	const check = (raw: string, sessions = [live], self?: string) =>
+		checkSessionName(raw, sessions, self);
+
+	test("letters, digits, . _ - and spaces made into -", () => {
+		expect(check("  fix login  ")).toEqual({ name: "fix-login" });
+		expect(check("v1.2_docs")).toEqual({ name: "v1.2_docs" });
+		expect(check("Web-Login")).toEqual({ name: "Web-Login" });
+	});
+
+	test("refuses an empty name, other characters, a leading . _ - and more than 40", () => {
+		expect(check("   ")).toEqual({ error: "Give the session a name." });
+		const rule = { error: "name: letters, digits, . _ - (max 40)" };
+		expect(check("fix/login")).toEqual(rule);
+		expect(check("über")).toEqual(rule);
+		expect(check("-dash")).toEqual(rule);
+		expect(check("a".repeat(41))).toEqual(rule);
+		expect(check("a".repeat(40))).toEqual({ name: "a".repeat(40) });
+	});
+
+	test("refuses every command word, in any case (ADR 0048)", () => {
+		for (const word of ["new", "copy", "handover", "move", "Move", "NEW"])
+			expect(check(word)).toEqual({
+				error: `${word} is reserved for @${word.toLowerCase()} in the master; pick another name`,
+			});
+		expect(check("move-docs")).toEqual({ name: "move-docs" });
+	});
+
+	test("refuses a name a live session has, in any case", () => {
+		const error = { error: "a session named api-auth already exists" };
+		expect(check("api-auth")).toEqual(error);
+		expect(check("API-Auth")).toEqual(error);
+	});
+
+	test("a session may keep its name or change its case", () => {
+		expect(check("api-auth", [live], "live")).toEqual({ name: "api-auth" });
+		expect(check("Api-Auth", [live], "live")).toEqual({ name: "Api-Auth" });
+	});
+
+	test("an archived session, or an ended one not pinned, frees its name", () => {
+		const archived = makeSession({ name: "old", status: "archived" });
+		const ended = makeSession({ name: "gone", status: "dead" });
+		const pinned = makeSession({ name: "kept", status: "dead", pinned: true });
+		const all = [archived, ended, pinned];
+		expect(check("old", all)).toEqual({ name: "old" });
+		expect(check("gone", all)).toEqual({ name: "gone" });
+		expect(check("kept", all)).toEqual({
+			error: "a session named kept already exists",
+		});
 	});
 });

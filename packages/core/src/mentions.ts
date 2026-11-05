@@ -23,6 +23,7 @@ export const MASTER_COMMANDS = {
 	new: "start sessions from a brief",
 	copy: "hand a session's work to a new session",
 	handover: "get a session's handover doc",
+	move: "move sessions to a topic",
 } as const;
 
 export type MasterCommand = keyof typeof MASTER_COMMANDS;
@@ -89,6 +90,72 @@ export function mentionedSessions(
 		if (hit) found.set(hit.session.id, hit.session);
 	}
 	return [...found.values()];
+}
+
+/** What `@move @a @b <topic>` asks for (ADR 0063). */
+export interface MoveRequest {
+	/** The live sessions to move, once each, in the order mentioned. */
+	sessions: Session[];
+	/** `@word`s that name no live session (and are no command), as typed. */
+	unknown: string[];
+	/** The topic, as typed and trimmed; null when the message names none. */
+	topic: string | null;
+}
+
+/** Words that may lead the topic: "to release", "into the release topic". */
+const MOVE_LEAD = /^(?:(?:to|into|under|in|the|topic)\s+)+/i;
+/** Words that may trail it: "release topic". */
+const MOVE_TRAIL = /\s+topic$/i;
+
+/**
+ * Reads `@move` from a message: every live session it @-mentions, and the
+ * topic: the first text after `@move` that is more than what joins the
+ * mentions ("@a, @b and @c"), up to its first clause break (, ; ! ? a
+ * sentence's full stop, or a new line). "to", "into", "under", "the" and a
+ * trailing "topic" are not part of it, and nor are quotes around it. Null
+ * when the message has no `@move`.
+ */
+export function parseMove(
+	text: string,
+	sessions: readonly Session[],
+): MoveRequest | null {
+	if (!masterCommands(text).includes("move")) return null;
+	const found = new Map<string, Session>();
+	const unknown: string[] = [];
+	// The text between and after the @words from @move on, less what only
+	// joins them ("@a, @b and @c").
+	const pieces: string[] = [];
+	let plainFrom = 0;
+	let afterMove = false;
+	for (const match of text.matchAll(MENTION)) {
+		const token = match[1] as string;
+		const word = token.replace(/[._-]+$/, "");
+		let name = word;
+		if (!Object.hasOwn(MASTER_COMMANDS, word)) {
+			const hit = resolveSession(token, sessions);
+			if (hit) {
+				found.set(hit.session.id, hit.session);
+				name = hit.name;
+			} else if (!unknown.includes(word)) unknown.push(word);
+		}
+		if (afterMove) pieces.push(text.slice(plainFrom, match.index));
+		afterMove ||= word === "move";
+		plainFrom = match.index + 1 + name.length;
+	}
+	pieces.push(text.slice(plainFrom));
+	const clause = (
+		pieces.find((piece) => !/^[\s,:&+]*(?:and)?[\s,&+]*$/i.test(piece)) ?? ""
+	)
+		.replace(/^[ \t,:;.-]+/, "")
+		.split(/[,;!?\n]|\.(?:\s|$)/)[0] as string;
+	const topic = clause
+		.trim()
+		.replace(/^["'`]+|["'`]+$/g, "")
+		.replace(MOVE_LEAD, "")
+		.replace(MOVE_TRAIL, "")
+		.replace(/^["'`]+|["'`]+$/g, "")
+		.trim();
+	return { sessions: [...found.values()], unknown, topic: topic || null };
 }
 
 /** What an `@word` turns out to be: a live session's name, or a command word. */

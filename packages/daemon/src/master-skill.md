@@ -1,6 +1,6 @@
 ---
 name: serenity
-description: How and when the serenity master uses its mcp__serenity__ tools (send_reply, suggest, set_topic, open_session, archive_session, session_status, pr_overview, watch_session, create_session, request_handover, share_slack_file), the @new, @copy and @handover commands, and, when Slack is on, sends Slack messages and files after the user confirms them. Use for any request that acts on a session or on Slack, or asks about the repo's PRs.
+description: How and when the serenity master uses its mcp__serenity__ tools (send_reply, suggest, set_topic, open_session, archive_session, session_status, pr_overview, watch_session, create_session, request_handover, share_slack_file), the @new, @copy, @handover and @move commands, and, when Slack is on, sends Slack messages and files after the user confirms them. Use for any request that acts on a session or on Slack, or asks about the repo's PRs.
 ---
 
 # Acting as serenity's master
@@ -25,6 +25,7 @@ Session names in tool calls are the exact names from the snapshot.
 | a finished session cleaned up | `suggest` kind `cleanup`, only once its PR merged (or it has none) and it is not working or pinned. |
 | a reviewer asked on a session's open PR | `suggest` kind `review`, with the reviewer's GitHub login as `text`. |
 | a session moved to another topic | `set_topic`. Only on the user's request. |
+| `@move @session <topic>`, one or more sessions | `set_topic` now, once per session. See "@move". |
 | to see, open or go to a session | `open_session`. |
 | new work started from a brief ("spin up a session to…", "split this into sessions") | `create_session`, once per session. See below. |
 | `@new <brief>` | `create_session` now, with no "how should I split this?". See "@new". |
@@ -44,7 +45,7 @@ A suggestion runs only when the user presses `y`. A `reply` waits in the master'
 
 ### @-mentions: relay to the session, don't look yourself
 
-The user can tag a session in their message with `@name` (the TUI completes names as they type). `@new`, `@copy` and `@handover` are commands, not sessions (below). A mention means the message is for that session: you are only the relay. The session's agent does all the looking, reasoning and work; you send it the message at once, without the draft-and-confirm step.
+The user can tag a session in their message with `@name` (the TUI completes names as they type). `@new`, `@copy`, `@handover` and `@move` are commands, not sessions (below). A mention means the message is for that session: you are only the relay. The session's agent does all the looking, reasoning and work; you send it the message at once, without the draft-and-confirm step.
 
 - **Never look into it yourself.** For a mentioned session, no `git`, no `gh`, no Read/Grep/Glob, no checkouts, no Slack reads, and no `session_status` before sending. Everything you need to relay is in the user's message and the snapshot.
 - **The text you send** is the user's message lightly rewritten so it stands on its own, in the user's voice: drop the `@name`, resolve "it" or "that" from this chat or the snapshot (a Slack item's channel, author and what it asks, as the snapshot shows them), and add nothing you looked up. No quote block, no "Send it?".
@@ -79,7 +80,7 @@ Anything else, a changed word included, is not sent: serenity puts it in the mas
 
 ### Acting at once
 
-`set_topic`, `open_session`, `archive_session` and `create_session` run immediately, and so do `send_reply` once the user asked for its text or @-mentioned the session and `request_handover` for their `@copy` or `@handover`, because the user's own request is the approval. Never call them to tidy up on your own. Pinned sessions are the user's: only they pin and unpin (`p`) or clean them up (`x`).
+`open_session`, `archive_session` and `create_session` run immediately, `set_topic` as soon as the session is not working and the user is not typing (it says when a move waits), and so do `send_reply` once the user asked for its text or @-mentioned the session and `request_handover` for their `@copy` or `@handover`, because the user's own request is the approval. Never call them to tidy up on your own. Pinned sessions are the user's: only they pin and unpin (`p`) or clean them up (`x`).
 
 ### Starting sessions from a brief
 
@@ -113,6 +114,20 @@ A handover doc says what someone new needs to carry on a session's work: goal, s
 - `request_handover` works only when the user's latest message says `@copy` or `@handover` and @-mentions that session. If they ask in words ("get me a handover of api-auth"), tell them to type `@handover @api-auth`.
 - It refuses a session that has ended, is archived or waits on a permission prompt. If the session finishes without writing the doc, serenity says so: tell the user, and don't start the follow-up. If it waits on the user (say, permission to write the file), tell them; it stays watched.
 - To send the doc to someone on Slack, see "Sharing a handover doc" below.
+
+### @move: move sessions to a topic
+
+`@move` is a command, not a session: no session is ever named `move`. `@move @api-auth release` or `@move @api-auth @web-login to release` is the user's go-ahead to move every session it @-mentions to that topic. serenity adds a note under their message naming the sessions and the topic, and saying whether the topic exists, is a near-duplicate of one that does, is new, or would be one too many.
+
+- Call `set_topic` once per session the note names, with the topic it names, in this turn and with no question first. Don't relay the message to the mentioned sessions, and don't look into them.
+- A topic that doesn't exist yet is created, as long as there are fewer than `maxTopics` topics. When the note says there are already too many, call nothing: tell the user nothing moved and name the topics they can move to.
+- Moves follow the topic rules: a session that is working moves once its turn ends, and while the user types in the map every move waits until they stop. `set_topic`'s result says which; pass that on.
+- With no topic in the message, ask which one, naming the current topics. With no session, tell them to `@`-mention the sessions to move.
+- Then confirm in one sentence what moved, what moves once it stops working, and what `set_topic` refused and why (a pinned session, an unknown name).
+
+### Renaming a session
+
+Only the user renames, with `r` on its card or NEEDS YOU row; you have no tool for it. A renamed session shows under its new name in the next snapshot; use that name, not one from earlier in the chat. Its branch and worktree keep their names.
 
 ### Watching a session
 

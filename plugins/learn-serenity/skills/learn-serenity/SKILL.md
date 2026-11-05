@@ -74,7 +74,7 @@ Try it:
 1. Press `Ctrl+w` to focus the master from anywhere, then `i` to open its input.
 2. Ask: `what is practice doing?`
 3. Type `@` to tag a session: `@practice what file did you read first?` The master passes it on and condenses the answer.
-4. `@new <brief>` starts a new session from a brief. Mention it, but they don't need to try it now.
+4. `@new <brief>` starts a new session from a brief, and `@move @session <topic>` moves sessions to another topic. Mention them, but they don't need to try them now.
 
 Ask them what the master said. Docs: https://getserenity.dev/docs/#master and https://getserenity.dev/docs/#mentions
 
@@ -87,7 +87,7 @@ There's nothing to try here unless they want to. Ask whether they have questions
 ### 8. Keep, end and clean up
 
 - `p` pins a session they reuse. A pinned session is never finished or cleaned up, and it resumes when they attach after it ended.
-- `f` watches a session, `r` renames it.
+- `f` watches a session, `r` renames it (the branch and worktree keep their names).
 - `K` kills the agent and archives the node. The worktree and branch stay.
 - `x` on a card cleans up: it checks for uncommitted changes, unpushed commits and PR state, then removes the worktree and its merged branch. `H` lists archived sessions.
 

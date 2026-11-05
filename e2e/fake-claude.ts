@@ -32,6 +32,8 @@
  * `-p --input-format stream-json` (the master chat): replies "Heard: <text>".
  * "suggest a reply to <name>" calls serenity's MCP `suggest` tool and "ask
  * permission" its permission tool, through the real `serenity mcp` proxy.
+ * serenity's @move note makes it call `set_topic` for each session it names
+ * and reply with the results.
  */
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import {
@@ -119,7 +121,18 @@ async function chat(): Promise<void> {
 		const text = message.message.content.split("User: ").pop()?.trim() ?? "";
 		let reply = `Heard: ${text}`;
 		const target = text.match(/suggest a reply to (\S+)/)?.[1];
-		if (target && mcp) {
+		// serenity's @move note names the sessions and the topic (ADR 0063).
+		const move = text.match(
+			/the user typed @move\. Move (.+?) to the topic "([^"]+)" now/,
+		);
+		if (move && mcp) {
+			const results: string[] = [];
+			for (const session of (move[1] as string).split(", "))
+				results.push(await mcp.call("set_topic", { session, topic: move[2] }));
+			reply = results.join(" ");
+		} else if (text.includes("the user typed @move.")) {
+			reply = "Nothing moved.";
+		} else if (target && mcp) {
 			const result = await mcp.call("suggest", {
 				session: target,
 				kind: "reply",

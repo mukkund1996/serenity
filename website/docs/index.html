@@ -209,7 +209,7 @@
 <h3>Keep, rename, end</h3>
 <ul>
 <li><kbd>p</kbd> pins a session you reuse. It is never marked finished or cleaned up, and resumes with <code>claude --resume</code> when you attach after it ended.</li>
-<li><kbd>f</kbd> watches a session; <kbd>r</kbd> renames it.</li>
+<li><kbd>f</kbd> watches a session; <kbd>r</kbd> renames it, on its card or its NEEDS YOU row. Type the new name and press <kbd>Enter</kbd>, or <kbd>Esc</kbd> to cancel. A name is letters, digits, <code>.</code> <code>_</code> <code>-</code> (spaces become <code>-</code>), at most 40 long, not already taken in any case, and never a command word such as <code>new</code> or <code>move</code>. The tmux window of a session serenity started is renamed too; its branch and worktree keep their names, so its PR stays linked.</li>
 <li><kbd>K</kbd> kills the agent. <kbd>x</kbd> on a session's card cleans it up, after checking for uncommitted changes, unpushed commits and PR state before it touches the worktree. On a NEEDS YOU item <kbd>x</kbd> only dismisses it.</li>
 <li><kbd>H</kbd> shows archived sessions.</li>
 </ul>
@@ -279,7 +279,7 @@
 <p>In the master's input, <kbd>@</kbd> opens a list that completes as you type: the commands first, each with a hint, then the live sessions of the repo. <kbd>↑</kbd> <kbd>↓</kbd> move, <kbd>Tab</kbd> or <kbd>Enter</kbd> complete, <kbd>Esc</kbd> closes the list. Names are exact and case-sensitive, which is why the list completes whole names.</p>
 <figure class="d-gif">
 <a class="d-gif-link" href="media/mentions.gif" aria-label="Open the mentions GIF full size"><img src="media/mentions.gif" width="1000" height="530" loading="lazy" decoding="async" alt="Typing @ in the master's input lists @new, @copy, @handover and the sessions. Typing ca and Tab completes @cart-badge in blue; the master asks cart-badge and relays its answer. @new, in green, starts a wishlist session that appears under checkout, and @copy, in yellow, is typed with @checkout-retry."></a>
-<figcaption>Session mentions turn blue, <code>@new</code> green, <code>@copy</code> and <code>@handover</code> yellow.</figcaption>
+<figcaption>Session mentions turn blue, <code>@new</code> green, <code>@copy</code> and <code>@handover</code> yellow. <code>@move</code>, added since this recording, is cyan.</figcaption>
 </figure>
 
 <h3><code>@session</code>: talk to a session</h3>
@@ -298,7 +298,12 @@
 <h3><code>@handover @session</code>: write it down for someone</h3>
 <p>Gets a handover doc from the session, or reuses an up-to-date one, and gives you its path. The master can share it on Slack as a file, once you have confirmed the file, the channel and the comment.</p>
 <pre class="d-term"><span class="u">@handover @api-auth</span></pre>
-<p>Command words such as <code>new</code> are reserved: no session can take them as its name.</p>
+
+<h3><code>@move @session &lt;topic&gt;</code>: move sessions to a topic</h3>
+<p>Moves every session you tag to the topic, at once and without a question. Tag several to move them together. A topic that doesn't exist yet is created, unless there are already as many topics as <code>maxTopics</code> allows; then nothing moves, and the master names the topics you can use. A name close to an existing topic ("releases") joins it. As with every topic move, a session that is working moves once its turn ends, and while you type in the map moves wait until you stop. The master says what moved and what is waiting.</p>
+<pre class="d-term"><span class="u">@move @api-auth @web-login to release</span>
+<span class="m">◈</span> <span class="h">Moved web-login to release; api-auth is working and moves once it stops.</span></pre>
+<p>Command words (<code>new</code>, <code>copy</code>, <code>handover</code>, <code>move</code>) are reserved: no session can take them as its name.</p>
 </section>
 
 <!-- ============ KEYS ============ -->
@@ -320,7 +325,7 @@
 <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>Previous / next topic</td></tr>
 <tr><td><kbd>N</kbd> <kbd>I</kbd></td><td>New session · import from tmux</td></tr>
 <tr><td><kbd>o</kbd> <kbd>f</kbd> <kbd>p</kbd></td><td>Open the PR · watch · pin</td></tr>
-<tr><td><kbd>r</kbd> <kbd>K</kbd> <kbd>x</kbd></td><td>Rename · kill the agent · clean up, on a session's card; on any NEEDS YOU item, <kbd>x</kbd> only dismisses it</td></tr>
+<tr><td><kbd>r</kbd> <kbd>K</kbd> <kbd>x</kbd></td><td>Rename (the branch and worktree keep their names) · kill the agent · clean up, on a session's card; <kbd>r</kbd> and <kbd>K</kbd> on its NEEDS YOU row too; on any NEEDS YOU item, <kbd>x</kbd> only dismisses it</td></tr>
 <tr><td><kbd>/</kbd> <kbd>c</kbd> <kbd>H</kbd></td><td>Search sessions · centre on the master · archived sessions</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>,</kbd></td><td>Settings: base branch, models, max topics, Slack for this repo</td></tr>
 <tr><td><kbd>?</kbd> <kbd>q</kbd></td><td>Shortcuts · quit the map (sessions keep running)</td></tr>

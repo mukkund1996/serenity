@@ -45,7 +45,7 @@ serenity runs on your existing Claude Code login and subscription ([what it uses
 |---|---|
 | **Mind map of sessions** | Three zoom levels: the **map** (master in the centre, topics around it), **topics** (every session as a card with its summary and PR), and **session** (the real Claude Code pane, untouched). |
 | **Live status** | Sessions report through Claude Code hooks: `◐` waiting, `●` working, `✓` finished. Only waiting sessions ask for attention. |
-| **The master** | Haiku writes one-line summaries and groups sessions into topics, Sonnet suggests replies, approvals and cleanups you accept with `y` / `e` / `n`, and an Opus chat (`i` on the master) can see and steer everything, start new sessions from a brief, and relay to any session you tag with `@name`, condensing its answer when you asked a question. |
+| **The master** | Haiku writes one-line summaries and groups sessions into topics, Sonnet suggests replies, approvals and cleanups you accept with `y` / `e` / `n`, and an Opus chat (`i` on the master) can see and steer everything, start new sessions from a brief, and relay to any session you tag with `@name`, condensing its answer when you asked a question. Commands in its input: `@new <brief>` starts sessions, `@copy` / `@handover @session` hand work over, `@move @session… <topic>` moves sessions to a topic. |
 | **Pull requests** | Each card shows its PR and checks via `gh`. `o` opens it, ready PRs get a review request from CODEOWNERS, and a merged PR finishes the session. |
 | **Safe cleanup** | Removing a session checks for uncommitted changes, unpushed commits and PR state before it touches a worktree. |
 | **Worktrees** | New sessions get their own git worktree beside the repo, or reuse an existing branch. |
@@ -157,7 +157,7 @@ serenity is keyboard-only. The footer shows the moves; `?` opens the full list.
 | `[` `]` | Previous / next topic |
 | `N` `I` | New session · import from tmux |
 | `o` `f` `p` | Open the PR · watch · pin |
-| `r` `K` `x` | Rename · kill the agent · clean up, on a session's card; on any NEEDS YOU item `x` only dismisses it (until something new happens) |
+| `r` `K` `x` | Rename · kill the agent · clean up, on a session's card (`r` and `K` on its NEEDS YOU row too); on any NEEDS YOU item `x` only dismisses it (until something new happens). A rename keeps the branch and worktree; names are letters, digits, `. _ -`, at most 40, unique in any case, and never a command word (`new`, `copy`, `handover`, `move`) |
 | `/` `c` `H` | Search sessions · centre on the master · archived sessions |
 | `Ctrl+,` | Settings: base branch, models, max topics, Slack for this repo (`,` on the map too, for terminals without extended keys) |
 
