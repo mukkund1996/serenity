@@ -8,6 +8,10 @@
  *                                         adds the request to that PR's file
  *   gh pr list --search … --json …      → review-requests.json, or []
  *   gh api user --jq .login             → "me"
+ *   gh auth status                      → logged in as "me", unless the
+ *                                         file logged-out exists
+ *   gh auth login …                     → a device-flow look-alike: waits
+ *                                         for Enter, then removes logged-out
  *   gh issue list --search '"<x>" in:title' → open issues in issues.json
  *                                         whose title contains <x>
  *   gh issue create --title … --body …  → appends to issues.json, prints its URL
@@ -18,6 +22,7 @@ import {
 	existsSync,
 	readdirSync,
 	readFileSync,
+	rmSync,
 	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -25,7 +30,37 @@ import { join } from "node:path";
 const dir = process.env.SERENITY_FAKE_GH_DIR ?? ".";
 const [group, command, target, ...rest] = process.argv.slice(2);
 
+const loggedOut = () => existsSync(join(dir, "logged-out"));
+const login = () => process.env.SERENITY_FAKE_GH_LOGIN ?? "me";
+
+if (group === "auth" && command === "status") {
+	if (loggedOut()) {
+		console.error(
+			"You are not logged into any GitHub hosts. To log in, run: gh auth login",
+		);
+		process.exit(1);
+	}
+	console.log(
+		`github.com\n  ✓ Logged in to github.com account ${login()} (keyring)`,
+	);
+	process.exit(0);
+}
+
+if (group === "auth" && command === "login") {
+	console.log("! First copy your one-time code: DEMO-1234");
+	console.log(
+		"Press Enter to open https://github.com/login/device in your browser...",
+	);
+	for await (const chunk of process.stdin) if (chunk.includes(10)) break;
+	await Bun.sleep(Number(process.env.SERENITY_FAKE_GH_LOGIN_MS ?? 800));
+	rmSync(join(dir, "logged-out"), { force: true });
+	console.log("✓ Authentication complete.");
+	console.log(`✓ Logged in as ${login()}`);
+	process.exit(0);
+}
+
 if (group === "api" && command === "user") {
+	if (loggedOut()) process.exit(1);
 	console.log("me");
 	process.exit(0);
 }

@@ -31,6 +31,8 @@ import {
 	SESSIONS,
 	sessionIn,
 	TIMELINE,
+	TUTORIAL,
+	TUTORIAL_PROMPT,
 } from "./scenario";
 
 const args = process.argv.slice(2);
@@ -221,6 +223,16 @@ async function interactive(): Promise<void> {
 	const dashes = args.indexOf("--");
 	const brief = dashes === -1 ? undefined : args[dashes + 1];
 	if (brief) work(brief);
+	// The first-boot tutorial: one step of TUTORIAL per prompt.
+	let step = brief === TUTORIAL_PROMPT ? 0 : -1;
+	const teach = () => {
+		const text = TUTORIAL[step];
+		if (step < 0 || text === undefined) return false;
+		step++;
+		setTimeout(() => stop(text), 1_500);
+		return true;
+	};
+	teach();
 
 	let onPermission = false;
 	const approve = () => {
@@ -251,6 +263,7 @@ async function interactive(): Promise<void> {
 			process.exit(0);
 		} else if (text) {
 			work(text);
+			if (teach()) return;
 			const answer = scripted?.answer;
 			if (answer) setTimeout(() => stop(answer), 2_500);
 		}

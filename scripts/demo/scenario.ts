@@ -243,3 +243,32 @@ export function sessionIn(prompt: string): DemoSession | undefined {
 	const name = prompt.match(/^Session: (\S+)/m)?.[1];
 	return [...SESSIONS, ...LATER_SESSIONS].find((s) => s.name === name);
 }
+
+/**
+ * The first-boot tutorial (onboarding.tape): what the learn-serenity skill
+ * says, abridged, one step per prompt. The first answers its first prompt.
+ */
+export const TUTORIAL_PROMPT = "teach me how to use serenity";
+export const TUTORIAL: string[] = [
+	[
+		"Hi! serenity puts each Claude Code session on a map in",
+		"your terminal, grouped by topic around a master agent that",
+		"keeps the overview. Only the sessions that need you ask",
+		"for attention.",
+		"",
+		"You're in the learn-serenity session now, next to the map.",
+		'The tour takes ten minutes; say "skip" or "stop" any time.',
+		"",
+		'Reply "ready" to start.',
+	].join("\r\n"),
+	[
+		"Step 1 · The map. Three zoom levels: the map (the master",
+		"in the middle, topics around it), the topics (a card per",
+		"session), and the session: this Claude Code pane.",
+		"",
+		"Try it: press Ctrl+q to go back to the map and look around",
+		"with the arrow keys. To come back, move to learn-serenity",
+		"and press Enter.",
+		"Docs: https://getserenity.dev/docs/#map",
+	].join("\r\n"),
+];
