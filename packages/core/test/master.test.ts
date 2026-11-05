@@ -451,3 +451,77 @@ describe("chatMessage", () => {
 		);
 	});
 });
+
+describe("@move's note (ADR 0063)", () => {
+	const a = makeSession({ id: "a", name: "api-auth", topic: "backend" });
+	const b = makeSession({ id: "b", name: "web-login", topic: "frontend" });
+	const c = makeSession({ id: "c", name: "docs", topic: "release" });
+	const context = { sessions: [a, b, c], maxTopics: 10 };
+	const note = (text: string, ctx = context) =>
+		chatMessage("S", text, ctx).split("\n\n")[2] ?? "";
+
+	test("follows the user's words, naming every session and the topic", () => {
+		const body = chatMessage(
+			"S",
+			"@move @api-auth @web-login to release",
+			context,
+		);
+		expect(body).toStartWith(
+			"S\n\nUser: @move @api-auth @web-login to release\n\nserenity: the user typed @move.",
+		);
+		expect(note("@move @api-auth @web-login to release")).toContain(
+			'Move api-auth, web-login to the topic "release" now: call mcp__serenity__set_topic once per session with topic "release", with no question first',
+		);
+		expect(note("@move @api-auth release")).toContain("Don't relay");
+	});
+
+	test("an unknown topic is new, made by set_topic while under the cap", () => {
+		const text = note("@move @api-auth to Payments");
+		expect(text).toContain('to the topic "payments"');
+		expect(text).toContain('"payments" is a new topic; set_topic creates it.');
+		expect(note("@move @api-auth release")).not.toContain("new topic");
+	});
+
+	test("an unknown topic past maxTopics moves nothing, and says which topics there are", () => {
+		// Another backend session keeps that topic alive.
+		const d = makeSession({ id: "d", name: "other", topic: "backend" });
+		const text = note("@move @api-auth to payments", {
+			sessions: [...context.sessions, d],
+			maxTopics: 3,
+		});
+		expect(text).toContain(
+			'"payments" would be a new topic, but there are already 3 topics, the most allowed (maxTopics 3). Don\'t call mcp__serenity__set_topic.',
+		);
+		expect(text).toContain('"frontend", "release", "backend"');
+	});
+
+	test("a topic emptied by the move does not count against the cap", () => {
+		// backend's only session leaves it, so payments fits under 3.
+		expect(
+			note("@move @api-auth to payments", { ...context, maxTopics: 3 }),
+		).toContain('"payments" is a new topic');
+	});
+
+	test("a near-duplicate joins the existing topic", () => {
+		expect(note("@move @api-auth to releases")).toContain(
+			'"releases" is the existing topic "release".',
+		);
+	});
+
+	test("no topic: ask which; no session: say how", () => {
+		expect(note("@move @api-auth")).toContain(
+			'Ask the user which topic, naming the current ones: "backend", "frontend", "release".',
+		);
+		const none = note("@move @nobody release");
+		expect(none).toContain(
+			"It @-mentions no session on the map, so move nothing.",
+		);
+		expect(none).toContain("No live session is named nobody: say so.");
+	});
+
+	test("unknown @words beside real sessions are reported, the rest still move", () => {
+		const text = note("@move @api-auth @ghost release");
+		expect(text).toContain("Move api-auth to the topic");
+		expect(text).toContain("No live session is named ghost");
+	});
+});

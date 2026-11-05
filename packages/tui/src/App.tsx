@@ -1527,6 +1527,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				<Centered rows={rows}>
 					<RenameDialog
 						session={confirmSession}
+						sessions={allSessions}
 						onSubmit={(name) => renameSession(confirmSession.id, name)}
 						onClose={() => setOverlay(null)}
 					/>

@@ -1,6 +1,6 @@
 import { PINNED, topicOf } from "./attention";
 import type { Session, Suggestion, SuggestionKind } from "./domain";
-import { type MasterCommand, masterCommands } from "./mentions";
+import { type MasterCommand, masterCommands, parseMove } from "./mentions";
 import { prLabel, prStatus } from "./pr";
 import type { SlackItem } from "./slack";
 
@@ -327,7 +327,7 @@ export const MASTER_SYSTEM_PROMPT = [
 	"When the user asks you to tell a session something, call mcp__serenity__send_reply with the exact text: it goes out at once if their latest message contains that text or confirms it after your last reply showed it; otherwise it waits in the master's queue for y. Say which one happened.",
 	"When the user's message @-mentions a session (@api-auth), you only relay it, with no draft and no confirmation: send the session the message, lightly rewritten to stand on its own, with mcp__serenity__send_reply. For a question, also call mcp__serenity__watch_session and, when it fires, condense the session's answer. Never look into a mentioned session yourself: no git, gh, file reads, checkouts or Slack reads; its agent does that. serenity sends whatever text you write to a mentioned session at once. Without a mention, the draft-and-confirm rules apply.",
 	"To propose an action the user did not ask for, call mcp__serenity__suggest with the session name, kind (reply, approve, cleanup or review), a short label and, for replies, the text. Nothing runs until the user presses y.",
-	"Call mcp__serenity__set_topic only when the user asks to move a session.",
+	"Call mcp__serenity__set_topic only when the user asks to move a session. @move @session <topic> (one or more sessions) is a command: call it at once for each session, then say what moved.",
 	"Call mcp__serenity__open_session when the user asks to open, show or go to a session; it opens beside their map.",
 	"Call mcp__serenity__create_session when the user asks to start new work: one call per session, each with a self-contained first prompt, since the new agent sees nothing of this chat. A message with @new (a command, not a session) means start it now, without asking how to split it.",
 	"@copy @session <follow-up> and @handover @session are commands: call mcp__serenity__request_handover for that session (purpose copy or share). For @copy, once its doc is written, start the follow-up with mcp__serenity__create_session and handover set to the doc's path.",
@@ -460,12 +460,60 @@ export function watchMessage(
 }
 
 /** What serenity adds after the user's words for each @command they used (ADR 0048). */
-const COMMAND_NOTES: Record<MasterCommand, string> = {
+const COMMAND_NOTES: Record<Exclude<MasterCommand, "move">, string> = {
 	new: "serenity: the user typed @new. Start the work in their brief now with mcp__serenity__create_session, with no plan to confirm and no question about how to split it: one session, or one per piece when the brief clearly holds independent pieces. You pick the names and topics, and each prompt stands on its own. Ask only when the brief says nothing to start.",
 	copy: "serenity: the user typed @copy. Call mcp__serenity__request_handover now for the session they @-mentioned, with purpose copy and for set to the rest of their message, then end your turn. When serenity says the doc is written, start the follow-up with mcp__serenity__create_session and handover set to its path, without asking. Don't relay their message to the mentioned session.",
 	handover:
 		"serenity: the user typed @handover. Call mcp__serenity__request_handover now for the session they @-mentioned, with purpose share; it gives back an up-to-date doc at once, or asks the session to write one and tells you when it's written. Then give the user its path. Don't relay their message to the mentioned session.",
 };
+
+/** What the chat needs to know of the repo to read an @move (ADR 0063). */
+export interface MoveContext {
+	sessions: readonly Session[];
+	maxTopics: number;
+}
+
+const quoteAll = (names: string[]) => names.map((n) => `"${n}"`).join(", ");
+
+/**
+ * serenity's note for `@move` (ADR 0063), read from the message so the chat
+ * need not parse it: which sessions, which topic, and whether that topic
+ * exists, joins a near-duplicate, is new, or would pass `maxTopics`.
+ */
+export function moveNote(text: string, context: MoveContext): string {
+	const move = parseMove(text, context.sessions);
+	const head = "serenity: the user typed @move.";
+	const unknown = move?.unknown.length
+		? ` No live session is named ${move.unknown.join(", ")}: say so.`
+		: "";
+	if (!move?.sessions.length)
+		return `${head} It @-mentions no session on the map, so move nothing.${unknown} Tell the user in one sentence to @-mention the sessions to move, e.g. @move @api-auth release.`;
+	const names = move.sessions.map((s) => s.name);
+	const moving = new Set(move.sessions.map((s) => s.id));
+	const topicsOf = (sessions: readonly Session[]) => [
+		...new Set(
+			sessions
+				.filter((s) => s.status !== "archived" && !s.pinned)
+				.map((s) => s.topic)
+				.filter((t): t is string => !!t),
+		),
+	];
+	const asked = normalizeTopic(move.topic);
+	if (!asked)
+		return `${head} It names no topic for ${names.join(", ")}, so move nothing yet.${unknown} Ask the user which topic, naming the current ones: ${quoteAll(topicsOf(context.sessions)) || "none yet"}.`;
+	// The topics left once these sessions move out of theirs.
+	const topics = topicsOf(context.sessions.filter((s) => !moving.has(s.id)));
+	const fit = capTopic(asked, topics, context.maxTopics);
+	if (!fit)
+		return `${head} "${asked}" would be a new topic, but there are already ${topics.length} topics, the most allowed (maxTopics ${context.maxTopics}). Don't call mcp__serenity__set_topic.${unknown} Tell the user in one sentence that nothing moved and why, naming the topics they can move to: ${quoteAll(topics)}.`;
+	const kind =
+		fit !== asked
+			? ` "${asked}" is the existing topic "${fit}".`
+			: topics.includes(fit)
+				? ""
+				: ` "${fit}" is a new topic; set_topic creates it.`;
+	return `${head} Move ${names.join(", ")} to the topic "${fit}" now: call mcp__serenity__set_topic once per session with topic "${fit}", with no question first; their message is the go-ahead.${kind}${unknown} A session that is working, or any while the user types, moves once that stops; set_topic says so. Then tell the user in one sentence what moved, what moves once it stops working, and what set_topic refused and why. Don't relay their message to the mentioned sessions.`;
+}
 
 /**
  * Sent when a turn answering @new ended with no session started (ADR 0048).
@@ -475,7 +523,13 @@ export const NEW_UNSTARTED =
 	"serenity: the user's @new asked you to start sessions at once, and you started none. Call mcp__serenity__create_session now for the brief in their last message, without asking how to split it. If it truly names no work to start, say so in one sentence instead.";
 
 /** The user's message as the chat gets it: the snapshot, their words, and a note per @command. */
-export function chatMessage(snapshot: string, text: string): string {
-	const notes = masterCommands(text).map((c) => COMMAND_NOTES[c]);
+export function chatMessage(
+	snapshot: string,
+	text: string,
+	context: MoveContext = { sessions: [], maxTopics: 10 },
+): string {
+	const notes = masterCommands(text).map((c) =>
+		c === "move" ? moveNote(text, context) : COMMAND_NOTES[c],
+	);
 	return [`${snapshot}\n\nUser: ${text}`, ...notes].join("\n\n");
 }

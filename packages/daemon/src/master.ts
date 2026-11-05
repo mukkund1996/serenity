@@ -344,6 +344,10 @@ export class MasterSupervisor {
 				this.topics(repo, session.id),
 				this.host.maxTopics,
 			);
+			if (!topic)
+				this.host.log(
+					`dropped ${session.name}'s held move to ${session.topicHeld}: ${this.host.maxTopics} topics already`,
+				);
 			this.host.update(session, {
 				topic: topic ?? session.topic,
 				topicHeld: null,
@@ -670,7 +674,10 @@ export class MasterSupervisor {
 		const snapshot = this.snapshot(repo);
 		const body =
 			item.from === "you"
-				? chatMessage(snapshot, item.text)
+				? chatMessage(snapshot, item.text, {
+						sessions: this.host.storage.sessions.listByRepo(repo),
+						maxTopics: this.host.maxTopics,
+					})
 				: `${snapshot}\n\n${item.text}`;
 		const retry = this.restarts.get(repo)?.attempts
 			? "serenity: your process restarted while answering the message below, so it is sent again. Tools you called for it may already have run: check session_status before calling one again.\n\n"
@@ -1019,7 +1026,25 @@ export class MasterSupervisor {
 					text: `There are already ${this.host.maxTopics} topics, the most allowed. Pick one of: ${topics.join(", ")}.`,
 					isError: true,
 				};
-			// The user's own request: moves at once, even while it works or they type.
+			if (fit === session.topic) {
+				if (session.topicHeld) {
+					this.host.update(session, { topicCandidate: null, topicHeld: null });
+					this.host.broadcast(repo);
+				}
+				return { text: `${session.name} is already in ${fit}.` };
+			}
+			// The user's move waits like any other while the session works or
+			// they type (ADR 0047, 0063), so the card doesn't jump under them.
+			const working = session.status === "working";
+			if (working || this.typing.has(repo)) {
+				this.host.update(session, { topicCandidate: null, topicHeld: fit });
+				this.host.broadcast(repo);
+				return {
+					text: working
+						? `${session.name} is working: it moves to ${fit} once it stops.`
+						: `The user is typing: ${session.name} moves to ${fit} once they stop.`,
+				};
+			}
 			this.host.update(session, {
 				topic: fit,
 				topicCandidate: null,

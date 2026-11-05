@@ -1,6 +1,6 @@
 # 0047 · Finer topics, near-duplicate names join their topic, and a topic move waits while a session works or the user types
 
-**Status:** Accepted · 2026-10-29 · Amends 0007, 0019
+**Status:** Accepted · 2026-10-29 · Amends 0007, 0019 · Amended by [0063](0063-rename-checks-and-at-move.md): `set_topic` waits too; only `create_session`'s `topic` applies at once
 
 ## Context
 0019 told the summarizer to strongly prefer an existing topic, even a loose fit, because it had opened a new topic for almost every session. That swung too far. Broad topics like "master agent" and "robustness" swallowed loosely related work, so a bubble no longer said what its sessions were about.

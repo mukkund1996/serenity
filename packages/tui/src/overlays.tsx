@@ -2,6 +2,7 @@ import {
 	archivedTopics,
 	type CleanupPlan,
 	type CreateSessionParams,
+	checkSessionName,
 	type ImportCandidate,
 	type ResolvedBase,
 	type Session,
@@ -291,15 +292,21 @@ export function ShortcutsPanel() {
 
 /**
  * Rename a session (r). Starts from the current name, edited like any text
- * field (ADR 0042): Ctrl+u clears what is before the cursor.
+ * field (ADR 0042): Ctrl+u clears what is before the cursor. The name is
+ * checked here by the daemon's rules (ADR 0063) before it is sent; the
+ * daemon checks again. Only the map's name and, for a session serenity
+ * started, its tmux window change: the branch and worktree keep theirs.
  * Topics have no rename: the master manages them (ADR 0012).
  */
 export function RenameDialog({
 	session,
+	sessions,
 	onSubmit,
 	onClose,
 }: {
 	session: Session;
+	/** The repo's sessions, to catch a name already taken. */
+	sessions: readonly Session[];
 	onSubmit: (name: string) => Promise<void>;
 	onClose: () => void;
 }) {
@@ -311,8 +318,9 @@ export function RenameDialog({
 		(input, key) => {
 			if (key.escape) return onClose();
 			const submit = (value: string) => {
-				const next = value.trim().replace(/\s+/g, "-");
-				if (!next) return setError("Give the session a name.");
+				const checked = checkSessionName(value, sessions, session.id);
+				if ("error" in checked) return setError(checked.error);
+				const next = checked.name;
 				if (next === session.name) return onClose();
 				setBusy(true);
 				setError(null);
@@ -349,15 +357,25 @@ export function RenameDialog({
 					<DialogField field={name} focused />
 				</Box>
 			</Box>
-			{session.origin === "spawned" ? null : (
+			<Text color="white" wrap="truncate">
+				{session.origin === "spawned"
+					? "renames its tmux window too"
+					: "its tmux window keeps its name: it is yours"}
+			</Text>
+			{session.branch || session.worktree ? (
 				<Text color="white" wrap="truncate">
-					its tmux window keeps its name: it is yours
+					{session.branch
+						? `branch ${session.branch} and its worktree keep their names`
+						: "its worktree keeps its name"}
 				</Text>
-			)}
-			<Box marginTop={1} justifyContent="space-between">
-				<Text color="red" wrap="truncate">
-					{error ?? ""}
+			) : null}
+			{/* Its own row: a long error ("… is reserved for @move …") would crowd the keys. */}
+			<Box marginTop={1}>
+				<Text color="red" wrap="wrap">
+					{error ?? " "}
 				</Text>
+			</Box>
+			<Box justifyContent="flex-end">
 				<Text color="white">
 					{busy ? (
 						"renaming…"

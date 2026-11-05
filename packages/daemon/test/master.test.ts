@@ -316,7 +316,7 @@ describe("summaries", () => {
 			});
 		});
 
-		test("set_topic and create_session move at once, while working or typing", async () => {
+		test("set_topic waits like the summarizer's moves, while working or typing (ADR 0063)", async () => {
 			put({
 				id: "a",
 				name: "api-auth",
@@ -324,15 +324,59 @@ describe("summaries", () => {
 				topic: "backend",
 				topicHeld: "infra",
 			});
-			master.setTyping(REPO, true);
-			await master.handleTool(REPO, "set_topic", {
+			put({ id: "b", name: "web-login", status: "idle", topic: "frontend" });
+			const working = await master.handleTool(REPO, "set_topic", {
 				session: "api-auth",
 				topic: "docs",
 			});
+			expect(working.text).toBe(
+				"api-auth is working: it moves to docs once it stops.",
+			);
+			expect(storage.sessions.get("a")).toMatchObject({
+				topic: "backend",
+				topicHeld: "docs",
+			});
+			master.setTyping(REPO, true);
+			const typing = await master.handleTool(REPO, "set_topic", {
+				session: "web-login",
+				topic: "docs",
+			});
+			expect(typing.text).toBe(
+				"The user is typing: web-login moves to docs once they stop.",
+			);
+			master.setTyping(REPO, false);
+			expect(storage.sessions.get("b")).toMatchObject({
+				topic: "docs",
+				topicHeld: null,
+			});
+			// Still working: api-auth waits for its turn to end.
+			expect(storage.sessions.get("a")?.topic).toBe("backend");
+			change("a", { status: "idle" });
+			await settle();
 			expect(storage.sessions.get("a")).toMatchObject({
 				topic: "docs",
 				topicHeld: null,
 			});
+		});
+
+		test("set_topic to where it already is cancels a held move", async () => {
+			put({
+				id: "a",
+				name: "api-auth",
+				status: "working",
+				topic: "backend",
+				topicHeld: "infra",
+			});
+			const result = await master.handleTool(REPO, "set_topic", {
+				session: "api-auth",
+				topic: "backend",
+			});
+			expect(result.text).toBe("api-auth is already in backend.");
+			expect(storage.sessions.get("a")?.topicHeld).toBeNull();
+		});
+
+		test("create_session's topic is set at once, while typing", async () => {
+			master.setTyping(REPO, true);
 			await master.handleTool(REPO, "create_session", {
 				name: "fresh",
 				prompt: "go",
@@ -340,6 +384,18 @@ describe("summaries", () => {
 			});
 			expect(storage.sessions.get("new-fresh")?.topic).toBe("docs");
 		});
+	});
+
+	test("@move reaches the chat with a note naming its sessions and topic (ADR 0063)", async () => {
+		put({ id: "a", name: "api-auth", topic: "backend" });
+		put({ id: "b", name: "web-login", topic: "frontend" });
+		master.message(REPO, "@move @api-auth @web-login to release");
+		const sent = runner.sent.at(-1) ?? "";
+		expect(sent).toContain("User: @move @api-auth @web-login to release");
+		expect(sent).toContain(
+			'Move api-auth, web-login to the topic "release" now',
+		);
+		expect(sent).toContain('"release" is a new topic');
 	});
 
 	test("a near-duplicate topic name joins the existing topic", async () => {

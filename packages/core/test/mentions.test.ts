@@ -10,6 +10,7 @@ import {
 	mentionedSessions,
 	mentionSegments,
 	mentionsSession,
+	parseMove,
 } from "../src/mentions";
 import { makeSession } from "../test-support";
 
@@ -128,6 +129,7 @@ describe("matchMentions", () => {
 			"new",
 			"copy",
 			"handover",
+			"move",
 			"fix-login",
 			"login-page",
 			"api-auth",
@@ -257,5 +259,93 @@ describe("mentionSegments", () => {
 				.join(""),
 		).toBe(text);
 		expect(mentionSegments("", all)).toEqual([]);
+	});
+});
+
+describe("parseMove (ADR 0063)", () => {
+	const sessions = [api, web];
+
+	test("is null without @move", () => {
+		expect(parseMove("@api-auth move to release", sessions)).toBeNull();
+		expect(parseMove("@Move @api-auth release", sessions)).toBeNull();
+	});
+
+	test("one session and a topic", () => {
+		expect(parseMove("@move @api-auth release", sessions)).toEqual({
+			sessions: [api],
+			unknown: [],
+			topic: "release",
+		});
+	});
+
+	test("several sessions at once, joined any way, with 'to'", () => {
+		for (const text of [
+			"@move @api-auth @web-login to release",
+			"@move @api-auth, @web-login to release",
+			"@move @api-auth and @web-login into the release topic",
+			"@move @api-auth & @web-login: release",
+			"@move to release @api-auth @web-login",
+		]) {
+			const move = parseMove(text, sessions);
+			expect(move?.sessions.map((s) => s.name)).toEqual([
+				"api-auth",
+				"web-login",
+			]);
+			expect(move?.topic).toBe("release");
+		}
+	});
+
+	test("a session mentioned twice moves once", () => {
+		expect(
+			parseMove("@move @api-auth @api-auth pr status", sessions)?.sessions,
+		).toEqual([api]);
+	});
+
+	test("the topic stops at a clause break; quotes and words before @move are not part of it", () => {
+		const topic = (text: string) => parseMove(text, sessions)?.topic;
+		expect(topic("@move @api-auth to pr status, it's about checks")).toBe(
+			"pr status",
+		);
+		expect(topic("@move @api-auth to v1.2 release. thanks")).toBe(
+			"v1.2 release",
+		);
+		expect(topic('@move @api-auth "slack replies"')).toBe("slack replies");
+		expect(topic("please @move @api-auth infra")).toBe("infra");
+		expect(topic("@move @api-auth\nrelease")).toBeNull();
+	});
+
+	test("an unknown topic is kept as typed: whether it is new is the note's call", () => {
+		expect(
+			parseMove("@move @api-auth to brand new area", sessions)?.topic,
+		).toBe("brand new area");
+	});
+
+	test("no topic, and @words that name no live session", () => {
+		expect(parseMove("@move @api-auth", sessions)).toEqual({
+			sessions: [api],
+			unknown: [],
+			topic: null,
+		});
+		expect(parseMove("@move @nobody @old-thing. release", sessions)).toEqual({
+			sessions: [],
+			unknown: ["nobody", "old-thing"],
+			topic: "release",
+		});
+	});
+
+	test("move is reserved like the other command words", () => {
+		expect(isReservedName("move")).toBe(true);
+		expect(isReservedName("MOVE")).toBe(true);
+		expect(commandHint("move")).toBe("move sessions to a topic");
+		expect(masterCommands("@move: @api-auth infra")).toEqual(["move"]);
+	});
+
+	test("@move is coloured as a command, its sessions as sessions", () => {
+		expect(mentionSegments("@move @api-auth infra", sessions)).toEqual([
+			{ text: "@move", kind: "move" },
+			{ text: " ", kind: null },
+			{ text: "@api-auth", kind: "session" },
+			{ text: " infra", kind: null },
+		]);
 	});
 });
