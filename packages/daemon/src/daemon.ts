@@ -4,6 +4,7 @@ import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 import {
 	type Attachment,
+	agentMcpPath,
 	averageWait,
 	BUILD_ID,
 	baseSettingFor,
@@ -56,6 +57,7 @@ import { ClaudeObserver } from "./adopt";
 import { type ClaudeRunner, CliClaudeRunner } from "./claude";
 import { type CleanupFacts, cleanupPlan, plannedRemovals } from "./cleanup";
 import { onDependency, run } from "./exec";
+import { Fanout } from "./fanout";
 import { Gh } from "./gh";
 import {
 	addWorktree,
@@ -74,6 +76,7 @@ import {
 	AGENT_WRAPPER,
 	agentCommand,
 	shellQuote,
+	writeAgentMcpConfig,
 	writeHookSettings,
 } from "./hooks";
 import {
@@ -259,6 +262,7 @@ export class Daemon {
 	/** A check still waiting on tmux; the next one is skipped. */
 	private checkingTmux = false;
 	private readonly master: MasterSupervisor;
+	private readonly fanout: Fanout;
 	private readonly gh: Gh;
 	private readonly prs: PrWatcher;
 	private readonly reviews: ReviewWatcher;
@@ -379,6 +383,15 @@ export class Daemon {
 			pollMs:
 				opts.prPollMs ?? envNumber("SERENITY_PR_POLL_MS", DEFAULT_PR_POLL_MS),
 		});
+		this.fanout = new Fanout({
+			storage: opts.storage,
+			now: this.now,
+			log: this.log,
+			broadcast: (repo) => this.broadcast(repo),
+			create: (params) => this.createSession(params),
+			send: async (session, text) =>
+				this.tmux.sendText(await this.requireLivePane(session), text),
+		});
 		this.reviews = new ReviewWatcher({
 			gh: this.gh,
 			watching: (repo) =>
@@ -466,6 +479,11 @@ export class Daemon {
 		securePrivateState(this.opts.home);
 		mkdirSync(join(this.opts.home, "workers"), { recursive: true });
 		writeHookSettings(hookSettingsPath(this.opts.home), this.self);
+		writeAgentMcpConfig(
+			agentMcpPath(this.opts.home),
+			this.self,
+			this.opts.home,
+		);
 		writeMasterPlugin(masterPluginPath(this.opts.home));
 		const path = socketPath(this.opts.home);
 		if (existsSync(path)) rmSync(path);
@@ -667,7 +685,24 @@ export class Daemon {
 			this.opts.storage.sessions.put(next);
 			if (ended) this.opts.storage.waits.append(ended);
 		});
+		if (next.topic !== base.topic) this.childrenFollow(next);
+		this.fanout.onSessionChanged(base, next);
 		return next;
+	}
+
+	/** A parent's children move with it to its topic (ADR 0060). */
+	private childrenFollow(parent: Session): void {
+		for (const child of this.opts.storage.sessions.listByRepo(parent.repo))
+			if (
+				child.parentId === parent.id &&
+				child.status !== "archived" &&
+				child.topic !== parent.topic
+			)
+				this.update(child, {
+					topic: parent.topic,
+					topicCandidate: null,
+					topicHeld: null,
+				});
 	}
 
 	/** Updates a session and lets the master react (summaries, suggestions). */
@@ -864,6 +899,8 @@ export class Daemon {
 						);
 					// "1" picks "Yes" in Claude Code's numbered permission menu.
 					await this.tmux.pressKey(await this.requireLivePane(session), "1");
+				} else if (suggestion.kind === "fanout") {
+					await this.fanout.accept(suggestion);
 				} else if (suggestion.kind === "review") {
 					if (session.pr?.state !== "OPEN")
 						throw new RpcError(
@@ -897,6 +934,7 @@ export class Daemon {
 					status: "declined",
 					updatedAt: this.now(),
 				});
+				if (suggestion.kind === "fanout") this.fanout.declined(suggestion);
 				this.broadcast(suggestion.repo);
 			}
 			return null;
@@ -950,6 +988,9 @@ export class Daemon {
 				);
 			return null;
 		},
+
+		"agent.tool": ({ sessionId, name, args }) =>
+			this.fanout.tool(sessionId, name, args),
 
 		"master.tool": ({ repo, name, args }) =>
 			this.master.handleTool(repo, name, args),
@@ -1229,6 +1270,7 @@ export class Daemon {
 			hookSettingsPath(this.opts.home),
 			this.self,
 			prompt,
+			agentMcpPath(this.opts.home),
 		);
 		let pane = session.tmuxPane;
 		if (pane && (await this.tmux.paneExists(pane))) {
@@ -1676,7 +1718,7 @@ export class Daemon {
 			id,
 			repo,
 			name,
-			topic: null,
+			topic: params.topic ?? null,
 			cwd,
 			worktree,
 			branch,
@@ -1704,6 +1746,7 @@ export class Daemon {
 			pinned: false,
 			exitNote: null,
 			dismissedAt: null,
+			parentId: params.parentId ?? null,
 			createdAt: at,
 			updatedAt: at,
 		};

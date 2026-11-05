@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { agentCommand } from "../src/hooks";
+import { agentCommand, agentMcpConfig, hookSettings } from "../src/hooks";
 
 test("the agent command runs claude, then reports its exit code", () => {
 	const command = agentCommand(["claude"], "/h/hooks.json", [
@@ -42,4 +42,39 @@ test("the wrapper passes the exit code through to the notifier", () => {
 		},
 	);
 	expect(result.stdout.trim()).toBe("exited 7");
+});
+
+test("serenity's MCP server for the session comes before the first prompt (ADR 0060)", () => {
+	const command = agentCommand(
+		["claude"],
+		"/h/hooks.json",
+		["serenity"],
+		"go",
+		"/h/agent-mcp.json",
+	);
+	expect(command.slice(4)).toEqual([
+		"claude",
+		"--settings",
+		"/h/hooks.json",
+		"--mcp-config",
+		"/h/agent-mcp.json",
+		"--",
+		"go",
+	]);
+});
+
+test("the hook settings allow request_sessions; the MCP config runs mcp-agent", () => {
+	expect(hookSettings(["serenity"])).toMatchObject({
+		permissions: { allow: ["mcp__serenity__request_sessions"] },
+	});
+	expect(agentMcpConfig(["bun", "/src/main.ts"], "/h")).toEqual({
+		mcpServers: {
+			serenity: {
+				type: "stdio",
+				command: "bun",
+				args: ["/src/main.ts", "mcp-agent"],
+				env: { SERENITY_HOME: "/h" },
+			},
+		},
+	});
 });

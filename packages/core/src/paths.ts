@@ -24,6 +24,8 @@ export const crashReportsDir = (home: string) => join(home, "crash-reports");
 export const masterPluginPath = (home: string) => join(home, "master-plugin");
 export const hookSettingsPath = (home: string) =>
 	join(home, "claude-hooks.json");
+/** `--mcp-config` of every agent session: `serenity mcp-agent` (ADR 0060). */
+export const agentMcpPath = (home: string) => join(home, "agent-mcp.json");
 /** Claude Code's own config dir; CLAUDE_CONFIG_DIR moves it, as in Claude Code. */
 export function claudeConfigDir(env: NodeJS.ProcessEnv = process.env): string {
 	return env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");

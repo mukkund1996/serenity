@@ -1,4 +1,5 @@
 import type { Session, Suggestion } from "./domain";
+import { withChildrenUnderParents } from "./fanout";
 
 /** Topic for sessions the master has not placed yet. */
 export const UNSORTED = "unsorted";
@@ -124,7 +125,10 @@ export function groupTopics(sessions: Session[]): TopicGroup[] {
 	return [...byName]
 		.map(([name, list]) => ({
 			name,
-			sessions: list.sort((a, b) => CARD_RANK[a.status] - CARD_RANK[b.status]),
+			// A child is drawn right under its parent (ADR 0060).
+			sessions: withChildrenUnderParents(
+				list.sort((a, b) => CARD_RANK[a.status] - CARD_RANK[b.status]),
+			),
 			attention: attentionOf(list),
 			counts: {
 				waiting: list.filter((s) => s.status === "waiting").length,
@@ -181,6 +185,8 @@ export function suggestionAction(
 				action: `Request review on ${session.name}`,
 				text: g.text ? `@${g.text.replace(/^@/, "")}` : null,
 			};
+		case "fanout":
+			return { action: `${session.name}: ${g.label}`, text: g.text };
 	}
 }
 

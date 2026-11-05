@@ -335,10 +335,17 @@ function drawCard(
 			bold: focused,
 			dim: !focused,
 		});
-	col = canvas.text(col, y, truncate(s.name, cardW - 18), {
-		fg: focused ? "whiteBright" : nameColor(s.status),
-		bold: true,
-	});
+	// A session another one started (ADR 0060).
+	if (s.parentId) col = canvas.text(col, y, "↳ ", { fg: "gray" });
+	col = canvas.text(
+		col,
+		y,
+		truncate(s.name, cardW - 18 - (s.parentId ? 2 : 0)),
+		{
+			fg: focused ? "whiteBright" : nameColor(s.status),
+			bold: true,
+		},
+	);
 	canvas.text(col, y, " ");
 
 	const chips: Array<{ text: string; style: Style }> = [];

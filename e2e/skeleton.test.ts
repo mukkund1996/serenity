@@ -1614,6 +1614,69 @@ step(
 	STEP_TIMEOUT,
 );
 
+step(
+	"an agent fans out at the user's request; its sessions hang off it and report back (ADR 0060)",
+	async () => {
+		await newSession("lead");
+		typeInAgent("lead", "fanout kid-a,kid-b now split this into sessions");
+		await until(() => {
+			const windows = tmux(
+				"list-windows",
+				"-t",
+				"=serenity-demo",
+				"-F",
+				"#{window_name}",
+			).split("\n");
+			return windows.includes("kid-a") && windows.includes("kid-b");
+		}, "windows for kid-a and kid-b");
+		await waitFor(/Started kid-a, kid-b/, "serenity-demo:lead");
+		// Drawn under their parent (↳ on a card, └ on a map row), in its topic.
+		await until(
+			() => /(└ .*|↳ )kid-a/.test(screen()) && /(└ .*|↳ )kid-b/.test(screen()),
+			"the children under lead on the map",
+		).catch((e: Error) => {
+			throw new Error(`${e.message}; screen was:\n${screen()}`);
+		});
+		// Each child's finished turn is typed into the parent once it is free.
+		await waitFor(
+			/From the sessions you started: kid-(a|b) finished its turn/,
+			"serenity-demo:lead",
+		);
+	},
+	STEP_TIMEOUT,
+);
+
+step(
+	"an agent's own fan-out waits in NEEDS YOU until y starts it (ADR 0060)",
+	async () => {
+		typeInAgent("lead", "fanout kid-c");
+		await waitFor(/waits in the user's NEEDS YOU/, "serenity-demo:lead");
+		expect(
+			tmux("list-windows", "-t", "=serenity-demo", "-F", "#{window_name}"),
+		).not.toContain("kid-c");
+		await selectNeed("lead");
+		await waitFor(/Start 1 session: kid-c/);
+		keys("y");
+		await until(
+			() =>
+				tmux(
+					"list-windows",
+					"-t",
+					"=serenity-demo",
+					"-F",
+					"#{window_name}",
+				).includes("kid-c"),
+			"a window for kid-c",
+		).catch((e: Error) => {
+			throw new Error(`${e.message}; screen was:\n${screen()}`);
+		});
+		await waitFor(/the user started kid-c/, "serenity-demo:lead");
+		await until(() => /(└ .*|↳ )kid-c/.test(screen()), "kid-c under lead");
+		keys("Escape");
+	},
+	STEP_TIMEOUT,
+);
+
 // Last: the dismissed request stays pending, so the master's chat waits on it.
 step(
 	"x on the master's permission request hides it without allowing or denying it",

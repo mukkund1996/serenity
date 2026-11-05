@@ -26,6 +26,10 @@ export interface CreateSessionParams {
 	branch?: string;
 	/** Sent to the agent as its first prompt. */
 	prompt?: string;
+	/** The session whose request_sessions asked for this one (ADR 0060). */
+	parentId?: string;
+	/** Topic to start under; a child starts under its parent's. */
+	topic?: string | null;
 	/**
 	 * A branch to start this one worktree from instead of the setting
 	 * (ADR 0058); refused if it exists neither locally nor on origin.
@@ -172,6 +176,14 @@ export interface Methods {
 	"master.dismissPermission": { params: { id: string }; result: null };
 	"master.tool": {
 		params: { repo: string; name: string; args: Record<string, unknown> };
+		result: MasterToolResult;
+	};
+	/**
+	 * A tool call from an agent session's own MCP server, `serenity
+	 * mcp-agent` (ADR 0060), e.g. request_sessions.
+	 */
+	"agent.tool": {
+		params: { sessionId: string; name: string; args: Record<string, unknown> };
 		result: MasterToolResult;
 	};
 	/** The settings panel's values for this repo (Ctrl+, ADR 0058). */

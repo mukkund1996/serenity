@@ -535,13 +535,18 @@ export class MasterSupervisor {
 
 	// ------------------------------------------------------------- suggestions
 
-	/** Pending suggestions of a session (or only those of `kind`) that no longer apply. */
+	/**
+	 * Pending suggestions of a session (or only those of `kind`) that no
+	 * longer apply. A session's own fanout request is left alone: it stays
+	 * until the user answers it, whatever the session does (ADR 0060).
+	 */
 	supersede(sessionId: string, kind?: SuggestionKind): void {
 		const session = this.host.storage.sessions.get(sessionId);
 		if (!session) return;
 		let changed = false;
 		for (const g of this.host.storage.suggestions.listPending(session.repo)) {
-			if (g.sessionId !== sessionId || (kind && g.kind !== kind)) continue;
+			if (g.sessionId !== sessionId) continue;
+			if (kind ? g.kind !== kind : g.kind === "fanout") continue;
 			this.host.storage.suggestions.put({
 				...g,
 				status: "superseded",

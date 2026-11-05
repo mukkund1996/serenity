@@ -427,3 +427,15 @@ test("the master box's permission request says x dismisses it (ADR 0057)", () =>
 	expect(text).toContain("master wants to use Bash");
 	expect(text).toContain("y allow · n deny · x dismiss");
 });
+
+test("a child hangs off its parent with └, right under it (ADR 0060)", () => {
+	const list = [
+		makeSession({ id: "k", name: "kid", topic: "api", parentId: "p" }),
+		makeSession({ id: "o", name: "other", topic: "api", status: "working" }),
+		makeSession({ id: "p", name: "lead", topic: "api" }),
+	];
+	const { canvas, rows } = draw({ list });
+	expect(canvas.toString()).toContain("└ kid");
+	const y = (id: string) => rows.find((r) => r.sessionId === id)?.y ?? -1;
+	expect(y("k")).toBe(y("p") + 1);
+});

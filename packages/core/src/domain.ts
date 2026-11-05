@@ -101,6 +101,12 @@ export interface Session {
 	 * dismisses a waiting session; x does. Null otherwise.
 	 */
 	dismissedAt: number | null;
+	/**
+	 * The session that asked for this one with request_sessions (ADR 0060):
+	 * it is drawn under that parent, follows its topic, reports its turns to
+	 * it and cannot fan out itself. Null for every other session.
+	 */
+	parentId: string | null;
 	createdAt: number;
 	updatedAt: number;
 }
@@ -171,7 +177,20 @@ export interface HookEvent {
 	at: number;
 }
 
-export type SuggestionKind = "reply" | "approve" | "cleanup" | "review";
+export type SuggestionKind =
+	| "reply"
+	| "approve"
+	| "cleanup"
+	| "review"
+	/** Sessions an agent asked to start (ADR 0060); on the parent, in `sessions`. */
+	| "fanout";
+
+/** One session an agent's request_sessions asks for (ADR 0060). */
+export interface FanoutSession {
+	name: string;
+	/** Its first prompt; self-contained, since it sees nothing of the parent. */
+	prompt: string;
+}
 
 export type SuggestionStatus =
 	| "pending"
@@ -191,7 +210,10 @@ export interface Suggestion {
 	/** The text to send for replies; the reviewer's login for reviews. */
 	text: string | null;
 	status: SuggestionStatus;
-	source: "worker" | "chat";
+	/** worker and chat: the master's; agent: a session's own request_sessions (ADR 0060). */
+	source: "worker" | "chat" | "agent";
+	/** The sessions a fanout starts; absent on every other kind. */
+	sessions?: FanoutSession[];
 	createdAt: number;
 	updatedAt: number;
 }

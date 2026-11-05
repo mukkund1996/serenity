@@ -10,6 +10,8 @@
  *                       the key "1" (or any line) → PostToolUse, then Stop
  *   "crash"           → exit 3 with no hook, like a crash
  *   "exit"            → SessionEnd, then exit
+ *   "fanout a,b [now]" → calls request_sessions on serenity's agent MCP
+ *                       server (--mcp-config), then Stop
  *   Ctrl+g            → "opened $EDITOR", as Claude Code opens the editor
  *   Ctrl+q            → "got Ctrl+q"; serenity's tmux binding should never
  *                       let it through
@@ -149,10 +151,13 @@ async function chat(): Promise<void> {
 	mcp?.stop();
 }
 
-/** Starts the MCP server named in --mcp-config and calls its tools. */
+/** Starts the MCP server named in --mcp-config (JSON, or a file of it) and calls its tools. */
 function startMcp(config: string | undefined) {
 	if (!config) return null;
-	const server = JSON.parse(config).mcpServers.serenity as {
+	const json = config.trimStart().startsWith("{")
+		? config
+		: readFileSync(config, "utf8");
+	const server = JSON.parse(json).mcpServers.serenity as {
 		command: string;
 		args: string[];
 		env: Record<string, string>;
@@ -283,6 +288,7 @@ async function interactive(): Promise<void> {
 		}
 		fire("UserPromptSubmit", { prompt: text });
 		registry.prompt(text);
+		if (text.startsWith("fanout ")) return void fanout(text);
 		if (text.includes("permission")) {
 			state = "permission";
 			fire("PermissionRequest", {
@@ -300,6 +306,30 @@ async function interactive(): Promise<void> {
 		fire("Stop", { last_assistant_message: reply });
 		statusLine();
 		process.stdout.write(`got: ${text}\r\n> `);
+	};
+
+	/**
+	 * "fanout a,b [now] …": calls request_sessions on serenity's agent MCP
+	 * server (ADR 0060), user_asked when "now" is there, then ends the turn.
+	 */
+	let agentMcp: ReturnType<typeof startMcp> = null;
+	const fanout = async (text: string) => {
+		agentMcp ??= startMcp(flag("--mcp-config"));
+		const names = (text.split(" ")[1] ?? "").split(",").filter(Boolean);
+		const result = agentMcp
+			? await agentMcp.call("request_sessions", {
+					sessions: names.map((name) => ({
+						name,
+						prompt: `You are ${name}. Reply with one line saying you are ready, then stop.`,
+					})),
+					reason: "e2e fan-out",
+					user_asked: / now\b/.test(text),
+				})
+			: "no mcp";
+		const reply = `Done: ${result}`;
+		registry.reply(reply);
+		fire("Stop", { last_assistant_message: reply });
+		process.stdout.write(`got: ${text}\r\n${reply}\r\n> `);
 	};
 
 	if (state === "ready") sendFirstPrompt();
