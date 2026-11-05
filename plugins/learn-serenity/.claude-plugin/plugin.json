@@ -1,0 +1,10 @@
+{
+	"name": "learn-serenity",
+	"description": "A hands-on tour of serenity, the terminal map of your Claude Code sessions: the map, the master, NEEDS YOU, the keys, sessions and PRs. Ask \"teach me how to use serenity\".",
+	"version": "1.0.0",
+	"author": { "name": "Mukkund Sunjii" },
+	"homepage": "https://getserenity.dev/docs/",
+	"repository": "https://github.com/mukkund1996/serenity",
+	"license": "MIT",
+	"keywords": ["claude-code", "serenity", "tutorial", "onboarding"]
+}

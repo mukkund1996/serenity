@@ -22,6 +22,9 @@ export const daemonCrashPath = (home: string) => join(home, "crash.json");
 export const crashReportsDir = (home: string) => join(home, "crash-reports");
 /** The plugin holding the master chat's skill, rewritten on every daemon start. */
 export const masterPluginPath = (home: string) => join(home, "master-plugin");
+/** The learn-serenity plugin for the first-boot tutorial session (ADR 0062), rewritten on every daemon start. */
+export const tutorialPluginPath = (home: string) =>
+	join(home, "tutorial-plugin");
 export const hookSettingsPath = (home: string) =>
 	join(home, "claude-hooks.json");
 /** `--mcp-config` of every agent session: `serenity mcp-agent` (ADR 0060). */

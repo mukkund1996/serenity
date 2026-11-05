@@ -14,9 +14,13 @@
 #                         file:/// URL to a directory. For CI and mirrors (ADR 0056):
 #                         the checksums come from the same place, so only point
 #                         it at a copy you trust.
+#   SERENITY_NO_OPEN=1    don't open the docs in a browser at the end (the URL
+#                         is printed either way; CI and machines with no
+#                         display never open it)
 set -eu
 
 REPO="mukkund1996/serenity"
+DOCS_URL="https://getserenity.dev/docs/"
 INSTALL_DIR="${SERENITY_INSTALL_DIR:-$HOME/.local/bin}"
 # The user's PATH, before installing Claude Code adds ~/.local/bin to ours.
 USER_PATH="$PATH"
@@ -160,6 +164,29 @@ install_serenity() {
 	say "Installed $INSTALL_DIR/serenity ($("$INSTALL_DIR/serenity" version))"
 }
 
+# ── docs ────────────────────────────────────────────────────────────────────
+# The browser command for this machine, or nothing when no browser should
+# open: opted out, CI, or no display (ADR 0062).
+browser_cmd() {
+	[ "${SERENITY_NO_OPEN:-}" = 1 ] && return 1
+	[ -n "${CI:-}" ] && return 1
+	if [ "$os" = darwin ]; then
+		# Over SSH there is no screen in front of the user, even if `open` works.
+		[ -z "${SSH_CONNECTION:-}" ] && [ -z "${SSH_TTY:-}" ] || return 1
+		has open && echo open
+	else
+		[ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ] || return 1
+		has xdg-open && echo xdg-open
+	fi
+}
+
+open_docs() {
+	printf 'Docs: %s\n' "$DOCS_URL"
+	cmd=$(browser_cmd) || return 0
+	[ -n "$cmd" ] || return 0
+	"$cmd" "$DOCS_URL" >/dev/null 2>&1 </dev/null || true
+}
+
 # Under `curl | sh` the rest of this script is on stdin: a package manager or
 # installer that reads stdin would swallow it, and sh would exit 0 halfway.
 [ "${SERENITY_NO_DEPS:-}" = 1 ] || install_tools </dev/null
@@ -174,4 +201,6 @@ case ":$USER_PATH:" in
 esac
 has gh && ! gh auth status >/dev/null 2>&1 && warn "log in to GitHub for PR status: gh auth login"
 say "Done. Run serenity inside any git repo."
+echo "New to serenity? The first map you open starts learn-serenity, a short tour."
+open_docs
 printf '\033[32m★\033[0m Enjoying serenity? Star it: https://github.com/%s\n' "$REPO"

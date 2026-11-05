@@ -87,6 +87,19 @@ export interface RecoveryState {
 	attached: Attachment[];
 	/** `session:pr` pairs already offered a reviewer, so a decline sticks. */
 	offeredReviews: string[];
+	/** The first-boot tutorial ran, or was skipped; it never runs again (ADR 0062). */
+	onboarding: Onboarded;
+}
+
+/** When and where the first-boot tutorial started (ADR 0062). */
+export interface Onboarded {
+	at: number;
+	/** The repo whose map it started on; null when it was skipped. */
+	repo: string | null;
+	/** The `learn-serenity` session; null when it was skipped or failed to start. */
+	sessionId: string | null;
+	/** Why there is no session: "existing sessions", "off", or the error. */
+	skipped?: string;
 }
 
 export interface RecoveryStore {

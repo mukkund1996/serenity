@@ -9,6 +9,11 @@
 			"name": "parallel-sessions",
 			"source": "./plugins/parallel-sessions",
 			"description": "Keep parallel Claude Code sessions tidy: one git worktree per task, safety checks before cleanup, and short handover notes."
+		},
+		{
+			"name": "learn-serenity",
+			"source": "./plugins/learn-serenity",
+			"description": "A hands-on tour of serenity: the map, the master, NEEDS YOU, the keys, sessions and PRs. serenity runs it on first boot; install it to take the tour again."
 		}
 	]
 }

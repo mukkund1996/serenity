@@ -79,6 +79,7 @@ The install script reads these environment variables:
 | `SERENITY_INSTALL_DIR` | `~/.local/bin` | Where the binary goes |
 | `SERENITY_NO_DEPS` | unset | Set to `1` to skip installing dependencies |
 | `SERENITY_DOWNLOAD_BASE` | the GitHub release | An `https://` or `file:///` URL to a directory holding a copy of a release's binaries and `SHA256SUMS`, for mirrors and CI. The checksums come from the same place, so only use a copy you trust |
+| `SERENITY_NO_OPEN` | unset | Set to `1` to not open the [docs](https://getserenity.dev/docs/) in your browser when the install finishes. They never open in CI or without a display; the URL is printed either way |
 
 ## Install the skill
 
@@ -100,6 +101,8 @@ serenity          # opens the map for this repo
 ```
 
 `serenity doctor` checks your setup. Press `N` to start a session, `?` for the full keymap.
+
+**First time?** The first map you open has one session on it, `learn-serenity`, prompted with "teach me how to use serenity". Press `Enter` on it for a hands-on tour: the map, sessions, NEEDS YOU, the master, PRs and the keys, one step at a time. It runs in the repo itself and changes nothing; press `K` on it when you're done and it won't come back. It only appears once per machine, and never if you already have sessions. Set `"onboarding": false` in the config or `SERENITY_NO_ONBOARDING=1` to skip it. To take the tour again, install the [learn-serenity](plugins/learn-serenity/) plugin (`/plugin install learn-serenity@serenity`) and ask any session "teach me how to use serenity" ([ADR 0062](docs/adr/0062-first-boot-tutorial.md)).
 
 | Command | What it does |
 |---------|--------------|
@@ -170,7 +173,8 @@ Config lives in `~/.config/serenity/config.json`. Every field is optional. `Ctrl
   "baseBranch": "default",
   "repos": { "~/projects/app": { "baseBranch": { "branch": "develop" } } },
   "slack": { "repos": ["~/projects/serenity"] },
-  "crashReports": { "enabled": true }
+  "crashReports": { "enabled": true },
+  "onboarding": true
 }
 ```
 
@@ -184,6 +188,7 @@ Config lives in `~/.config/serenity/config.json`. Every field is optional. `Ctrl
 | `slack.repos` | none | Repos whose maps show Slack mentions and DMs that need you ([ADR 0023](docs/adr/0023-slack-for-the-master.md), [0024](docs/adr/0024-slack-reply-suggestions.md), [0031](docs/adr/0031-slack-joins-needs-you.md), [0034](docs/adr/0034-dismiss-slack-items.md), [0050](docs/adr/0050-needs-you-seen-and-explicit-actions.md)); run `serenity slack login` once |
 | `crashReports.enabled` | `false` | File daemon crashes as GitHub issues through your `gh`, scrubbed of paths, tokens and emails, one issue per crash signature ([ADR 0045](docs/adr/0045-daemon-supervisor-crash-reports-recovery.md)). Reports are always kept in `crash-reports/` in the state directory |
 | `crashReports.repo` | `mukkund1996/serenity` | Where crash issues go |
+| `onboarding` | `true` | Start the `learn-serenity` tutorial on the first map you open ([ADR 0062](docs/adr/0062-first-boot-tutorial.md)); `false` skips it, as does `SERENITY_NO_ONBOARDING=1` |
 
 Model names are anything `claude --model` accepts (an alias like `sonnet` or a full model id). The daemon reads the file when it starts and again whenever the settings panel opens. From the panel, the base branch applies to new sessions; the summarizer and suggester models, max topics and Slack on the map apply at once. The master's chat model and its Slack tools change after `serenity restart`. After editing other fields by hand, run `serenity restart`.
 
