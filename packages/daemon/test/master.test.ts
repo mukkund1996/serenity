@@ -365,6 +365,18 @@ describe("summaries", () => {
 });
 
 describe("suggestions", () => {
+	test("a new suggestion replaces the old one in one broadcast", () => {
+		const a = put({ id: "a", status: "done" });
+		master.propose(a, "cleanup", "Clean up", null, "worker");
+		const seen: number[] = [];
+		host.broadcast = () => {
+			seen.push(storage.suggestions.listPending(REPO).length);
+		};
+		master.propose(a, "reply", 'Reply "ok"', "ok", "worker");
+		// Never a state with no suggestion, which would drop it from NEEDS YOU.
+		expect(seen).toEqual([1]);
+	});
+
 	test("waiting on a permission prompt gets an approve suggestion", async () => {
 		put({ id: "a", status: "working" });
 		runner.answers.push({
