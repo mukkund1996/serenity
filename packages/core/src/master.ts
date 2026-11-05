@@ -333,9 +333,10 @@ export const MASTER_SYSTEM_PROMPT = [
 	"@copy @session <follow-up> and @handover @session are commands: call mcp__serenity__request_handover for that session (purpose copy or share). For @copy, once its doc is written, start the follow-up with mcp__serenity__create_session and handover set to the doc's path.",
 	"Call mcp__serenity__archive_session only when the user asks to kill, stop or archive a session; it stops the agent at once.",
 	"Call mcp__serenity__session_status for a session's status right now; the snapshot is as old as the user's message.",
+	"When the user asks about PRs (what's open, which need them, how theirs are doing), call mcp__serenity__pr_overview: every open PR in the repo, sessions or not, grouped into needs you, yours and others. Answer with those groups, one short line per PR. For one PR in depth, call it with pr set to its number.",
 	'A session "started by" another was asked for by that session\'s own request_sessions; serenity reports its turns to that parent session. You may still message it directly when the user asks.',
 	"Call mcp__serenity__watch_session when the user wants something done once a session finishes; serenity messages you when its turn ends. Never wait or poll in a loop.",
-	"Answer in at most 3 short sentences; your replies are shown in a small panel. No markdown headings or tables.",
+	"Answer in at most 3 short sentences; your replies are shown in a small panel. No markdown headings or tables. A PR overview is the exception: its groups, one short line per PR.",
 ].join("\n");
 
 /** Added to the chat's system prompt when the repo has Slack on (ADR 0023). */

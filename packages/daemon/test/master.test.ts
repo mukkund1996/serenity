@@ -96,6 +96,7 @@ let opened: string[];
 let created: CreateSessionParams[];
 let replies: Array<{ name: string; text: string }>;
 let shared: SlackFileUpload[];
+let overviews: Array<number | null>;
 /** A temp dir per test: session worktrees and the handovers folder. */
 let tmp: string;
 let handovers: string;
@@ -103,6 +104,7 @@ let handovers: string;
 beforeEach(() => {
 	replies = [];
 	shared = [];
+	overviews = [];
 	tmp = mkdtempSync(join(tmpdir(), "srmaster-"));
 	handovers = join(tmp, "handovers");
 	killed = [];
@@ -144,6 +146,10 @@ beforeEach(() => {
 		shareSlackFile: async (share) => {
 			shared.push(share);
 			return "https://slack.test/file";
+		},
+		prOverview: async (_repo, pr) => {
+			overviews.push(pr);
+			return { text: pr === null ? "Open PRs: 0" : `#${pr} detail` };
 		},
 		pluginDir: "/tmp/master-plugin",
 		mcpConfig: () => "{}",
@@ -1701,5 +1707,23 @@ describe("handovers (ADR 0049)", () => {
 			expect((await share()).isError).toBe(true);
 			expect(shared).toEqual([]);
 		});
+	});
+});
+
+describe("pr_overview (ADR 0061)", () => {
+	test("needs no session: the overview without pr, one PR with it", async () => {
+		expect(await master.handleTool(REPO, "pr_overview", {})).toEqual({
+			text: "Open PRs: 0",
+		});
+		expect(await master.handleTool(REPO, "pr_overview", { pr: "#12" })).toEqual(
+			{ text: "#12 detail" },
+		);
+		expect(overviews).toEqual([null, 12]);
+	});
+
+	test("a pr that is not a number is refused", async () => {
+		const out = await master.handleTool(REPO, "pr_overview", { pr: "latest" });
+		expect(out.isError).toBe(true);
+		expect(overviews).toEqual([]);
 	});
 });

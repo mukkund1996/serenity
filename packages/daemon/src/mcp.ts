@@ -100,6 +100,21 @@ export const MCP_TOOLS = [
 		},
 	},
 	{
+		name: "pr_overview",
+		description:
+			'The repo\'s open PRs, every one and not only the sessions\' own, grouped: needs you (your review requested, your PR with changes requested, failing checks or ready to merge, or its session waiting on you), yours, others. Each with number, title, author, its session if any, checks and review state. Use when the user asks about PRs ("what PRs are open?", "which need me?", "how are my PRs?"). With pr, that one PR in depth: description, size, files, checks, reviews.',
+		inputSchema: {
+			type: "object",
+			properties: {
+				pr: {
+					type: "number",
+					description:
+						"A PR number, for that PR in depth; leave out for the overview",
+				},
+			},
+		},
+	},
+	{
 		name: "watch_session",
 		description:
 			'Hear when a session\'s turn ends, for something to do once it finishes ("tell me when api-auth is done", "post this to Slack when it finishes"). Returns at once; serenity sends you a message when the session stops working: finished, waiting on the user (it stays watched), or ended. One watch per session; a new one replaces it, cancel removes it. slack_text: a Slack message the user has just confirmed in the chat, character for character; it may be sent only once the session finishes.',
@@ -332,7 +347,7 @@ const TOOL_TIMEOUT_MS = 15 * 60_000;
 /** Waits between tries to reach the daemon, e.g. while it restarts; then the call fails. */
 const CONNECT_RETRY_MS = [250, 1_000, 3_000];
 /** Tools that change nothing, so a call cut off mid-way may be made again. */
-const READ_ONLY_TOOLS = new Set(["session_status"]);
+const READ_ONLY_TOOLS = new Set(["session_status", "pr_overview"]);
 
 type Peer = Pick<RpcPeer, "request" | "close">;
 

@@ -16,7 +16,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0008](0008-master-proposes-via-mcp.md) | Master only proposes; MCP tools for the Opus chat only | Amended by 0046, 0060 |
 | [0009](0009-storage-interface-sqlite.md) | SQLite behind a swappable storage interface | Accepted |
 | [0010](0010-worktrees-beside-repo.md) | New worktrees live beside the repo | Amended by 0058 |
-| [0011](0011-pr-status-via-gh.md) | PR status via `gh`, refreshed on events | Amended by 0043, 0055 |
+| [0011](0011-pr-status-via-gh.md) | PR status via `gh`, refreshed on events | Amended by 0043, 0055, 0061 |
 | [0012](0012-ux-decisions.md) | UX decisions not covered by the canvas | Amended by 0058 |
 | [0013](0013-testing-strategy.md) | Testing strategy | Accepted |
 | [0014](0014-distribution-and-release.md) | Distribution, release, licence, telemetry | Accepted |
@@ -66,6 +66,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0058](0058-settings-panel-and-base-branch.md) | A settings panel (`Ctrl+,`, or `,` on the map) saves a few config.json options through the daemon, applied live where it can; new worktrees branch off a per-repo or global base (repo default, the main checkout's branch, or a named one), with a fallback notice and a per-session override in the New session dialog | Accepted |
 | [0059](0059-topics-cards-fill-their-lanes.md) | Topic cards stretch to fill their side's lanes: a side holds as many lanes as fit a 36-column card, cards share one width up to 56, one-card bubbles share a shelf; padding tightened, so the master centres from about 164 columns | Accepted |
 | [0060](0060-agent-sessions-fan-out.md) | An agent session asks for new sessions with its own `request_sessions` MCP tool: they start at once when the user's latest prompt asked, otherwise as a fanout in NEEDS YOU; children nest under their parent on the map, follow its topic, report their turns to it and cannot fan out themselves | Accepted |
+| [0061](0061-master-pr-overview.md) | The master's `pr_overview` tool: every open PR in the repo, sessions or not, grouped into needs you, yours and others, one line each (number, title, author, session, checks, review, why it waits on you); with a number, one PR in depth; one cached `gh pr list`, and it says when gh is not logged in | Accepted |
 
 ## System at a glance
 
