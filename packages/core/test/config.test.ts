@@ -55,6 +55,14 @@ test("maxTopics is a positive whole number", () => {
 	expect(loadConfig(join(dir, "t0.json")).maxTopics).toBe(10);
 });
 
+test("the first-boot tutorial is on unless onboarding is false (ADR 0062)", () => {
+	expect(loadConfig(join(dir, "missing.json")).onboarding).toBe(true);
+	writeFileSync(join(dir, "o.json"), JSON.stringify({ onboarding: false }));
+	expect(loadConfig(join(dir, "o.json")).onboarding).toBe(false);
+	writeFileSync(join(dir, "o2.json"), JSON.stringify({ onboarding: "no" }));
+	expect(loadConfig(join(dir, "o2.json")).onboarding).toBe(true);
+});
+
 test("Slack is off unless repos list it; ~ and links resolve to real paths", () => {
 	expect(loadConfig(join(dir, "missing.json")).slack.repos).toEqual([]);
 	writeFileSync(

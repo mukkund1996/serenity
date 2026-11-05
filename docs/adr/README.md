@@ -67,6 +67,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0059](0059-topics-cards-fill-their-lanes.md) | Topic cards stretch to fill their side's lanes: a side holds as many lanes as fit a 36-column card, cards share one width up to 56, one-card bubbles share a shelf; padding tightened, so the master centres from about 164 columns | Accepted |
 | [0060](0060-agent-sessions-fan-out.md) | An agent session asks for new sessions with its own `request_sessions` MCP tool: they start at once when the user's latest prompt asked, otherwise as a fanout in NEEDS YOU; children nest under their parent on the map, follow its topic, report their turns to it and cannot fan out themselves | Accepted |
 | [0061](0061-master-pr-overview.md) | The master's `pr_overview` tool: every open PR in the repo, sessions or not, grouped into needs you, yours and others, one line each (number, title, author, session, checks, review, why it waits on you); with a number, one PR in depth; one cached `gh pr list`, and it says when gh is not logged in | Accepted |
+| [0062](0062-first-boot-tutorial.md) | The installer opens the docs (not in CI, without a display or with `SERENITY_NO_OPEN=1`); the first map on a machine gets a `learn-serenity` session, run once in the repo itself with the learn-serenity skill (also published as a plugin); `onboarding: false` or `SERENITY_NO_ONBOARDING=1` skips it | Accepted |
 
 ## System at a glance
 

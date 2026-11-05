@@ -47,6 +47,7 @@ import {
 	socketPath,
 	tmuxSessionName,
 	touchesPr,
+	tutorialPluginPath,
 	type Usage,
 	usageChanged,
 	WAIT_WINDOW_MS,
@@ -84,6 +85,7 @@ import {
 	MasterSupervisor,
 	writeMasterPlugin,
 } from "./master";
+import { Onboarding, writeTutorialPlugin } from "./onboarding";
 import { PrOverview } from "./pr-overview";
 import { PrWatcher, workDir } from "./prs";
 import { recoveryPlan } from "./recover";
@@ -264,6 +266,7 @@ export class Daemon {
 	private checkingTmux = false;
 	private readonly master: MasterSupervisor;
 	private readonly fanout: Fanout;
+	private readonly onboarding: Onboarding;
 	private readonly gh: Gh;
 	private readonly prs: PrWatcher;
 	private readonly reviews: ReviewWatcher;
@@ -395,6 +398,16 @@ export class Daemon {
 			send: async (session, text) =>
 				this.tmux.sendText(await this.requireLivePane(session), text),
 		});
+		this.onboarding = new Onboarding({
+			storage: opts.storage,
+			// Config `onboarding`, read again whenever the settings panel opens.
+			enabled: () =>
+				process.env.SERENITY_NO_ONBOARDING !== "1" && this.config.onboarding,
+			currentBranch,
+			create: (params, onId) => this.createSession(params, onId),
+			now: this.now,
+			log: this.log,
+		});
 		this.reviews = new ReviewWatcher({
 			gh: this.gh,
 			watching: (repo) =>
@@ -494,6 +507,7 @@ export class Daemon {
 			this.opts.home,
 		);
 		writeMasterPlugin(masterPluginPath(this.opts.home));
+		writeTutorialPlugin(tutorialPluginPath(this.opts.home));
 		const path = socketPath(this.opts.home);
 		if (existsSync(path)) rmSync(path);
 		await this.recover();
@@ -733,6 +747,8 @@ export class Daemon {
 				this.mapPanes.set(peer, clientPane);
 				void this.bindMapKeys(clientPane);
 			}
+			// First boot: the learn-serenity tutorial joins the map (ADR 0062).
+			void this.onboarding.mapOpened(repo);
 			this.prs.refreshRepo(repo);
 			this.prs.watch(repo);
 			this.reviews.watch(repo);
@@ -1274,8 +1290,12 @@ export class Daemon {
 			SERENITY_SESSION_ID: session.id,
 			SERENITY_HOME: this.opts.home,
 		};
+		// The tutorial loads its skill, on every launch (ADR 0062).
+		const plugins = this.onboarding.isTutorial(session.id)
+			? ["--plugin-dir", tutorialPluginPath(this.opts.home)]
+			: [];
 		const command = agentCommand(
-			[...this.claudeCommand, ...args],
+			[...this.claudeCommand, ...plugins, ...args],
 			hookSettingsPath(this.opts.home),
 			this.self,
 			prompt,
@@ -1686,7 +1706,11 @@ export class Daemon {
 		};
 	}
 
-	private async createSession(params: CreateSessionParams): Promise<Session> {
+	/** `onId` gets the new session's id before claude launches. */
+	private async createSession(
+		params: CreateSessionParams,
+		onId?: (id: string) => void,
+	): Promise<Session> {
 		const { repo, mode } = params;
 		const name = this.freeName(repo, params.name);
 
@@ -1759,6 +1783,7 @@ export class Daemon {
 			createdAt: at,
 			updatedAt: at,
 		};
+		onId?.(id);
 		session.tmuxPane = await this.launchAgent(
 			session,
 			[],

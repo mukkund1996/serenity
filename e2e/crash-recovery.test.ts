@@ -58,6 +58,8 @@ function envFor(home: string, extra: Record<string, string> = {}) {
 		SERENITY_TMUX_SOCKET: SOCKET,
 		SERENITY_CLAUDE_BIN: FAKE,
 		SERENITY_SELF: JSON.stringify([process.execPath, MAIN]),
+		// The first-boot tutorial would add a session to every map (ADR 0062).
+		SERENITY_NO_ONBOARDING: "1",
 		SERENITY_STARTUP_GRACE_MS: "300",
 		SERENITY_WORKER_DEBOUNCE_MS: "100",
 		SERENITY_GH_BIN: FAKE_GH,

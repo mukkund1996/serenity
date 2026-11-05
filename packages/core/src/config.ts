@@ -44,6 +44,11 @@ export interface Config {
 	baseBranch: BaseSetting;
 	/** Settings for one repo, keyed by its real path (`~` allowed in the file). */
 	repos: Record<string, { baseBranch?: BaseSetting }>;
+	/**
+	 * The first-boot tutorial (ADR 0062): a `learn-serenity` session on the
+	 * first map opened. False skips it; SERENITY_NO_ONBOARDING=1 does too.
+	 */
+	onboarding: boolean;
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -54,6 +59,7 @@ export const DEFAULT_CONFIG: Config = {
 	crashReports: { enabled: false, repo: "mukkund1996/serenity" },
 	baseBranch: "default",
 	repos: {},
+	onboarding: true,
 };
 
 const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
@@ -111,6 +117,7 @@ export function loadConfig(path = configPath()): Config {
 		crashReports?: { enabled?: unknown; repo?: unknown };
 		baseBranch?: unknown;
 		repos?: unknown;
+		onboarding?: unknown;
 	};
 	try {
 		raw = JSON.parse(readFileSync(path, "utf8"));
@@ -167,6 +174,7 @@ export function loadConfig(path = configPath()): Config {
 		},
 		baseBranch: parseBaseSetting(raw.baseBranch) ?? DEFAULT_CONFIG.baseBranch,
 		repos,
+		onboarding: raw.onboarding !== false,
 	};
 }
 
