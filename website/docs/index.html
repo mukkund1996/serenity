@@ -101,10 +101,10 @@
 <tr><td><a href="https://claude.com/claude-code">Claude Code</a></td><td>Logged in with a Claude subscription (Pro or Max, or a Team or Enterprise seat) or an Anthropic Console account. serenity uses that login; it has none of its own. See <a href="#usage">Usage and cost</a>.</td></tr>
 <tr><td><a href="https://github.com/tmux/tmux">tmux</a> 3.2 or later</td><td>Every session runs in a tmux pane.</td></tr>
 <tr><td>git</td><td>serenity is scoped to a git repo, and new sessions get their own worktree.</td></tr>
-<tr><td><a href="https://cli.github.com"><code>gh</code></a>, logged in</td><td>Run <code>gh auth login</code> once. Without it serenity still runs, but cards show no PR status.</td></tr>
+<tr><td><a href="https://cli.github.com"><code>gh</code></a></td><td>The first map offers to log it in (see <a href="#setup">First boot</a>). Without it serenity still runs, but cards show no PR status.</td></tr>
 </tbody>
 </table></div>
-<p>The install script installs tmux, git, <code>gh</code> and Claude Code if they are missing; Homebrew brings tmux, git and <code>gh</code> as dependencies. Logging in to Claude Code and <code>gh</code> is up to you. <code>serenity doctor</code> checks all of it.</p>
+<p>The install script installs tmux, git, <code>gh</code> and Claude Code if they are missing; Homebrew brings tmux, git and <code>gh</code> as dependencies. Logging in to Claude Code is up to you; the first map offers to log in <code>gh</code> and Slack. <code>serenity doctor</code> checks all of it.</p>
 </section>
 
 <!-- ============ INSTALL ============ -->
@@ -141,11 +141,22 @@
 <section id="start">
 <h2><a href="#start">Starting serenity</a></h2>
 <p>serenity is scoped to a repo: run it inside one and you get that repo's map.</p>
-<div class="d-cmd"><pre><span class="p">$ </span>gh auth login   <span class="c"># optional: PR status on cards</span>
-<span class="p">$ </span>cd ~/your/repo
+<div class="d-cmd"><pre><span class="p">$ </span>cd ~/your/repo
 <span class="p">$ </span>serenity        <span class="c"># opens the map for this repo</span></pre><button type="button" class="d-copy" aria-label="Copy the commands"><span class="done"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7fc77f" stroke-width="2" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span><span class="idle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg></span></button></div>
+<h3 id="setup">First boot: GitHub and Slack</h3>
+<p>The first map you open starts with <strong>Set up serenity</strong>: two logins serenity uses but doesn't own. Both are optional.</p>
+<ul>
+<li><strong>GitHub</strong>, through <code>gh</code>: PR badges and checks on cards, adding reviewers, the master's overview of the repo's PRs, and crash reports if you turn them on. Without it, cards show no PRs.</li>
+<li><strong>Slack</strong>: your mentions and DMs that need you, in NEEDS YOU, replies the master drafts (nothing is sent until you press <kbd>y</kbd>), and sharing handover docs. It's off by default; <a href="https://github.com/mukkund1996/serenity/blob/main/PRIVACY.md#what-is-sent-and-where">PRIVACY.md</a> says what it reads.</li>
+</ul>
+<p><kbd>Enter</kbd> runs a login in a popup over the map: gh's device flow for GitHub, and Claude Code's <code>claude mcp login</code> for Slack, which then turns Slack on for this repo. The panel checks again and shows who you're connected as. <kbd>s</kbd> skips a step, <kbd>o</kbd> opens the privacy notes, and <kbd>Esc</kbd> closes it. serenity never sees a token: gh and Claude Code keep their own.</p>
+<figure class="d-gif">
+<a class="d-gif-link" href="media/onboarding.gif" aria-label="Open the first boot GIF full size"><img src="media/onboarding.gif" width="1000" height="530" loading="lazy" decoding="async" alt="Running serenity in a new repo opens the map with the Set up serenity panel: GitHub not logged in, Slack not connected. Enter opens a popup running gh's device flow, and the panel shows GitHub connected as sam-demo. Enter on Slack opens a popup logging in through Claude Code; the panel shows Slack connected as Sam (Acme), on for this repo. Enter closes it onto the learn-serenity card, and Enter opens the tutorial, which says hello."></a>
+<figcaption>First boot: <kbd>Enter</kbd> logs in to GitHub, then Slack, then <kbd>Enter</kbd> on the tutorial.</figcaption>
+</figure>
+<p>To redo either later, press <kbd>Ctrl+,</kbd> (or <kbd>,</kbd> on the map): the settings show GITHUB › Login and SLACK › Login with their status, and <kbd>Enter</kbd> on one runs the same popup. From a shell, it's <code>serenity setup github</code> or <code>serenity setup slack</code>. <code>serenity doctor</code> shows both.</p>
 <h3 id="tutorial">The first-boot tutorial</h3>
-<p>The first map you open has one session on it, <code>learn-serenity</code>, prompted with <em>teach me how to use serenity</em>. Press <kbd>Enter</kbd> on it for a hands-on tour of the map, sessions, NEEDS YOU, the master, PRs and the keys. It goes one step at a time, asks you to try each one, and links back to this page. It runs in your repo without a worktree and changes nothing. Press <kbd>K</kbd> on it when you're done and it won't come back.</p>
+<p>Once you close the Setup panel, you land on the map's one session, <code>learn-serenity</code>, prompted with <em>teach me how to use serenity</em>. Press <kbd>Enter</kbd> on it for a hands-on tour of the map, sessions, NEEDS YOU, the master, PRs and the keys. It goes one step at a time, asks you to try each one, and links back to this page. It runs in your repo without a worktree and changes nothing. Press <kbd>K</kbd> on it when you're done and it won't come back.</p>
 <p>It appears once per machine, and not at all if you already have sessions. To skip it, set <code>"onboarding": false</code> in <code>~/.config/serenity/config.json</code> or <code>SERENITY_NO_ONBOARDING=1</code>. To take the tour again, install the <a href="https://github.com/mukkund1996/serenity/tree/main/plugins/learn-serenity">learn-serenity</a> plugin (<code>/plugin install learn-serenity@serenity</code>) and ask any session <em>teach me how to use serenity</em>.</p>
 <h3 id="import">Bring your existing sessions</h3>
 <p>Already using Claude Code? Bring those sessions onto the map, whether or not you use tmux. serenity finds them in Claude's own history (<code>~/.claude/projects</code>), which it only reads and never changes. Each one goes onto the map of the repo it ran in, worktrees included. An empty map tells you how many it found and points you to <kbd>I</kbd>.</p>
@@ -160,8 +171,9 @@
 <tbody>
 <tr><td><code>serenity</code></td><td>Open the map for the git repo you are in</td></tr>
 <tr><td><code>serenity import</code></td><td>Bring in your existing Claude Code sessions (<code>--help</code> for options)</td></tr>
-<tr><td><code>serenity doctor</code></td><td>Check tmux, claude, git and gh</td></tr>
-<tr><td><code>serenity slack login</code></td><td>Sign in to Slack for the master (once); asks to turn Slack on for the repo you are in</td></tr>
+<tr><td><code>serenity doctor</code></td><td>Check tmux, claude, git and gh, and who GitHub and Slack are logged in as</td></tr>
+<tr><td><code>serenity setup github</code></td><td>Log in to GitHub with <code>gh</code> (the Setup panel runs this)</td></tr>
+<tr><td><code>serenity setup slack</code></td><td>Log in to Slack for the master; asks to turn it on for the repo you are in. <code>serenity slack login</code> is the same</td></tr>
 <tr><td><code>serenity slack on</code> / <code>off</code> / <code>status</code></td><td>Show Slack on this repo's map, or not</td></tr>
 <tr><td><code>serenity restart</code></td><td>Restart the background daemon (sessions keep running)</td></tr>
 <tr><td><code>serenity stop</code></td><td>Stop the background daemon</td></tr>
@@ -243,7 +255,7 @@
 </tbody>
 </table></div>
 <p>Replies the master wants to send to a session wait in their own <strong>QUEUE</strong> under NEEDS YOU, so they never make an idle session look like it needs you. <kbd>Enter</kbd> shows the whole message, <kbd>y</kbd> sends it.</p>
-<p class="d-note"><strong>Slack is optional.</strong> Run <code>serenity slack login</code> once, then turn it on for a repo: <code>serenity slack on</code> inside it, or <kbd>Ctrl+,</kbd> → Slack on its map. (Advanced: the list lives under <code>slack.repos</code> in <code>~/.config/serenity/config.json</code>.) A Slack item drops out as soon as you write after it on Slack.</p>
+<p class="d-note"><strong>Slack is optional.</strong> Connect it in the Setup panel on first boot, under <kbd>Ctrl+,</kbd> → Slack › Login, or with <code>serenity setup slack</code>. Then turn it on for a repo: <code>serenity slack on</code> inside it, or <kbd>Ctrl+,</kbd> → Slack on its map. (Advanced: the list lives under <code>slack.repos</code> in <code>~/.config/serenity/config.json</code>.) A Slack item drops out as soon as you write after it on Slack.</p>
 </section>
 
 <!-- ============ MASTER ============ -->

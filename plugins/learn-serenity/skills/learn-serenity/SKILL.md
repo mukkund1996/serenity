@@ -58,7 +58,7 @@ Explain that `Enter` and `Ctrl+q` are how they move between the overview and a s
 
 ### 5. NEEDS YOU
 
-NEEDS YOU is the single list of what's waiting on the user: sessions asking a question or a permission, the master's suggestions, and (if they turn Slack on: `serenity slack login` once, then `serenity slack on` in the repo or Ctrl+, → Slack) mentions and DMs. The yellow **N need you** chip counts them. Everything else stays quiet.
+NEEDS YOU is the single list of what's waiting on the user: sessions asking a question or a permission, the master's suggestions, and (if they connected Slack in the Setup panel, or later with Ctrl+, → Slack) mentions and DMs. The yellow **N need you** chip counts them. Everything else stays quiet.
 
 Try it:
 1. On the map, focus `practice`, press `i` and send: `Ask me a yes/no question about this repo, then wait for my answer.`
@@ -82,7 +82,7 @@ Ask them what the master said. Docs: https://getserenity.dev/docs/#master and ht
 
 ### 7. Pull requests
 
-When a session pushes its branch and opens a PR (they can just ask the agent to), its card shows the PR and its checks through `gh`. `o` opens the PR in the browser. When a PR is ready, the master suggests a reviewer from CODEOWNERS. A merged PR finishes the session, and the master then suggests cleaning it up. If cards say there's no PR status, `gh auth login` fixes it.
+When a session pushes its branch and opens a PR (they can just ask the agent to), its card shows the PR and its checks through `gh`. `o` opens the PR in the browser. When a PR is ready, the master suggests a reviewer from CODEOWNERS. A merged PR finishes the session, and the master then suggests cleaning it up. If cards say there's no PR status, Ctrl+, → GitHub › Login logs in to GitHub.
 
 There's nothing to try here unless they want to. Ask whether they have questions. Docs: https://getserenity.dev/docs/#sessions (Pull requests)
 
