@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.11.0](https://github.com/mukkund1996/serenity/compare/v0.10.0...v0.11.0) (2026-11-05)
+
+
+### Features
+
+* agent sessions fan out into new sessions (ADR 0060) ([#101](https://github.com/mukkund1996/serenity/issues/101)) ([3c488b7](https://github.com/mukkund1996/serenity/commit/3c488b75a9b5db95ec4a8f47a5287ebf9f465e2b))
+* GitHub and Slack login steps in onboarding (ADR 0065) ([#113](https://github.com/mukkund1996/serenity/issues/113)) ([a6859ce](https://github.com/mukkund1996/serenity/commit/a6859ceec38a8b35a2153543ba4ec05852866666))
+* import past Claude Code sessions from any repo, without tmux (ADR 0064) ([#111](https://github.com/mukkund1996/serenity/issues/111)) ([6e7ae38](https://github.com/mukkund1996/serenity/commit/6e7ae38e39702c098c8c5e787ae1485f720879e8))
+* r checks session names in its dialog, and [@move](https://github.com/move) moves sessions to a topic (ADR 0063) ([#110](https://github.com/mukkund1996/serenity/issues/110)) ([39fa99f](https://github.com/mukkund1996/serenity/commit/39fa99f13e467a640e220b19b9cd7b3d85869599))
+* the installer opens the docs, and a learn-serenity tutorial on first boot (ADR 0062) ([#109](https://github.com/mukkund1996/serenity/issues/109)) ([f2d70d7](https://github.com/mukkund1996/serenity/commit/f2d70d7fdf581de58ab604fa6c7da71262033a35)), closes [#104](https://github.com/mukkund1996/serenity/issues/104)
+* the master gives an overview of the repo's PRs (ADR 0061) ([#107](https://github.com/mukkund1996/serenity/issues/107)) ([7d169eb](https://github.com/mukkund1996/serenity/commit/7d169ebd921d939b0172dc414e33d8b39c05b027)), closes [#105](https://github.com/mukkund1996/serenity/issues/105)
+
+
+### Bug Fixes
+
+* **daemon:** master turns always end in a reply, an error or a restart ([#106](https://github.com/mukkund1996/serenity/issues/106)) ([#108](https://github.com/mukkund1996/serenity/issues/108)) ([da553a6](https://github.com/mukkund1996/serenity/commit/da553a6643335279a1db0ed8b92eded04fa5c2bd))
+* **slack:** say how to turn Slack on, add serenity slack on|off|status ([#112](https://github.com/mukkund1996/serenity/issues/112)) ([1c39769](https://github.com/mukkund1996/serenity/commit/1c397697f0c3331d5d587d5e665932b02f075aca))
+* **tui:** show , settings in the map footer ([#114](https://github.com/mukkund1996/serenity/issues/114)) ([7ad5f5b](https://github.com/mukkund1996/serenity/commit/7ad5f5be994017eba8d237abd0ce2d6e140bd02a))
+
 ## [0.10.0](https://github.com/mukkund1996/serenity/compare/v0.9.0...v0.10.0) (2026-11-04)
 
 
