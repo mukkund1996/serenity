@@ -1654,8 +1654,17 @@ step(
 		expect(
 			tmux("list-windows", "-t", "=serenity-demo", "-F", "#{window_name}"),
 		).not.toContain("kid-c");
-		await selectNeed("lead");
-		await waitFor(/Start 1 session: kid-c/);
+		expect(needCount()).toBeGreaterThan(0);
+		// y on lead's own card: NEEDS YOU reorders as the children's reports
+		// come in, so a selection there can move under the key.
+		keys("/");
+		await waitFor(/name, topic or branch/);
+		type("lead");
+		await waitFor(/1 of 1/);
+		keys("Enter");
+		await until(() => !screen().includes("1 of 1"), "the search to close");
+		// The fanout comes before lead's other suggestions (its cleanup).
+		await waitFor(/◆ Start 1 session: kid-c/);
 		keys("y");
 		await until(
 			() =>
@@ -1672,7 +1681,6 @@ step(
 		});
 		await waitFor(/the user started kid-c/, "serenity-demo:lead");
 		await until(() => /(└ .*|↳ )kid-c/.test(screen()), "kid-c under lead");
-		keys("Escape");
 	},
 	STEP_TIMEOUT,
 );
