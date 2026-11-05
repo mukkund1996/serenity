@@ -162,3 +162,34 @@ describe("the tutorial plugin", () => {
 		);
 	});
 });
+
+describe("the first-boot Setup panel (ADR 0065)", () => {
+	test("opens after a first boot until it is closed, then never again", async () => {
+		const t = setup();
+		expect(t.onboarding.setupPending()).toBe(false);
+		await t.onboarding.mapOpened(REPO);
+		expect(t.onboarding.setupPending()).toBe(true);
+		t.onboarding.setupClosed();
+		expect(t.onboarding.setupPending()).toBe(false);
+		expect(t.storage.recovery.get("setup")).toEqual({ at: 7 });
+		t.onboarding.setupClosed();
+		expect(t.storage.recovery.get("setup")).toEqual({ at: 7 });
+	});
+
+	test("opens even when the tutorial failed to start", async () => {
+		const t = setup({ fail: "tmux is gone" });
+		await t.onboarding.mapOpened(REPO);
+		expect(t.onboarding.setupPending()).toBe(true);
+	});
+
+	test("never opens for an upgrade or with onboarding off", async () => {
+		const upgrade = setup();
+		upgrade.storage.sessions.put(makeSession({ id: "old", repo: REPO }));
+		await upgrade.onboarding.mapOpened(REPO);
+		expect(upgrade.onboarding.setupPending()).toBe(false);
+
+		const off = setup({ enabled: false });
+		await off.onboarding.mapOpened(REPO);
+		expect(off.onboarding.setupPending()).toBe(false);
+	});
+});

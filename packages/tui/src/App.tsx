@@ -85,6 +85,7 @@ import {
 import { PULSE_FRAME_MS, pulseEnd, pulsing } from "./pulse";
 import { QUEUE_ROW, QueueSection } from "./queue";
 import { SettingsPanel } from "./settings";
+import { SetupOverlay } from "./setup";
 import {
 	editField,
 	type Field,
@@ -139,6 +140,8 @@ type Overlay =
 	  }
 	| { kind: "rename"; sessionId: string }
 	| { kind: "settings" }
+	/** The Setup panel (ADR 0065): by itself on first boot, or from settings. */
+	| { kind: "setup"; firstBoot: boolean }
 	| null;
 
 /** The two zooms drawn here; the session zoom is an attached pane (design 1, 2, 3). */
@@ -158,6 +161,8 @@ export interface AppProps {
 }
 
 const PERM = "perm:";
+/** The first-boot tutorial's session (ADR 0062). */
+const TUTORIAL_NAME = "learn-serenity";
 /** A topic bubble's node id on the map, so no topic name clashes with MASTER. */
 const TOPIC = "topic:";
 /** The master panel's node id; every other node is a session card. */
@@ -1386,9 +1391,34 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				overlay?.kind !== "new" &&
 				overlay?.kind !== "import" &&
 				overlay?.kind !== "rename" &&
-				overlay?.kind !== "settings",
+				overlay?.kind !== "settings" &&
+				overlay?.kind !== "setup",
 		},
 	);
+
+	/**
+	 * First boot (ADR 0065): once the map has its state (so the daemon has
+	 * run onboarding), the Setup panel opens if it never closed before.
+	 */
+	const loaded = !!state;
+	useEffect(() => {
+		if (!loaded) return;
+		call("setup.pending", {}).then(
+			(pending) => {
+				if (pending) setOverlay((o) => o ?? { kind: "setup", firstBoot: true });
+			},
+			() => {},
+		);
+	}, [loaded, call]);
+
+	/** On first boot, the tutorial's card has the focus next, so Enter opens it. */
+	const closeSetup = (firstBoot: boolean) => {
+		setOverlay(null);
+		if (!firstBoot) return;
+		void call("setup.done", {}).catch(() => {});
+		const tutorial = state?.sessions.find((s) => s.name === TUTORIAL_NAME);
+		if (tutorial) focusNode(tutorial.id);
+	};
 
 	const importSessions = async (live: string[], past: string[]) => {
 		const adopted = live.length
@@ -1562,6 +1592,15 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 						resolveBase={() => call("base.resolve", { repo })}
 						onSubmit={createSession}
 						onClose={() => setOverlay(null)}
+					/>
+				</Centered>
+			) : null}
+			{overlay?.kind === "setup" ? (
+				<Centered rows={rows}>
+					<SetupOverlay
+						repo={repo}
+						call={call}
+						onClose={() => closeSetup(overlay.firstBoot)}
 					/>
 				</Centered>
 			) : null}

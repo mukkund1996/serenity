@@ -45,6 +45,25 @@ export class Onboarding {
 		return this.deps.storage.recovery.get("onboarding");
 	}
 
+	/**
+	 * Whether the first-boot Setup panel (ADR 0065) should open: onboarding
+	 * ran on this home (not an upgrade, not turned off) and the panel was
+	 * never closed. Asked after a map subscribed, so the record is there.
+	 */
+	setupPending(): boolean {
+		const record = this.record;
+		if (!record || !this.deps.enabled()) return false;
+		if (record.skipped === "existing sessions" || record.skipped === "off")
+			return false;
+		return !this.deps.storage.recovery.get("setup");
+	}
+
+	/** The Setup panel was closed, done or skipped; it won't open by itself again. */
+	setupClosed(): void {
+		if (!this.deps.storage.recovery.get("setup"))
+			this.deps.storage.recovery.set("setup", { at: this.deps.now() });
+	}
+
 	/** Whether `sessionId` is the tutorial, which gets the learn-serenity plugin. */
 	isTutorial(sessionId: string): boolean {
 		return !!sessionId && this.record?.sessionId === sessionId;

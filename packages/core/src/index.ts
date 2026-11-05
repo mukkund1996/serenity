@@ -19,6 +19,7 @@ export * from "./retry";
 export * from "./rpc";
 export * from "./self";
 export * from "./session-name";
+export * from "./setup";
 export * from "./slack";
 export * from "./status";
 export * from "./storage";

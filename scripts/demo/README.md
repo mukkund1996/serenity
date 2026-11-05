@@ -22,7 +22,9 @@ vhs scripts/demo/demo.tape
   really asks cart-badge and `@new` really starts a session.
 - `demo.ts`: `start` builds the world and waits until the sessions work,
   `play [name]` runs a timeline (`readme` by default), `attach` opens the
-  map, `stop` deletes it all.
+  map, `stop` deletes it all. `fresh` builds a first boot instead: an empty
+  repo and serenity home, and an `env.sh` that puts `serenity` and a
+  logged-out fake `gh` on PATH (the fake claude plays Slack's `mcp login`).
 - `demo.tape`: the README GIF's vhs script: size, theme, and the keys pressed.
 
 ## The docs page's GIFs
@@ -32,6 +34,7 @@ world off camera, presses the keys, and writes `website/docs/media/<name>.gif`:
 
 | Tape | Section | Shows |
 | --- | --- | --- |
+| `onboarding.tape` | First boot (and the README's) | `serenity` in a fresh home: the Setup panel logs in to GitHub and Slack in popups, then `Enter` on the tutorial |
 | `map.tape` | The map | moving between topics, `Z` into the topics, `Esc` out |
 | `sessions.tape` | Sessions | `/` to a card, `Enter` into its pane, `Ctrl+q` back |
 | `needs-you.tape` | NEEDS YOU | a permission prompt, a question and a Slack mention; `y`, `y`, `Enter`, `x` |
@@ -44,7 +47,7 @@ and the palette. `stop.tape` tears the world down. Record them all, or some,
 and compress them with gifsicle (needs `brew install vhs gifsicle`):
 
 ```bash
-sh scripts/demo/docs/record.sh             # all five
+sh scripts/demo/docs/record.sh             # all six
 sh scripts/demo/docs/record.sh mentions    # just one
 ```
 

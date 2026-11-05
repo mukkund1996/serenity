@@ -131,13 +131,15 @@ export function slackMessageKey(m: { channelId: string; ts: string }): string {
 /** How far back the inbox looks, and so how long a dismissal matters to it. */
 const INBOX_WINDOW_MS = 7 * 24 * 3600_000;
 
-export const SLACK_LOGIN_HINT = "Slack needs a login: run serenity slack login";
+export const SLACK_LOGIN_HINT =
+	"Slack needs a login: Ctrl+, then Slack, or run serenity setup slack";
 
 export const SLACK_INBOX_SCHEMA = {
 	type: "object",
 	properties: {
 		access: { type: "string", enum: ["ok", "no_access"] },
 		problem: { type: ["string", "null"] },
+		me: { type: ["string", "null"] },
 		items: {
 			type: "array",
 			items: {
@@ -170,7 +172,7 @@ export const SLACK_INBOX_SCHEMA = {
 			},
 		},
 	},
-	required: ["access", "problem", "items"],
+	required: ["access", "problem", "me", "items"],
 	additionalProperties: false,
 } as const;
 
@@ -209,6 +211,7 @@ export function slackInboxPrompt(
 		"- permalink: the message's link, or null.",
 		"- lastOwnTs: the ts of the user's newest message where they would have seen this one, or null if none: for a DM, anything the user wrote in that DM; for a message in a thread, the user's newest reply in that thread; otherwise the user's newest top-level message in that channel.",
 		"",
+		"me: the user's display name from their profile, with the workspace name in brackets, e.g. Sam (Acme); null if unknown.",
 		"access: no_access when the Slack tools are missing or fail with an authentication error, with the error in problem; otherwise ok and problem null.",
 	].join("\n");
 }
@@ -232,12 +235,13 @@ function line(text: string, max: number): string {
  */
 export function parseSlackInbox(
 	raw: unknown,
-): { items: SlackItem[]; error: string | null } | null {
+): { items: SlackItem[]; error: string | null; me: string | null } | null {
 	if (!raw || typeof raw !== "object") return null;
 	const r = raw as Record<string, unknown>;
 	if (r.access === "no_access")
 		return {
 			items: [],
+			me: null,
 			error:
 				typeof r.problem === "string" && /auth|login|token/i.test(r.problem)
 					? SLACK_LOGIN_HINT
@@ -277,8 +281,13 @@ export function parseSlackInbox(
 	const items = [...byThread.values()]
 		.sort((a, b) => b.at - a.at)
 		.slice(0, SLACK_LIMIT);
-	return { items, error: null };
+	const me =
+		typeof r.me === "string" && r.me.trim() ? line(r.me, NAME_SHOWN) : null;
+	return { items, error: null, me };
 }
+
+/** The user's own Slack name, as the Setup panel shows it. */
+const NAME_SHOWN = 40;
 
 // ------------------------------------------------------------ suggestions
 

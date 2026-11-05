@@ -52,11 +52,11 @@ serenity runs on your existing Claude Code login and subscription ([what it uses
 | **Fan-out** | An agent can split its work into new sessions with serenity's `request_sessions` tool. Ask it ("split this into 3 sessions") and they start at once; if it decides by itself, they wait in NEEDS YOU for `y`. They show under the agent that asked, report each finished turn back to it, and cannot fan out again. |
 | **Import** | Bring the Claude Code sessions you already have, no tmux needed: `I` on the map, `serenity import` in any terminal, or ask the master ("import my sessions from yesterday"). Past sessions arrive ended and `Enter` resumes one with `claude --resume` in its own folder; ones running in your tmux join in place. |
 | **Pinned sessions** | `p` pins a session you reuse: it is never marked finished or cleaned up, and resumes with `claude --resume` when you attach after it ended. |
-| **Slack (optional)** | Mentions and DMs that need you to act, at most three, join NEEDS YOU. The master proposes a follow-up from your sessions and PRs: a reply, a message to the session it is about, or a new session. `y` runs it, Enter marks it seen and opens it, `x` dismisses it. Messages you have written after on Slack drop out. Turn it on per repo: `serenity slack login` once, then `serenity slack on` in the repo (or `Ctrl+,` → Slack). |
+| **Slack (optional)** | Mentions and DMs that need you to act, at most three, join NEEDS YOU. The master proposes a follow-up from your sessions and PRs: a reply, a message to the session it is about, or a new session. `y` runs it, Enter marks it seen and opens it, `x` dismisses it. Messages you have written after on Slack drop out. Connect it from the Setup panel on first boot, from `Ctrl+,` → Slack › Login, or with `serenity setup slack`; then it's on per repo (`serenity slack on`, or `Ctrl+,` → Slack › This repo). |
 
 ## Install
 
-**Requirements:** macOS or Linux, [Claude Code](https://claude.com/claude-code) logged in with a Claude subscription (Pro or Max, or a Team or Enterprise seat) or an Anthropic Console account, [tmux](https://github.com/tmux/tmux) 3.2+, git, and [`gh`](https://cli.github.com) logged in (`gh auth login`). The install script installs tmux, git, gh and Claude Code if they are missing; logging in is up to you.
+**Requirements:** macOS or Linux, [Claude Code](https://claude.com/claude-code) logged in with a Claude subscription (Pro or Max, or a Team or Enterprise seat) or an Anthropic Console account, [tmux](https://github.com/tmux/tmux) 3.2+, git, and [`gh`](https://cli.github.com), which the first map offers to log in. The install script installs tmux, git, gh and Claude Code if they are missing; logging in is up to you.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mukkund1996/serenity/main/scripts/install.sh | sh
@@ -95,14 +95,17 @@ For claude.ai, build the upload zip with `bun run package:skill` ([details](plug
 ## Quick start
 
 ```bash
-gh auth login     # optional: PR status on cards (without it, cards say why)
 cd ~/your/repo
 serenity          # opens the map for this repo
 ```
 
 `serenity doctor` checks your setup. Press `N` to start a session, `?` for the full keymap.
 
-**First time?** The first map you open has one session on it, `learn-serenity`, prompted with "teach me how to use serenity". Press `Enter` on it for a hands-on tour: the map, sessions, NEEDS YOU, the master, PRs and the keys, one step at a time. It runs in the repo itself and changes nothing; press `K` on it when you're done and it won't come back. It only appears once per machine, and never if you already have sessions. Set `"onboarding": false` in the config or `SERENITY_NO_ONBOARDING=1` to skip it. To take the tour again, install the [learn-serenity](plugins/learn-serenity/) plugin (`/plugin install learn-serenity@serenity`) and ask any session "teach me how to use serenity" ([ADR 0062](docs/adr/0062-first-boot-tutorial.md)).
+**First time?** The first map you open starts with **Set up serenity**, two optional logins. **GitHub** (through `gh`) gives cards their PRs and checks, reviewers, the master's PR overview and crash reports. **Slack** puts your mentions and DMs that need you in NEEDS YOU, with replies the master drafts (see [PRIVACY.md](PRIVACY.md) for what it reads). `Enter` runs a login in a popup over the map, using gh's device flow or Claude Code's `claude mcp login`, then shows who you're connected as. `s` skips a step. Tokens stay with gh and Claude Code. You can redo either one later under `Ctrl+,` → GitHub or Slack, or with `serenity setup github|slack` ([ADR 0065](docs/adr/0065-setup-logins.md)).
+
+![First boot: the Setup panel logs in to GitHub and Slack in popups, then the learn-serenity tutorial](website/docs/media/onboarding.gif)
+
+Closing it puts you on the tutorial: one session, `learn-serenity`, prompted with "teach me how to use serenity". Press `Enter` on it for a hands-on tour: the map, sessions, NEEDS YOU, the master, PRs and the keys, one step at a time. It runs in the repo itself and changes nothing; press `K` on it when you're done and it won't come back. It only appears once per machine, and never if you already have sessions. Set `"onboarding": false` in the config or `SERENITY_NO_ONBOARDING=1` to skip it. To take the tour again, install the [learn-serenity](plugins/learn-serenity/) plugin (`/plugin install learn-serenity@serenity`) and ask any session "teach me how to use serenity" ([ADR 0062](docs/adr/0062-first-boot-tutorial.md)).
 
 **Already have Claude Code sessions?** Bring them along, whether or not you use tmux ([ADR 0064](docs/adr/0064-import-past-sessions.md)):
 
@@ -118,8 +121,9 @@ Or press `I` on the map (`g` in the picker adds every repo), or ask the master: 
 |---------|--------------|
 | `serenity` | Open the map for the git repo you are in |
 | `serenity import` | Bring in your existing Claude Code sessions (`--help` for options) |
-| `serenity doctor` | Check tmux, claude, git and gh |
-| `serenity slack login` | Sign in to Slack for the master (once); asks to turn Slack on for the repo you are in |
+| `serenity doctor` | Check tmux, claude, git and gh, and who GitHub and Slack are logged in as |
+| `serenity setup github` | Log in to GitHub with `gh` (the Setup panel runs this) |
+| `serenity setup slack` | Log in to Slack for the master; asks to turn it on for the repo you are in. `serenity slack login` is the same |
 | `serenity slack on` / `off` / `status` | Show Slack on this repo's map, or not (`serenity slack on ~/code/app` names another repo) |
 | `serenity restart` | Restart the background daemon (sessions keep running) |
 | `serenity stop` | Stop the background daemon |
@@ -197,7 +201,7 @@ Config lives in `~/.config/serenity/config.json`. Every field is optional. `Ctrl
 | `maxTopics` | `10` | How many topics the master groups sessions into |
 | `baseBranch` | `"default"` | What new session worktrees branch off: `"default"` (origin's HEAD), `"current"` (the branch the main checkout is on) or `{ "branch": "develop" }` (local first, else `origin/develop`). If it can't be followed, the repo default is used and the panel and New session dialog say why. The dialog's Base field overrides it for one session |
 | `repos.<path>.baseBranch` | none | The same, for one repo (`~` allowed); a repo without one follows `baseBranch` |
-| `slack.repos` | none | Repos whose maps show Slack mentions and DMs that need you. Easier: `serenity slack on` in the repo, or `Ctrl+,` → Slack, which write this list for you ([ADR 0023](docs/adr/0023-slack-for-the-master.md), [0024](docs/adr/0024-slack-reply-suggestions.md), [0031](docs/adr/0031-slack-joins-needs-you.md), [0034](docs/adr/0034-dismiss-slack-items.md), [0050](docs/adr/0050-needs-you-seen-and-explicit-actions.md)); run `serenity slack login` once |
+| `slack.repos` | none | Repos whose maps show Slack mentions and DMs that need you. Easier: `serenity slack on` in the repo, or `Ctrl+,` → Slack, which write this list for you ([ADR 0023](docs/adr/0023-slack-for-the-master.md), [0024](docs/adr/0024-slack-reply-suggestions.md), [0031](docs/adr/0031-slack-joins-needs-you.md), [0034](docs/adr/0034-dismiss-slack-items.md), [0050](docs/adr/0050-needs-you-seen-and-explicit-actions.md)); log in once with `serenity setup slack` |
 | `crashReports.enabled` | `false` | File daemon crashes as GitHub issues through your `gh`, scrubbed of paths, tokens and emails, one issue per crash signature ([ADR 0045](docs/adr/0045-daemon-supervisor-crash-reports-recovery.md)). Reports are always kept in `crash-reports/` in the state directory |
 | `crashReports.repo` | `mukkund1996/serenity` | Where crash issues go |
 | `onboarding` | `true` | Start the `learn-serenity` tutorial on the first map you open ([ADR 0062](docs/adr/0062-first-boot-tutorial.md)); `false` skips it, as does `SERENITY_NO_ONBOARDING=1` |

@@ -33,7 +33,7 @@ export function runChecks(): Check[] {
 		"--version",
 	]);
 	const git = output(["git", "--version"]);
-	const gh = output(["gh", "auth", "status"]);
+	const gh = output([process.env.SERENITY_GH_BIN ?? "gh", "--version"]);
 	return [
 		{
 			name: "tmux",
@@ -62,8 +62,8 @@ export function runChecks(): Check[] {
 			required: false,
 			ok: gh.ok,
 			detail: gh.ok
-				? "authenticated"
-				: "missing or not logged in · PR status needs it later (gh auth login)",
+				? (gh.text.split("\n")[0] ?? "")
+				: "not found · PRs on cards need it (brew install gh)",
 		},
 	];
 }

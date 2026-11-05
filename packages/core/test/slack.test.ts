@@ -141,7 +141,7 @@ test("a message's key is its channel and ts", () => {
 test("no access says how to log in when it is an auth problem", () => {
 	expect(
 		parseSlackInbox({ access: "no_access", problem: "needs auth", items: [] }),
-	).toEqual({ items: [], error: SLACK_LOGIN_HINT });
+	).toEqual({ items: [], error: SLACK_LOGIN_HINT, me: null });
 	expect(
 		parseSlackInbox({ access: "no_access", problem: "rate limited", items: [] })
 			?.error,
@@ -483,4 +483,21 @@ describe("confirmedReply", () => {
 		).toBe(false);
 		expect(confirmedReply([], "yes")).toBe(false);
 	});
+});
+
+test("the inbox read also names the user, for the Setup panel (ADR 0065)", () => {
+	expect(
+		parseSlackInbox({
+			access: "ok",
+			problem: null,
+			me: " Sam (Acme) ",
+			items: [],
+		})?.me,
+	).toBe("Sam (Acme)");
+	expect(
+		parseSlackInbox({ access: "ok", problem: null, me: null, items: [] })?.me,
+	).toBeNull();
+	expect(
+		parseSlackInbox({ access: "ok", problem: null, items: [] })?.me,
+	).toBeNull();
 });

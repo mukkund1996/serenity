@@ -11,6 +11,10 @@
  *                                    readme; the docs GIFs have their own)
  *   bun scripts/demo/demo.ts attach  attach this terminal to the map
  *   bun scripts/demo/demo.ts stop    stop serenity and delete the world
+ *   bun scripts/demo/demo.ts fresh   a first boot instead (onboarding.tape):
+ *                                    an empty repo and serenity home, with
+ *                                    `serenity` and a logged-out fake `gh` on
+ *                                    PATH; `source` the env.sh it writes
  */
 import { spawnSync } from "node:child_process";
 import {
@@ -64,6 +68,8 @@ const env: Record<string, string> = {
 	SERENITY_REVIEW_POLL_MS: "60000",
 	XDG_CONFIG_HOME: join(WORLD, "config"),
 	CLAUDE_CONFIG_DIR: join(WORLD, "claude"),
+	// The busy-world GIFs start with sessions; a first boot's tutorial would join them.
+	SERENITY_NO_ONBOARDING: "1",
 };
 
 function tmux(...args: string[]): string {
@@ -184,6 +190,58 @@ function makeWorld(): void {
 	}
 }
 
+/**
+ * A first boot (onboarding.tape): an empty repo, an empty serenity home and
+ * config, no doctor marker, and onboarding on. Writes env.sh, which puts
+ * `serenity` (this checkout) and the fake `gh`, logged out, on PATH.
+ */
+function fresh(): void {
+	stop();
+	const bin = join(WORLD, "bin");
+	for (const dir of [REPO_DIR, HOME, GH_DIR, bin, join(WORLD, "config")])
+		mkdirSync(dir, { recursive: true });
+	writeFileSync(join(GH_DIR, "logged-out"), "");
+	writeFileSync(SLACK, "[]");
+	const script = (name: string, body: string) =>
+		writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+	script("serenity", `exec "${process.execPath}" "${MAIN}" "$@"`);
+	script(
+		"gh",
+		`exec "${process.execPath}" "${join(ROOT, "e2e/fake-gh.ts")}" "$@"`,
+	);
+	const git = (...args: string[]) =>
+		spawnSync("git", ["-C", REPO_DIR, ...args], { encoding: "utf8" });
+	git("init", "-q", "-b", "main");
+	writeFileSync(join(REPO_DIR, "README.md"), "# acme-shop\n");
+	git("add", ".");
+	git(
+		"-c",
+		"user.name=demo",
+		"-c",
+		"user.email=demo@example.com",
+		"commit",
+		"-q",
+		"-m",
+		"init",
+	);
+	const { SERENITY_NO_ONBOARDING: _, ...firstBoot } = env;
+	const lines = Object.entries({
+		...firstBoot,
+		SERENITY_GH_BIN: join(bin, "gh"),
+		SERENITY_FAKE_GH_LOGIN: "sam-demo",
+		SERENITY_FAKE_GH_LOGIN_MS: "1500",
+		SERENITY_FAKE_SLACK_LOGIN: "Sam (Acme)",
+		SERENITY_FAKE_MCP_LOGIN_MS: "2000",
+		PATH: `${bin}:${process.env.PATH}`,
+	}).map(([k, v]) => `export ${k}=${JSON.stringify(v)}`);
+	writeFileSync(
+		join(WORLD, "env.sh"),
+		// Unset TMUX: recorded from inside tmux, `serenity` would think it ran in the map's.
+		`${lines.join("\n")}\nunset TMUX TMUX_PANE\nexport PS1='\\[\\e[2m\\]~/work/${REPO}\\[\\e[0m\\] $ '\ncd ${JSON.stringify(REPO_DIR)}\n`,
+	);
+	console.log(join(WORLD, "env.sh"));
+}
+
 async function start(): Promise<void> {
 	stop();
 	makeWorld();
@@ -283,9 +341,10 @@ else if (command === "play") await play(process.argv[3]);
 else if (command === "attach")
 	spawnSync("tmux", ["-L", SOCKET, "attach", "-t", MAP], { stdio: "inherit" });
 else if (command === "stop") stop();
+else if (command === "fresh") fresh();
 else {
 	console.error(
-		"usage: bun scripts/demo/demo.ts start|play [name]|attach|stop",
+		"usage: bun scripts/demo/demo.ts start|play [name]|attach|stop|fresh",
 	);
 	process.exit(2);
 }

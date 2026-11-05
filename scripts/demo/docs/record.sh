@@ -4,7 +4,7 @@
 # Needs vhs and gifsicle (brew install vhs gifsicle), tmux and bun.
 set -eu
 cd "$(dirname "$0")/../../.."
-[ $# -gt 0 ] || set -- map sessions needs-you master mentions
+[ $# -gt 0 ] || set -- onboarding map sessions needs-you master mentions
 for name in "$@"; do
 	echo "recording $name"
 	vhs "scripts/demo/docs/$name.tape"

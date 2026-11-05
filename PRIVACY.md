@@ -17,7 +17,7 @@ You can change the models with `models` in `~/.config/serenity/config.json`.
 
 **GitHub, through your `gh` login.** serenity reads your GitHub login, the pull request of each session's branch, the PRs waiting for your review, and the repo's CODEOWNERS file ([ADR 0011](docs/adr/0011-pr-status-via-gh.md)). It writes only two things. One is a reviewer you asked for, added when you press `y` on that suggestion. The other is a crash report, and only if you turn on `crashReports.enabled` (off by default). Crash reports are public issues on `mukkund1996/serenity`, with tokens, emails and paths removed first ([ADR 0045](docs/adr/0045-daemon-supervisor-crash-reports-recovery.md)). Every report is also saved in `crash-reports/` in the state directory, so you can see what would be sent.
 
-**Slack, only if you turn it on.** Slack is off until you list repos under `slack.repos` and run `serenity slack login` ([ADR 0023](docs/adr/0023-slack-for-the-master.md)).
+**Slack, only if you turn it on.** Slack is off until you connect it (the Setup panel on first boot, `Ctrl+,` → Slack, or `serenity setup slack`) and turn it on for a repo ([ADR 0023](docs/adr/0023-slack-for-the-master.md)).
 
 - **What it reads:** your own profile, messages from the last 7 days that @-mention you by name, your DMs and group DMs, the threads around them, people's names, and reactions. It uses read-only tools. It checks once a minute, and only while a map of a repo with Slack on is open.
 - **What it shows:** at most three messages that still need you to act ([ADR 0031](docs/adr/0031-slack-joins-needs-you.md)).
@@ -37,7 +37,7 @@ Claude Code keeps its own copy of the master chat, as it does for any session, u
 
 ## Tokens
 
-serenity stores no tokens. GitHub access is `gh`'s login. The Slack OAuth token comes from `claude mcp login`, so Claude Code stores it, as it does its own login: in the macOS Keychain on macOS, and in a file in `~/.claude` that only you can read on Linux. serenity never reads the token, and it never writes one to its database, log or crash reports.
+serenity stores no tokens. GitHub access is `gh`'s login: the Setup panel runs `gh auth login` for you and reads back only whether you're logged in and as whom ([ADR 0065](docs/adr/0065-setup-logins.md)). The Slack OAuth token comes from `claude mcp login` (which the Setup panel and `serenity setup slack` run), so Claude Code stores it, as it does its own login: in the macOS Keychain on macOS, and in a file in `~/.claude` that only you can read on Linux. serenity never reads the token, and it never writes one to its database, log or crash reports.
 
 ## Disconnect Slack and delete your data
 

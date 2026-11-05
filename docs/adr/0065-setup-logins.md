@@ -1,0 +1,29 @@
+# 0065 · GitHub and Slack logins in onboarding, settings and doctor
+
+**Status:** Accepted · 2026-11-05 · Amends [0062](0062-first-boot-tutorial.md), [0023](0023-slack-for-the-master.md)
+
+## Context
+serenity uses two logins it doesn't own. `gh` gives cards their PR status, adds reviewers, feeds the master's `pr_overview` (0061) and files crash reports (0045). Slack's MCP server, signed in through `claude mcp login`, feeds NEEDS YOU, drafted replies and handover sharing (0023, 0024, 0049).
+
+A recording of first boot (`scripts/demo/docs/onboarding.tape`) showed how a new user meets them:
+- The first-run doctor prints `! gh missing or not logged in` for less than a second before tmux takes the screen. Nobody can read it.
+- Slack is never mentioned. Turning it on means a shell command, then a switch in settings or `serenity slack on` (0023, #112).
+- On the first map the master has the focus, not the tutorial's card, so the `Enter` the tutorial asks for opens the master's input.
+
+## Decision
+- **Setup steps are a list.** `SETUP_STEPS` in `packages/core/src/setup.ts` holds each step's title, what it enables, what's missing without it, an optional link and its command. GitHub and Slack are the two steps today. The Setup panel, the settings panel and `serenity doctor` all read this list, so a new step (an import step, say) is one more entry plus its check.
+- **First boot opens a Setup panel on the map.** When onboarding ran on this home (0062), the first map shows the panel over the tutorial. `setup.pending` asks the daemon, and it is cheap. A `setup` record in the recovery store, written when the panel closes, keeps it from opening again. It never opens for a home that already had sessions (an upgrade), or with onboarding off. The panel shows one row per step: a status (`✓ connected as sam`, `○ not logged in`, `○ not connected · off for this repo`), what the step enables and, while it's not done, what's missing without it. `Enter` connects, `s` skips, `o` opens the privacy notes, and `Esc` closes. It starts at the first step left to do. Once the last step is done it stays open with both ✓, and `Enter` closes it. Closing moves the focus to the `learn-serenity` card, so the tutorial's `Enter` works.
+- **Logins run in a tmux popup, as `serenity setup github|slack`.** The map runs `tmux display-popup -E` over itself, with the map's environment passed on (`SERENITY_*`, `XDG_*`, `GH_*`, `CLAUDE_CONFIG_DIR`, `PATH`, `HOME`). The map keeps running underneath. When the popup closes, the panel checks again. The same commands work in a shell, and `serenity slack login` is `serenity setup slack` under its older name.
+  - **GitHub:** if `gh auth status --hostname github.com` passes, the step is done. Otherwise it runs `gh auth login --hostname github.com --web` (gh's device or browser flow) and checks again. The account comes from `gh auth status`'s output.
+  - **Slack:** if `claude mcp get slack` in serenity's workers folder says `✓ Connected`, the login is skipped. Otherwise the server is registered for the workers folder only, as before (0023), and `claude mcp login slack` runs, with `--no-browser` over SSH. From a panel, a connected Slack is then turned on for the map's repo through `config.set`, the settings panel's atomic write (0058). In a shell it asks first, as `serenity slack login` did (#112).
+- **"Connected as" comes from what gh and Slack already say.** For GitHub it is the gh account. For Slack, the inbox worker already reads the user's profile, so its schema gains `me` (display name and workspace), kept in memory. Until the first read after Slack is turned on, the status says `connected`. The panel looks again a few times over 15 seconds to pick up the name.
+- **What can and can't run without the user.** `gh auth status`, `claude mcp get`, `claude mcp add-json` and `claude mcp remove` run non-interactively, so the checks do. `gh auth login` needs a code typed into a browser, and `claude mcp login` needs an OAuth round trip in a browser to a local callback on port 3118 (with `--no-browser`, a pasted redirect URL). Neither can finish unattended, so both run in a terminal: the popup, or the user's shell. `/mcp` inside Claude Code would log in the user's own MCP config, not serenity's isolated workers folder (0007), so it isn't used.
+- **Re-runnable.** The settings panel (`Ctrl+,`) has GITHUB › Login and SLACK › Login rows with the same status, and `Enter` runs the same popup. SLACK › This repo still toggles the repo. `serenity doctor` lists both logins after the required checks and names the command for any that aren't done. The first-run doctor checks only that `gh` is installed, since its output is gone before anyone reads it.
+- **No tokens.** serenity runs gh's and Claude Code's own login commands and reads only their status output: whether they're logged in, the account name, and Slack's display name. Tokens stay in gh's and Claude Code's stores, as PRIVACY.md says.
+
+## Consequences
+- A new user is offered both logins before the tour, can see what each gives and what's missing without it, and can skip either. Nothing about Slack runs until they connect it.
+- Opening a panel runs `gh auth status` and `claude mcp get slack` (about a second, since the latter checks Slack's server). Opening a map runs neither.
+- A popup needs a tmux client attached to the map, which a map someone is looking at always has. Without one, the panel shows tmux's error and the shell commands still work.
+- The e2e fakes gained `gh auth status|login`, `gh --version` and `claude mcp add-json|remove|get|login` (`e2e/fake-mcp.ts`), and the fake inbox returns `me`.
+- The import step from 0064 can join `SETUP_STEPS`. Its action would open the `I` picker rather than a popup.

@@ -24,6 +24,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fakeMcp } from "../../e2e/fake-mcp";
 import { connectDaemon } from "../../packages/core/src/index";
 import {
 	CHAT,
@@ -31,6 +32,8 @@ import {
 	SESSIONS,
 	sessionIn,
 	TIMELINE,
+	TUTORIAL,
+	TUTORIAL_PROMPT,
 } from "./scenario";
 
 const args = process.argv.slice(2);
@@ -39,6 +42,8 @@ const flag = (name: string) => {
 	return at === -1 ? undefined : args[at + 1];
 };
 const emit = (msg: unknown) => process.stdout.write(`${JSON.stringify(msg)}\n`);
+
+if (args[0] === "mcp") await fakeMcp(args.slice(1));
 
 if (args.includes("--version")) {
 	console.log("0.0.0 (serenity demo claude)");
@@ -79,7 +84,12 @@ function answer(prompt: string, schema: string): unknown {
 			const fixture = process.env.SERENITY_FAKE_SLACK;
 			if (fixture) items = JSON.parse(readFileSync(fixture, "utf8"));
 		} catch {}
-		return { access: "ok", problem: null, items };
+		return {
+			access: "ok",
+			problem: null,
+			me: process.env.SERENITY_FAKE_SLACK_LOGIN ?? null,
+			items,
+		};
 	}
 
 	// A Slack follow-up: the scenario's, for the message in the prompt.
@@ -221,6 +231,16 @@ async function interactive(): Promise<void> {
 	const dashes = args.indexOf("--");
 	const brief = dashes === -1 ? undefined : args[dashes + 1];
 	if (brief) work(brief);
+	// The first-boot tutorial: one step of TUTORIAL per prompt.
+	let step = brief === TUTORIAL_PROMPT ? 0 : -1;
+	const teach = () => {
+		const text = TUTORIAL[step];
+		if (step < 0 || text === undefined) return false;
+		step++;
+		setTimeout(() => stop(text), 1_500);
+		return true;
+	};
+	teach();
 
 	let onPermission = false;
 	const approve = () => {
@@ -251,6 +271,7 @@ async function interactive(): Promise<void> {
 			process.exit(0);
 		} else if (text) {
 			work(text);
+			if (teach()) return;
 			const answer = scripted?.answer;
 			if (answer) setTimeout(() => stop(answer), 2_500);
 		}

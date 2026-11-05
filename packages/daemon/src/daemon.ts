@@ -40,6 +40,7 @@ import {
 	resumeArgs,
 	type Session,
 	type SettingsView,
+	type SetupStatus,
 	SLACK_SERVER,
 	STARTUP_ASK,
 	type Storage,
@@ -92,6 +93,7 @@ import { PrOverview } from "./pr-overview";
 import { PrWatcher, workDir } from "./prs";
 import { recoveryPlan } from "./recover";
 import { ReviewWatcher } from "./reviews";
+import { githubStatus, slackStatus } from "./setup";
 import { SlackWatcher } from "./slack";
 import { SlackAdvisor } from "./slack-advisor";
 import { uploadSlackFile } from "./slack-upload";
@@ -137,6 +139,11 @@ export interface DaemonOptions {
 	configPath?: string;
 	/** How often Slack is read while such a map is open; SERENITY_SLACK_POLL_MS overrides it. */
 	slackPollMs?: number;
+	/** The setup steps' checks (ADR 0065); default to asking gh and claude. */
+	setupChecks?: {
+		github(): Promise<SetupStatus>;
+		slack(on: boolean): Promise<SetupStatus>;
+	};
 }
 
 /** Width of the agent pane when attached: the right ⅔ (ADR 0004). */
@@ -269,6 +276,8 @@ export class Daemon {
 	private readonly fanout: Fanout;
 	private readonly onboarding: Onboarding;
 	private readonly gh: Gh;
+	/** What the last setup check found, to act when a step gets connected. */
+	private readonly setupSeen: { github?: boolean } = {};
 	private readonly prs: PrWatcher;
 	private readonly reviews: ReviewWatcher;
 	private readonly prOverview: PrOverview;
@@ -792,6 +801,15 @@ export class Daemon {
 			this.reloadConfig();
 			this.log(`settings: ${describeChange(change)}`);
 			return { view: await this.settingsView(repo), applies: applies(change) };
+		},
+
+		"setup.status": ({ repo }) => this.setupStatus(repo),
+
+		"setup.pending": () => this.onboarding.setupPending(),
+
+		"setup.done": () => {
+			this.onboarding.setupClosed();
+			return null;
 		},
 
 		"base.resolve": async ({ repo, override }) => {
@@ -1701,6 +1719,30 @@ export class Daemon {
 	/** Where a new worktree in `repo` branches off now (ADR 0058). */
 	private baseFor(repo: string, override?: string): Promise<ResolvedBase> {
 		return resolveBase(repo, baseSettingFor(this.config, repo), override);
+	}
+
+	/**
+	 * The setup steps, checked now (ADR 0065). A step that just got connected
+	 * is put to use at once: PRs are read again, Slack is read again.
+	 */
+	private async setupStatus(repo: string): Promise<SetupStatus[]> {
+		const on = this.slackRepos.has(repo);
+		const [github, slack] = await Promise.all([
+			this.opts.setupChecks?.github() ?? githubStatus(),
+			this.opts.setupChecks?.slack(on) ??
+				slackStatus({
+					claude: this.claudeCommand,
+					workers: join(this.opts.home, "workers"),
+					on,
+					user: this.slack.user(),
+				}),
+		]);
+		if (github.connected && this.setupSeen.github === false)
+			this.prs.refreshRepo(repo);
+		if (slack.connected && on && this.slack.state().error)
+			this.slack.refreshNow();
+		this.setupSeen.github = github.connected;
+		return [github, slack];
 	}
 
 	private async settingsView(repo: string): Promise<SettingsView> {
