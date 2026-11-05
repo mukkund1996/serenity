@@ -24,7 +24,6 @@
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { fakeMcp } from "../../e2e/fake-mcp";
 import { connectDaemon } from "../../packages/core/src/index";
 import {
 	CHAT,
@@ -43,7 +42,9 @@ const flag = (name: string) => {
 };
 const emit = (msg: unknown) => process.stdout.write(`${JSON.stringify(msg)}\n`);
 
-if (args[0] === "mcp") await fakeMcp(args.slice(1));
+// Loaded only for `claude mcp …`, so every other start stays as quick as before.
+if (args[0] === "mcp")
+	await (await import("../../e2e/fake-mcp")).fakeMcp(args.slice(1));
 
 if (args.includes("--version")) {
 	console.log("0.0.0 (serenity demo claude)");
