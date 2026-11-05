@@ -92,7 +92,7 @@ import {
 	isTyping,
 	splitAtNewline,
 } from "./text-input";
-import { askLine } from "./theme";
+import { askLine, masterTurnLabel } from "./theme";
 import {
 	type CardElement,
 	cardElements,
@@ -202,6 +202,21 @@ function usePulseClock(pings: Ping[]): number {
 }
 
 /**
+ * The clock the master's turn label reads (issue #106): it ticks each second
+ * while a turn runs, so its time counts up, and stops when it ends.
+ */
+function useTurnClock(running: boolean): number {
+	const [now, setNow] = useState(() => Date.now());
+	useEffect(() => {
+		if (!running) return;
+		setNow(Date.now());
+		const timer = setInterval(() => setNow(Date.now()), 1_000);
+		return () => clearInterval(timer);
+	}, [running]);
+	return now;
+}
+
+/**
  * State that key handlers read through `ref`, which a set updates at once.
  * Ink delivers each stdin chunk to the last rendered handler, so `i` and the
  * text typed right after it can both arrive before React re-renders.
@@ -304,6 +319,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const suggestions = state?.suggestions ?? [];
 	const permissions = state?.permissions ?? [];
 	const master: MasterState = state?.master ?? { status: "idle", error: null };
+	const turnNow = useTurnClock(!!master.turn);
+	const thinkingLabel = masterTurnLabel(master.turn, turnNow);
 	const pings = state?.pings ?? NO_PINGS;
 	const pulse = pulsing(pings, usePulseClock(pings));
 	const attached =
@@ -548,6 +565,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				master: {
 					focused: onMaster,
 					thinking: master.status === "thinking",
+					thinkingLabel,
 					error: master.error,
 					needCount: needs.length + permissions.length + slackItems.length,
 					queueCount: queue.length,
@@ -1442,6 +1460,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 								/>
 							}
 							pulse={pulse.master}
+							thinkingLabel={thinkingLabel}
 						/>
 					</Box>
 				) : null}

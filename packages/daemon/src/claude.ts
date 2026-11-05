@@ -86,6 +86,8 @@ const CHAT_SETTINGS = JSON.stringify({
 });
 
 const JSON_TIMEOUT_MS = 120_000;
+/** After claude exits, how long its last output may take to be read before the exit is reported. */
+export const EXIT_DRAIN_MS = 1_000;
 
 /**
  * Keeps the user's hooks, plugins and MCP servers out of the master's
@@ -188,26 +190,48 @@ export class CliClaudeRunner implements ClaudeRunner {
 			],
 			{ cwd: opts.cwd, stdin: "pipe", stdout: "pipe", stderr: "pipe" },
 		);
-		void readLines(proc.stdout, (line) => {
-			for (const event of parseChatLine(line)) onEvent(event);
-		});
-		const stderr = new Response(proc.stderr).text();
-		void proc.exited.then(async (code) =>
+		// Every line is read, even if handling one throws: stdout left unread
+		// fills its pipe and stalls claude.
+		const stdout = readLines(proc.stdout, (line) => {
+			for (const event of parseChatLine(line)) {
+				try {
+					onEvent(event);
+				} catch {}
+			}
+		}).catch(() => {});
+		const stderr = new Response(proc.stderr).text().catch(() => "");
+		void proc.exited.then(async (code) => {
+			// A child claude started (its MCP server, a Bash command left running)
+			// can hold stdout and stderr open after it exits, so the exit is not
+			// held back on them for longer than EXIT_DRAIN_MS (issue #106). The
+			// lines before it, such as a result, still come first.
+			const drain = Bun.sleep(EXIT_DRAIN_MS);
+			const [, tail] = await Promise.all([
+				Promise.race([stdout, drain]),
+				Promise.race([stderr, drain]),
+			]);
 			onEvent({
 				type: "exit",
 				code,
-				stderr: (await stderr).trim().slice(-300),
-			}),
-		);
+				stderr: (typeof tail === "string" ? tail : "").trim().slice(-300),
+			});
+		});
 		return {
 			send: (text) => {
+				// Writing to a process that has exited does not fail: it is lost.
+				if (proc.exitCode !== null || proc.signalCode !== null)
+					throw new Error(
+						`claude has exited (${proc.exitCode ?? proc.signalCode})`,
+					);
 				proc.stdin.write(
 					`${JSON.stringify({ type: "user", message: { role: "user", content: text } })}\n`,
 				);
 				proc.stdin.flush();
 			},
 			stop: () => {
-				proc.stdin.end();
+				try {
+					proc.stdin.end();
+				} catch {}
 				proc.kill();
 			},
 		};
@@ -222,6 +246,7 @@ export function parseChatLine(line: string): ChatEvent[] {
 		session_id?: string;
 		is_error?: boolean;
 		result?: string;
+		errors?: unknown;
 		message?: { content?: Array<{ type: string; text?: string }> };
 	};
 	try {
@@ -231,10 +256,16 @@ export function parseChatLine(line: string): ChatEvent[] {
 	}
 	if (msg.type === "system" && msg.subtype === "init" && msg.session_id)
 		return [{ type: "session", sessionId: msg.session_id }];
-	if (msg.type === "result")
-		return [
-			{ type: "result", isError: !!msg.is_error, text: msg.result ?? "" },
-		];
+	if (msg.type === "result") {
+		// An error result may have no text, only its kind (error_max_turns, ...).
+		const errors = Array.isArray(msg.errors)
+			? msg.errors.filter((e) => typeof e === "string").join("; ")
+			: "";
+		const text = msg.is_error
+			? msg.result || errors || msg.subtype || "unknown error"
+			: (msg.result ?? "");
+		return [{ type: "result", isError: !!msg.is_error, text }];
+	}
 	const texts: ChatEvent[] =
 		msg.type === "assistant"
 			? (msg.message?.content ?? [])

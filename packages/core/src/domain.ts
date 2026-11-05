@@ -295,6 +295,17 @@ export interface MasterState {
 	status: "idle" | "thinking";
 	/** Last failure (chat or worker), shown until the next success. */
 	error: string | null;
+	/** The chat's turn while one runs, so a long turn and a hung one look different (issue #106). */
+	turn?: MasterTurn;
+}
+
+/** A running master chat turn. */
+export interface MasterTurn {
+	startedAt: number;
+	/** The chat's last output (any stream line); startedAt until it has some. */
+	lastOutputAt: number;
+	/** What it waits on: the user's answer to a permission request, or one of serenity's tools. */
+	waitingOn: "you" | "tool" | null;
 }
 
 /**

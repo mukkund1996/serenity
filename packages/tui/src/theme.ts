@@ -1,5 +1,6 @@
 import type {
 	Color,
+	MasterTurn,
 	MentionKind,
 	PrTone,
 	Session,
@@ -117,6 +118,32 @@ export const TONE_COLOR: Record<PrTone, Color> = {
 	warn: "yellow",
 	quiet: "gray",
 };
+
+/** A short duration: "8s", "2m05s". */
+export function duration(ms: number): string {
+	const seconds = Math.floor(Math.max(0, ms) / 1000);
+	if (seconds < 60) return `${seconds}s`;
+	return `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+/** The master's output can pause this long before the map says it is quiet. */
+export const MASTER_QUIET_MS = 30_000;
+
+/**
+ * What the master's running turn shows (issue #106): how long it has worked,
+ * and how long it has been quiet once that is long enough to matter, so a
+ * long turn and a hung one look different. "thinking" with no turn.
+ */
+export function masterTurnLabel(
+	turn: MasterTurn | undefined,
+	now: number,
+): string {
+	if (!turn) return "thinking";
+	if (turn.waitingOn === "you")
+		return `waiting on you ${duration(now - turn.startedAt)}`;
+	const quiet = now - turn.lastOutputAt;
+	return `working ${duration(now - turn.startedAt)}${quiet >= MASTER_QUIET_MS && turn.waitingOn !== "tool" ? ` · quiet ${duration(quiet)}` : ""}`;
+}
 
 /** How long ago, in the largest whole unit: "now", "5m", "2h", "3d", "4w". */
 export function age(at: number, now: number): string {

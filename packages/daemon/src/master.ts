@@ -38,6 +38,7 @@ import {
 	type MasterRecord,
 	type MasterState,
 	type MasterToolResult,
+	type MasterTurn,
 	masterCommands,
 	mentionedSessions,
 	mentionsSession,
@@ -65,7 +66,7 @@ import {
 	turnEnded,
 	watchMessage,
 } from "@serenity/core";
-import type { ChatProcess, ClaudeRunner } from "./claude";
+import type { ChatEvent, ChatProcess, ClaudeRunner } from "./claude";
 import MASTER_SKILL from "./master-skill.md" with { type: "text" };
 import { prArg } from "./pr-overview";
 
@@ -122,7 +123,7 @@ export interface SlackFileUpload {
 const PERMISSION_TIMEOUT_MS = 10 * 60_000;
 
 /** A chat turn with no output for this long is hung: its process is killed and restarted (ADR 0046). */
-export const CHAT_HANG_MS = 5 * 60_000;
+export const CHAT_HANG_MS = 3 * 60_000;
 /** Waits before each restart of a chat that died mid-turn; after the last, it gives up. */
 export const CHAT_RESTART_BACKOFF_MS = [1_000, 5_000, 30_000];
 /** How long one of serenity's tools may run before the chat is told it timed out. */
@@ -143,6 +144,11 @@ interface Chat {
 	reply: string[];
 	/** Kills a turn that goes quiet for CHAT_HANG_MS. */
 	watchdog: ReturnType<typeof setTimeout> | null;
+	/** When the running turn was sent; 0 when none runs. */
+	turnStartedAt: number;
+	/** The last stream line: when, and what kind of event it was. */
+	lastOutputAt: number;
+	lastOutput: string;
 }
 
 /** A repo's chat that died mid-turn: how often it was restarted, and the pending restart. */
@@ -222,9 +228,26 @@ export class MasterSupervisor {
 			(this.running.get(repo) ?? 0) > 0 ||
 			!!this.chats.get(repo)?.thinking ||
 			!!this.restarts.get(repo)?.timer;
+		const turn = this.turn(repo);
 		return {
 			status: busy ? "thinking" : "idle",
 			error: this.errors.get(repo) ?? null,
+			...(turn ? { turn } : {}),
+		};
+	}
+
+	/** The chat's running turn, for the map: how long it has run and been quiet. */
+	private turn(repo: string): MasterTurn | null {
+		const chat = this.chats.get(repo);
+		if (!chat?.thinking) return null;
+		return {
+			startedAt: chat.turnStartedAt,
+			lastOutputAt: chat.lastOutputAt,
+			waitingOn: this.permissions(repo).length
+				? "you"
+				: this.toolCalls.get(repo)
+					? "tool"
+					: null,
 		};
 	}
 
@@ -656,6 +679,12 @@ export class MasterSupervisor {
 		if (!retry) this.created.delete(repo);
 		chat.thinking = true;
 		chat.reply = [];
+		chat.turnStartedAt = this.host.now();
+		chat.lastOutputAt = chat.turnStartedAt;
+		chat.lastOutput = "none";
+		this.host.log(
+			`master turn started for ${repo}: ${item.from === "you" ? "your message" : "serenity's message"}${retry ? " (sent again)" : ""}, ${this.record(repo).outbox.length - 1} more queued`,
+		);
 		this.arm(repo, chat);
 		this.host.broadcast(repo);
 		try {
@@ -674,10 +703,15 @@ export class MasterSupervisor {
 			chat.watchdog = null;
 			if (this.chats.get(repo) !== chat || !chat.thinking) return;
 			if (this.awaitsPermission(repo) || this.toolCalls.get(repo)) {
+				this.host.log(
+					`master turn for ${repo} quiet for ${this.since(chat.lastOutputAt)} but waits on ${this.awaitsPermission(repo) ? "a permission request" : "a serenity tool"}`,
+				);
 				this.arm(repo, chat);
 				return;
 			}
-			this.host.log(`master chat for ${repo} hung; restarting it`);
+			this.host.log(
+				`master chat for ${repo} hung (last output ${chat.lastOutput} ${this.since(chat.lastOutputAt)} ago, turn ran ${this.since(chat.turnStartedAt)}); restarting it`,
+			);
 			chat.process.stop();
 			this.ended(
 				repo,
@@ -696,6 +730,9 @@ export class MasterSupervisor {
 			thinking: false,
 			reply: [],
 			watchdog: null,
+			turnStartedAt: 0,
+			lastOutputAt: 0,
+			lastOutput: "none",
 		};
 		const slack = !!this.host.slack(repo);
 		chat.process = this.runner.startChat(
@@ -714,23 +751,19 @@ export class MasterSupervisor {
 			(event) => {
 				// A chat that was replaced (hung, or failed to take a message) is ignored.
 				if (this.chats.get(repo) !== chat) return;
-				if (chat.thinking && event.type !== "exit") this.arm(repo, chat);
-				if (event.type === "session") {
-					chat.started = true;
-					if (record.claudeSessionId !== event.sessionId) {
-						record.claudeSessionId = event.sessionId;
-						this.save(repo);
-					}
-				} else if (event.type === "text") {
-					chat.reply.push(event.text);
-				} else if (event.type === "result") {
-					this.turnDone(repo, chat, event.isError, event.text);
-				} else if (event.type === "exit") {
-					this.ended(
-						repo,
-						chat,
-						`master stopped (exit ${event.code}) ${event.stderr}`.trim(),
+				try {
+					this.onChatEvent(repo, record, chat, event);
+				} catch (error) {
+					// A turn must not be left thinking because handling one line failed.
+					const message =
+						error instanceof Error ? error.message : String(error);
+					this.host.log(
+						`master chat for ${repo} failed on ${event.type}: ${message}`,
 					);
+					if (this.chats.get(repo) === chat) {
+						chat.process.stop();
+						this.ended(repo, chat, `master failed (${message})`);
+					}
 				}
 			},
 		);
@@ -741,6 +774,36 @@ export class MasterSupervisor {
 		return chat;
 	}
 
+	private onChatEvent(
+		repo: string,
+		record: MasterRecord,
+		chat: Chat,
+		event: ChatEvent,
+	): void {
+		if (event.type !== "exit") {
+			chat.lastOutputAt = this.host.now();
+			chat.lastOutput = event.type;
+		}
+		if (chat.thinking && event.type !== "exit") this.arm(repo, chat);
+		if (event.type === "session") {
+			chat.started = true;
+			if (record.claudeSessionId !== event.sessionId) {
+				record.claudeSessionId = event.sessionId;
+				this.save(repo);
+			}
+		} else if (event.type === "text") {
+			chat.reply.push(event.text);
+		} else if (event.type === "result") {
+			this.turnDone(repo, chat, event.isError, event.text);
+		} else if (event.type === "exit") {
+			this.ended(
+				repo,
+				chat,
+				`master stopped (exit ${event.code}) ${event.stderr}`.trim(),
+			);
+		}
+	}
+
 	private turnDone(
 		repo: string,
 		chat: Chat,
@@ -749,6 +812,8 @@ export class MasterSupervisor {
 	): void {
 		if (chat.watchdog) clearTimeout(chat.watchdog);
 		chat.watchdog = null;
+		// The turn is over, so nothing in it still waits on the user.
+		this.denyPermissions(repo);
 		const text = chat.reply.join("\n\n") || resultText;
 		if (text)
 			this.host.storage.conversation.append({
@@ -758,10 +823,15 @@ export class MasterSupervisor {
 				at: this.host.now(),
 			});
 		chat.reply = [];
+		let silent = false;
 		if (chat.thinking) {
 			chat.thinking = false;
 			const answered = this.record(repo).outbox.shift();
 			this.save(repo);
+			this.host.log(
+				`master turn for ${repo} ended after ${this.since(chat.turnStartedAt)}${isError ? " with an error" : ""}${text ? "" : " without a reply"}`,
+			);
+			silent = !isError && !text && answered?.from === "you";
 			// @new means sessions start in this turn; a turn that asked instead is told once.
 			if (
 				!isError &&
@@ -775,6 +845,9 @@ export class MasterSupervisor {
 		}
 		this.restarts.delete(repo);
 		if (isError) this.errors.set(repo, `master: ${resultText.slice(0, 120)}`);
+		// The user asked something: an answer with no text must not look like none yet.
+		else if (silent)
+			this.errors.set(repo, "master finished without a reply; ask again");
 		else this.errors.delete(repo);
 		this.host.broadcast(repo);
 		this.pump(repo);
@@ -791,10 +864,11 @@ export class MasterSupervisor {
 		this.chats.delete(repo);
 		if (chat.watchdog) clearTimeout(chat.watchdog);
 		chat.watchdog = null;
-		this.host.log(`master chat for ${repo} ended: ${why}`);
+		this.host.log(
+			`master chat for ${repo} ended: ${why}${chat.thinking ? ` (mid-turn after ${this.since(chat.turnStartedAt)}, last output ${chat.lastOutput} ${this.since(chat.lastOutputAt)} ago)` : ""}`,
+		);
 		// Its MCP server went with it, so nothing can answer these.
-		for (const entry of [...this.pending.values()])
-			if (entry.permission.repo === repo) entry.resolve(false);
+		this.denyPermissions(repo);
 		const record = this.record(repo);
 		if (chat.resumed && !chat.started && record.claudeSessionId) {
 			this.host.log(
@@ -816,7 +890,10 @@ export class MasterSupervisor {
 			this.restarts.delete(repo);
 			this.errors.set(
 				repo,
-				`${why}; gave up after ${attempts - 1} restarts${lost?.from === "you" ? ", your message was not answered" : ""}`,
+				`${why}; gave up after ${attempts - 1} restarts${lost?.from === "you" ? ", your message was not answered" : ""}${record.outbox.length ? `; ${record.outbox.length} more wait for your next message` : ""}`,
+			);
+			this.host.log(
+				`master chat for ${repo} gave up: ${this.errors.get(repo)}`,
 			);
 			this.host.broadcast(repo);
 			return;
@@ -834,6 +911,20 @@ export class MasterSupervisor {
 		this.host.broadcast(repo);
 	}
 
+	/** Denies the repo's pending permission requests: nothing waits on them any more. */
+	private denyPermissions(repo: string): void {
+		for (const entry of [...this.pending.values()])
+			if (entry.permission.repo === repo) entry.resolve(false);
+	}
+
+	/** How long ago `at` was, for the log: "42s", "3m10s". */
+	private since(at: number): string {
+		const seconds = Math.max(0, Math.round((this.host.now() - at) / 1000));
+		return seconds < 60
+			? `${seconds}s`
+			: `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, "0")}s`;
+	}
+
 	// ---------------------------------------------------- tools from the chat
 
 	/**
@@ -846,9 +937,15 @@ export class MasterSupervisor {
 		name: string,
 		args: Record<string, unknown>,
 	): Promise<MasterToolResult> {
-		if (name === "request_permission")
+		if (name === "request_permission") {
+			this.host.log(
+				`master for ${repo} asks permission for ${String(args.tool_name ?? "a tool")}`,
+			);
 			return this.requestPermission(repo, args);
+		}
 		this.toolCalls.set(repo, (this.toolCalls.get(repo) ?? 0) + 1);
+		const started = this.host.now();
+		this.host.log(`master tool ${name} for ${repo} started`);
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const limit = SLOW_TOOL_TIMEOUT_MS[name] ?? TOOL_TIMEOUT_MS;
 		const timeout = new Promise<MasterToolResult>((resolve) => {
@@ -862,7 +959,11 @@ export class MasterSupervisor {
 			);
 		});
 		try {
-			return await Promise.race([this.runTool(repo, name, args), timeout]);
+			const out = await Promise.race([this.runTool(repo, name, args), timeout]);
+			this.host.log(
+				`master tool ${name} for ${repo} ${out.isError ? "failed" : "done"} after ${this.since(started)}`,
+			);
+			return out;
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			this.host.log(`master tool ${name} failed: ${message}`);

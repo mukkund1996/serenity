@@ -805,6 +805,7 @@ export function MasterPanel({
 	reply,
 	queue = null,
 	pulse = null,
+	thinkingLabel = "thinking",
 }: {
 	width: number;
 	sessions: Session[];
@@ -825,6 +826,8 @@ export function MasterPanel({
 	queue?: ReactNode;
 	/** The glow's colour while a session's answer lights it (ADR 0039, 0042). */
 	pulse?: Color | null;
+	/** Beside the spinner while it thinks, e.g. "working 1m05s" (issue #106). */
+	thinkingLabel?: string;
 }) {
 	const inner = width - 6;
 	const now = Date.now();
@@ -905,7 +908,14 @@ export function MasterPanel({
 			borderStyle={focused ? "bold" : "round"}
 			borderColor={pulse ?? (focused ? "whiteBright" : "magenta")}
 			width={width}
-			right={master.status === "thinking" ? <Spinner /> : undefined}
+			right={
+				master.status === "thinking" ? (
+					<Text>
+						<Text color="magenta">{thinkingLabel} </Text>
+						<Spinner />
+					</Text>
+				) : undefined
+			}
 		>
 			{sessions.length === 0 ? (
 				<>
