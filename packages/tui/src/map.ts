@@ -85,6 +85,8 @@ export type MasterItem =
 export interface MapMaster {
 	focused: boolean;
 	thinking: boolean;
+	/** What the header shows while thinking, e.g. "working 1m05s" (issue #106). */
+	thinkingLabel?: string;
 	error: string | null;
 	/** NEEDS YOU items, Slack's among them, plus permission requests. */
 	needCount: number;
@@ -445,7 +447,11 @@ function drawMaster(
 				: { fg: "magenta" },
 	);
 	canvas.text(x + 2, y, " ◆ master ", { fg: "magenta", bold: true });
-	if (m.thinking) canvas.text(x + w - 12, y, " thinking ", { fg: "magenta" });
+	if (m.thinking) {
+		// Right-aligned in the top border, clear of the title.
+		const label = ` ${truncate(m.thinkingLabel ?? "thinking", Math.max(0, w - 18))} `;
+		canvas.text(x + w - 2 - label.length, y, label, { fg: "magenta" });
+	}
 
 	const ix = x + 2;
 	const iw = w - 4;

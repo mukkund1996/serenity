@@ -62,6 +62,20 @@ function draw(
 }
 
 describe("drawMap", () => {
+	test("a running turn shows in the master's top border (issue #106)", () => {
+		const { canvas } = draw({
+			master: { thinking: true, thinkingLabel: "working 3m10s · quiet 2m40s" },
+		});
+		const top = canvas
+			.toString()
+			.split("\n")
+			.find((l) => l.includes("◆ master"));
+		expect(top).toContain(" working 3m10s · quiet 2m40s ");
+		expect(draw({ master: { thinking: true } }).canvas.toString()).toContain(
+			" thinking ",
+		);
+	});
+
 	test("master in the centre, topics as bubbles on both sides", () => {
 		const { canvas, master: box, rows } = draw();
 		const text = canvas.toString();

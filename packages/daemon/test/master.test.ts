@@ -1384,7 +1384,7 @@ describe("robustness (ADR 0046)", () => {
 		jest.advanceTimersByTime(1_000);
 		expect(runner.stops).toBe(1);
 		expect(master.state(REPO).error).toBe(
-			"master hung (no output for 5m); restarting (1/3)",
+			"master hung (no output for 3m); restarting (1/3)",
 		);
 		// The killed process's exit is not counted again.
 		exit();
@@ -1499,6 +1499,174 @@ describe("robustness (ADR 0046)", () => {
 		expect(
 			await master.handleTool(REPO, "open_session", { session: "api" }),
 		).toEqual({ text: "open_session failed: tmux is gone", isError: true });
+	});
+});
+
+describe("hangs (issue #106)", () => {
+	afterEach(() => jest.useRealTimers());
+
+	const result = (text = "ok") =>
+		runner.emit({ type: "result", isError: false, text });
+	/** The permission timeout: an unanswered request is denied after it. */
+	const PERMISSION_TIMEOUT_MS = 10 * 60_000;
+	const ask = () =>
+		master.handleTool(REPO, "request_permission", {
+			tool_name: "Bash",
+			input: { command: "make" },
+		});
+
+	test("a permission request never answered ends in a restart, not a forever-thinking turn", async () => {
+		jest.useFakeTimers();
+		master.message(REPO, "post it");
+		const asked = ask();
+		jest.advanceTimersByTime(PERMISSION_TIMEOUT_MS);
+		expect(JSON.parse((await asked).text).behavior).toBe("deny");
+		expect(runner.stops).toBe(0);
+		// The chat never goes on after the denial: it is hung.
+		jest.advanceTimersByTime(CHAT_HANG_MS);
+		expect(runner.stops).toBe(1);
+		expect(master.state(REPO).error).toContain("master hung");
+		jest.advanceTimersByTime(CHAT_RESTART_BACKOFF_MS[0] as number);
+		expect(runner.sent.at(-1)).toContain("User: post it");
+	});
+
+	test("a permission request left over from an ended turn does not keep the next one from hanging", async () => {
+		jest.useFakeTimers();
+		master.message(REPO, "first");
+		const stale = ask();
+		result("one");
+		expect(JSON.parse((await stale).text).behavior).toBe("deny");
+		expect(master.permissions(REPO)).toEqual([]);
+		master.message(REPO, "second");
+		jest.advanceTimersByTime(CHAT_HANG_MS);
+		expect(runner.stops).toBe(1);
+	});
+
+	test("a serenity tool that never finishes cannot keep the turn from hanging", async () => {
+		jest.useFakeTimers();
+		put({ name: "api", status: "idle" });
+		host.open = () => new Promise(() => {});
+		master.message(REPO, "open api");
+		const out = master.handleTool(REPO, "open_session", { session: "api" });
+		// The tool answers with a timeout at TOOL_TIMEOUT_MS, within the hang limit.
+		expect(TOOL_TIMEOUT_MS).toBeLessThan(CHAT_HANG_MS);
+		jest.advanceTimersByTime(TOOL_TIMEOUT_MS);
+		expect(await out).toMatchObject({ isError: true });
+		expect(master.state(REPO).turn?.waitingOn).toBeNull();
+		// The chat never goes on after the tool's answer: it is hung.
+		jest.advanceTimersByTime(CHAT_HANG_MS);
+		expect(runner.stops).toBe(1);
+	});
+
+	test("a chat that exits mid-turn without a result is restarted, not left thinking", () => {
+		jest.useFakeTimers();
+		master.message(REPO, "hello");
+		runner.emit({ type: "text", text: "Looking…" });
+		runner.emit({ type: "exit", code: 0, stderr: "" });
+		expect(master.state(REPO).error).toBe(
+			"master stopped (exit 0); restarting (1/3)",
+		);
+		jest.advanceTimersByTime(CHAT_RESTART_BACKOFF_MS[0] as number);
+		expect(runner.chatStarts).toBe(2);
+		expect(runner.sent.at(-1)).toContain("User: hello");
+	});
+
+	test("a reply to the user with no text shows an error instead of nothing", () => {
+		master.message(REPO, "watch api");
+		result("");
+		expect(master.state(REPO)).toEqual({
+			status: "idle",
+			error: "master finished without a reply; ask again",
+		});
+		master.message(REPO, "and now?");
+		result("All quiet.");
+		expect(master.state(REPO).error).toBeNull();
+	});
+
+	test("a turn of serenity's own may end without a reply", () => {
+		const s = put({ name: "api", status: "working" });
+		void master.handleTool(REPO, "watch_session", {
+			session: "api",
+			note: "tell me",
+		});
+		change(s.id, { status: "idle", lastAssistantMessage: "Done." });
+		expect(runner.sent.at(-1)).toContain("serenity: api is now idle");
+		result("");
+		expect(master.state(REPO).error).toBeNull();
+	});
+
+	test("an error while handling the chat's output ends the turn instead of leaving it thinking", () => {
+		jest.useFakeTimers();
+		master.message(REPO, "hello");
+		const append = storage.conversation.append.bind(storage.conversation);
+		storage.conversation.append = () => {
+			throw new Error("disk full");
+		};
+		result("hi");
+		storage.conversation.append = append;
+		expect(runner.stops).toBe(1);
+		expect(master.state(REPO).error).toBe(
+			"master failed (disk full); restarting (1/3)",
+		);
+		jest.advanceTimersByTime(CHAT_RESTART_BACKOFF_MS[0] as number);
+		expect(runner.sent.at(-1)).toContain("User: hello");
+	});
+
+	test("after giving up, the error says which messages still wait", () => {
+		jest.useFakeTimers();
+		master.message(REPO, "doomed");
+		master.message(REPO, "next");
+		for (const wait of CHAT_RESTART_BACKOFF_MS) {
+			runner.emit({ type: "exit", code: 1, stderr: "" });
+			jest.advanceTimersByTime(wait);
+		}
+		runner.emit({ type: "exit", code: 1, stderr: "" });
+		expect(master.state(REPO).error).toBe(
+			"master stopped (exit 1); gave up after 3 restarts, your message was not answered; 1 more wait for your next message",
+		);
+	});
+
+	test("the state shows how long the turn has run, its last output, and what it waits on", async () => {
+		let clock = 10_000;
+		host.now = () => clock;
+		master.message(REPO, "hello");
+		expect(master.state(REPO).turn).toEqual({
+			startedAt: 10_000,
+			lastOutputAt: 10_000,
+			waitingOn: null,
+		});
+		clock = 40_000;
+		runner.emit({ type: "activity" });
+		const asked = ask();
+		expect(master.state(REPO).turn).toEqual({
+			startedAt: 10_000,
+			lastOutputAt: 40_000,
+			waitingOn: "you",
+		});
+		master.answerPermission(master.permissions(REPO)[0]?.id as string, true);
+		await asked;
+		result("hi");
+		expect(master.state(REPO).turn).toBeUndefined();
+	});
+
+	test("the daemon log tells a turn's start, its tools, and how its process ended", async () => {
+		jest.useFakeTimers();
+		const lines: string[] = [];
+		host.log = (line) => lines.push(line);
+		put({ name: "api", status: "idle" });
+		master.message(REPO, "open api");
+		await master.handleTool(REPO, "open_session", { session: "api" });
+		runner.emit({ type: "activity" });
+		runner.emit({ type: "exit", code: 1, stderr: "boom" });
+		const log = lines.join("\n");
+		expect(log).toContain(
+			`master turn started for ${REPO}: your message, 0 more queued`,
+		);
+		expect(log).toContain(`master tool open_session for ${REPO} started`);
+		expect(log).toMatch(/master tool open_session for .* done after \d+s/);
+		expect(log).toMatch(
+			/master chat for .* ended: master stopped \(exit 1\) boom \(mid-turn after \d+s, last output activity \d+s ago\)/,
+		);
 	});
 });
 
