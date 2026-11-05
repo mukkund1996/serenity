@@ -45,8 +45,6 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { fakeMcp } from "./fake-mcp";
-
 const args = process.argv.slice(2);
 const flag = (name: string) => {
 	const at = args.indexOf(name);
@@ -54,7 +52,9 @@ const flag = (name: string) => {
 };
 const emit = (msg: unknown) => process.stdout.write(`${JSON.stringify(msg)}\n`);
 
-if (args[0] === "mcp") await fakeMcp(args.slice(1));
+// Loaded only for `claude mcp …`, so every other start stays as quick as before.
+if (args[0] === "mcp")
+	await (await import("./fake-mcp")).fakeMcp(args.slice(1));
 
 if (args.includes("--version")) {
 	console.log("0.0.0 (fake claude)");
