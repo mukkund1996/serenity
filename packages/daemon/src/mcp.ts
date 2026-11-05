@@ -4,6 +4,7 @@ import {
 	RpcError,
 	RpcErrorCode,
 	type RpcPeer,
+	StaleClientError,
 } from "@serenity/core";
 
 /**
@@ -439,7 +440,18 @@ async function forwardCall(
 ): Promise<MasterToolResult> {
 	for (let attempt = 0; ; attempt++) {
 		const retry = attempt < retryMs.length;
-		const peer = await connect().catch(() => null);
+		let peer: Peer | null;
+		try {
+			peer = await connect();
+		} catch (error) {
+			// Serenity was upgraded under this session: retrying won't help.
+			if (error instanceof StaleClientError)
+				return {
+					text: `serenity was upgraded while this session ran: ${error.message}`,
+					isError: true,
+				};
+			peer = null;
+		}
 		if (!peer) {
 			if (!retry)
 				return { text: "serenity's daemon is not running.", isError: true };

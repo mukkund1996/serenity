@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { StaleClientError } from "@serenity/core";
 import {
 	DaemonLink,
 	healthBadges,
@@ -130,6 +131,28 @@ test("a call waits for the reconnect, and gives up after its wait", async () => 
 	expect(await link.waitForPeer(10)).toBeNull();
 });
 
+test("an outdated map says so, never turns down, and starts no daemon", async () => {
+	let stale = false;
+	const { world } = make({
+		connect: async () => {
+			world.tries++;
+			if (stale) throw new StaleClientError("9.9.9+new");
+			const peer = new FakePeer();
+			world.peers.push(peer);
+			return peer;
+		},
+	});
+	await wait(10);
+	stale = true;
+	world.peers[0]?.close();
+	await wait(90);
+	expect(world.statuses).toEqual(["connected", "reconnecting", "outdated"]);
+	expect(world.starts).toBe(0);
+	stale = false;
+	await wait(10);
+	expect(world.statuses.at(-1)).toBe("connected");
+});
+
 test("stopping closes the peer and stops trying", async () => {
 	const { world, link } = make();
 	world.up = true;
@@ -153,6 +176,10 @@ test("header badges: yellow while reconnecting, red once down or failing", () =>
 	});
 	expect(linkBadge("down")).toEqual({
 		text: " daemon down · see daemon.log ",
+		color: "red",
+	});
+	expect(linkBadge("outdated")).toEqual({
+		text: " serenity was upgraded · restart this map ",
 		color: "red",
 	});
 	expect(
