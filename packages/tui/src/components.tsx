@@ -15,6 +15,7 @@ import {
 	actionLine,
 	commandHint,
 	mentionSegments,
+	preferFanout,
 	prLabel,
 	prLine,
 	prStatus,
@@ -874,7 +875,9 @@ export function MasterPanel({
 						<NeedItem
 							key={item.s.id}
 							session={item.s}
-							suggestion={suggestions.find((g) => g.sessionId === item.s.id)}
+							suggestion={preferFanout(
+								suggestions.filter((g) => g.sessionId === item.s.id),
+							)}
 							selected={selected === item.s.id}
 							reply={reply}
 							inner={inner}

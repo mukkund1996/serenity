@@ -31,7 +31,41 @@ export function hookSettings(selfCommand: string[]): object {
 	return {
 		hooks,
 		statusLine: { type: "command", command: `${base} statusline` },
+		// serenity decides itself whether a request waits for the user (ADR 0060).
+		permissions: { allow: [AGENT_TOOL_PERMISSION] },
 	};
+}
+
+/** The agent's request_sessions tool, as Claude Code names it. */
+export const AGENT_TOOL_PERMISSION = "mcp__serenity__request_sessions";
+
+/**
+ * The `--mcp-config` file of every agent session: `serenity mcp-agent`,
+ * which learns the session from SERENITY_SESSION_ID in claude's environment.
+ */
+export function agentMcpConfig(selfCommand: string[], home: string): object {
+	const [command, ...args] = selfCommand;
+	return {
+		mcpServers: {
+			serenity: {
+				type: "stdio",
+				command,
+				args: [...args, "mcp-agent"],
+				env: { SERENITY_HOME: home },
+			},
+		},
+	};
+}
+
+export function writeAgentMcpConfig(
+	path: string,
+	selfCommand: string[],
+	home: string,
+): void {
+	writeFileSync(
+		path,
+		`${JSON.stringify(agentMcpConfig(selfCommand, home), null, 2)}\n`,
+	);
 }
 
 /** The `$0` of an agent pane's wrapper shell, which marks a pane as serenity's in its start command. */
@@ -49,6 +83,11 @@ export function agentCommand(
 	selfCommand: string[],
 	/** A first prompt; after `--` so one starting with "-" is not a flag. */
 	prompt?: string,
+	/**
+	 * serenity's MCP server for the session (ADR 0060). Added to the user's
+	 * own servers, not in place of them.
+	 */
+	mcpConfigPath?: string,
 ): string[] {
 	const notify = [...selfCommand, "exited"].map(shellQuote).join(" ");
 	return [
@@ -59,6 +98,7 @@ export function agentCommand(
 		...claude,
 		"--settings",
 		settingsPath,
+		...(mcpConfigPath ? ["--mcp-config", mcpConfigPath] : []),
 		...(prompt ? ["--", prompt] : []),
 	];
 }

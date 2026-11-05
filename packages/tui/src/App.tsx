@@ -15,6 +15,7 @@ import {
 	mentionDraft,
 	needsYou,
 	type Ping,
+	preferFanout,
 	type Session,
 	type SlackItem,
 	type Suggestion,
@@ -330,12 +331,12 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		[sessions, suggestions],
 	);
 	const queueId = (g: Suggestion) => `${QUEUE_ROW}${g.id}`;
-	/** A card's suggestion, queued replies among them. */
+	/** A card's suggestion, queued replies among them; its own fanout request first (ADR 0060). */
 	const suggestionFor = (id: string | undefined): Suggestion | undefined =>
-		suggestions.find((g) => g.sessionId === id);
+		preferFanout(suggestions.filter((g) => g.sessionId === id));
 	/** A NEEDS YOU item's suggestion; its queued reply sits in the queue instead. */
 	const needSuggestionFor = (id: string | undefined): Suggestion | undefined =>
-		suggestions.find((g) => g.sessionId === id && !isQueued(g));
+		preferFanout(suggestions.filter((g) => g.sessionId === id && !isQueued(g)));
 	const onMaster = node === MASTER;
 	const bodyHeight = rows - 2;
 	const masterWidth = Math.max(38, Math.min(72, columns - 50));

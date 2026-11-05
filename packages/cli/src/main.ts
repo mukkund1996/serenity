@@ -37,7 +37,7 @@ usage:
   serenity version
 
 internal:
-  serenity daemon [--worker] | tui | hook <Event> | statusline | exited <code> | detach <pane> [master] | mcp <repo>`;
+  serenity daemon [--worker] | tui | hook <Event> | statusline | exited <code> | detach <pane> [master] | mcp <repo> | mcp-agent`;
 
 const home = serenityHome();
 
@@ -307,6 +307,12 @@ switch (command) {
 		if (!arg) fail("usage: serenity mcp <repo>");
 		const { runMcpProxy } = await import("@serenity/daemon");
 		await runMcpProxy(home, arg);
+		break;
+	}
+	case "mcp-agent": {
+		// Started by an agent session's claude (ADR 0060), which passes on its environment.
+		const { runAgentMcp } = await import("@serenity/daemon");
+		await runAgentMcp(home, process.env.SERENITY_SESSION_ID ?? "");
 		break;
 	}
 	case "statusline":

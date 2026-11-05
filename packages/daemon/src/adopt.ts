@@ -219,6 +219,7 @@ export class ClaudeObserver {
 				pinned: false,
 				exitNote: null,
 				dismissedAt: null,
+				parentId: null,
 				createdAt: at,
 				updatedAt: at,
 			};

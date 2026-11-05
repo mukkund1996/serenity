@@ -4,6 +4,7 @@ import {
 	type MasterMessage,
 	type MasterPermission,
 	mentionSegments,
+	nestedIn,
 	type Session,
 	type SlackItem,
 	type SlackSuggestion,
@@ -342,6 +343,7 @@ function drawBubble(
 			cursor,
 			focused,
 			input.pulse?.get(s.id) ?? null,
+			nestedIn(s, b.shown),
 		);
 		rows.push({ sessionId: s.id, x, y, w, h: 1 });
 		y++;
@@ -367,7 +369,10 @@ function drawBubble(
 	if (b.hidden) canvas.text(x + 4, y, `+${b.hidden} more`, DIM);
 }
 
-/** One agent: cursor, glyph, name, ⚑. Waiting rows are inverse yellow; a lit name glows magenta. */
+/**
+ * One agent: cursor, glyph, name, ⚑. Waiting rows are inverse yellow; a lit
+ * name glows magenta. A child under its parent hangs off it with └ (ADR 0060).
+ */
 function drawRow(
 	canvas: Canvas,
 	s: Session,
@@ -377,6 +382,7 @@ function drawRow(
 	cursor: boolean,
 	focused: boolean,
 	lit: Color | null,
+	nested = false,
 ): void {
 	const waiting = s.status === "waiting";
 	const base: Style = waiting ? { fg: "black", bg: "yellow" } : {};
@@ -389,6 +395,11 @@ function drawRow(
 		});
 	const g = glyph(s.status);
 	let col = x + 2;
+	if (nested)
+		col = canvas.text(col, y, "└ ", {
+			...base,
+			fg: waiting ? "black" : "gray",
+		});
 	if (g)
 		col = canvas.text(col, y, `${g.ch} `, {
 			...base,

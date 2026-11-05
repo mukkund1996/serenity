@@ -205,7 +205,10 @@ export function applySummary(
 	const hold = typing || session.status === "working";
 	const patch: Partial<Session> = {
 		summary: result.summary,
-		...(session.pinned ? {} : heldTopic(session, result.topic, hold)),
+		// A child follows its parent's topic (ADR 0060).
+		...(session.pinned || session.parentId
+			? {}
+			: heldTopic(session, result.topic, hold)),
 	};
 	if (session.status !== "idle") return patch;
 	if (result.ask) {
@@ -330,6 +333,7 @@ export const MASTER_SYSTEM_PROMPT = [
 	"@copy @session <follow-up> and @handover @session are commands: call mcp__serenity__request_handover for that session (purpose copy or share). For @copy, once its doc is written, start the follow-up with mcp__serenity__create_session and handover set to the doc's path.",
 	"Call mcp__serenity__archive_session only when the user asks to kill, stop or archive a session; it stops the agent at once.",
 	"Call mcp__serenity__session_status for a session's status right now; the snapshot is as old as the user's message.",
+	'A session "started by" another was asked for by that session\'s own request_sessions; serenity reports its turns to that parent session. You may still message it directly when the user asks.',
 	"Call mcp__serenity__watch_session when the user wants something done once a session finishes; serenity messages you when its turn ends. Never wait or poll in a loop.",
 	"Answer in at most 3 short sentences; your replies are shown in a small panel. No markdown headings or tables.",
 ].join("\n");
@@ -366,10 +370,13 @@ function sessionSnapshot(
 	suggestions: Suggestion[],
 ): string {
 	if (!sessions.length) return "Sessions: none yet.";
+	const names = new Map(sessions.map((s) => [s.id, s.name]));
 	const lines = sessions.map((s) => {
 		const parts = [
 			`- ${s.name} [${topicOf(s)}] ${s.status}${s.waitingOn ? ` on ${s.waitingOn}` : ""}`,
 		];
+		const parent = s.parentId ? names.get(s.parentId) : undefined;
+		if (parent) parts.push(`started by ${parent}, which hears its turns`);
 		if (s.ask) parts.push(`asks: ${s.ask}`);
 		if (s.pr || s.prError) parts.push(prLine(s));
 		if (s.summary) parts.push(`summary: ${s.summary}`);

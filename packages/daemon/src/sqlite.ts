@@ -88,6 +88,7 @@ const SESSION_DEFAULTS: Pick<
 	| "dismissedAt"
 	| "subagents"
 	| "topicHeld"
+	| "parentId"
 > = {
 	waitingOn: null,
 	waitingSince: null,
@@ -103,6 +104,7 @@ const SESSION_DEFAULTS: Pick<
 	dismissedAt: null,
 	subagents: [],
 	topicHeld: null,
+	parentId: null,
 };
 
 /** Rows written before "category" was renamed to "topic". */

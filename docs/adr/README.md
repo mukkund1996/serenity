@@ -11,9 +11,9 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0003](0003-hybrid-rendering.md) | Hybrid rendering: cell canvas for the map, Ink for panels | Accepted |
 | [0004](0004-sessions-in-tmux-panes.md) | Claude Code sessions run in tmux panes | Amended by 0051, 0053 |
 | [0005](0005-daemon-and-json-rpc.md) | Background daemon, JSON-RPC over a unix socket, scoped per repo | Amended by 0043, 0045 |
-| [0006](0006-status-from-hooks.md) | Session status from Claude Code hooks, plus an exit report | Amended by 0044 |
+| [0006](0006-status-from-hooks.md) | Session status from Claude Code hooks, plus an exit report | Amended by 0044, 0060 |
 | [0007](0007-master-roles-and-models.md) | Master = Opus stream + Haiku/Sonnet one-shot workers via the claude CLI | Amended by 0046, 0047 |
-| [0008](0008-master-proposes-via-mcp.md) | Master only proposes; MCP tools for the Opus chat only | Amended by 0046 |
+| [0008](0008-master-proposes-via-mcp.md) | Master only proposes; MCP tools for the Opus chat only | Amended by 0046, 0060 |
 | [0009](0009-storage-interface-sqlite.md) | SQLite behind a swappable storage interface | Accepted |
 | [0010](0010-worktrees-beside-repo.md) | New worktrees live beside the repo | Amended by 0058 |
 | [0011](0011-pr-status-via-gh.md) | PR status via `gh`, refreshed on events | Amended by 0043, 0055 |
@@ -65,6 +65,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0057](0057-x-only-dismisses-needs-you-items.md) | `x` on any NEEDS YOU item only dismisses it: a session is hidden (a waiting one too, until it asks something new) with its ◆ suggestion declined, the master's permission request hidden but left pending; a card's `x` still cleans up | Accepted |
 | [0058](0058-settings-panel-and-base-branch.md) | A settings panel (`Ctrl+,`, or `,` on the map) saves a few config.json options through the daemon, applied live where it can; new worktrees branch off a per-repo or global base (repo default, the main checkout's branch, or a named one), with a fallback notice and a per-session override in the New session dialog | Accepted |
 | [0059](0059-topics-cards-fill-their-lanes.md) | Topic cards stretch to fill their side's lanes: a side holds as many lanes as fit a 36-column card, cards share one width up to 56, one-card bubbles share a shelf; padding tightened, so the master centres from about 164 columns | Accepted |
+| [0060](0060-agent-sessions-fan-out.md) | An agent session asks for new sessions with its own `request_sessions` MCP tool: they start at once when the user's latest prompt asked, otherwise as a fanout in NEEDS YOU; children nest under their parent on the map, follow its topic, report their turns to it and cannot fan out themselves | Accepted |
 
 ## System at a glance
 

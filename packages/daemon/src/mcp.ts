@@ -214,6 +214,55 @@ export const MCP_TOOLS = [
 	},
 ] as const;
 
+/**
+ * Tools of `serenity mcp-agent` (ADR 0060), the MCP server every agent
+ * session gets: the one way an agent asks for more sessions.
+ */
+export const AGENT_MCP_TOOLS = [
+	{
+		name: "request_sessions",
+		description:
+			"Ask serenity to start new Claude Code sessions for parts of your work, each in its own worktree on a new branch, shown on the user's map under you. Use when the user asks you to split work into sessions, fan out or run things in parallel, or when a task clearly divides into independent parts that would each take a long time. Each new session sees nothing of this conversation: give each a self-contained prompt (goal, files or area, constraints, what done looks like, whether to open a PR). If the user's latest message asked for sessions, set user_asked and they start at once; otherwise they wait in NEEDS YOU until the user presses y. serenity tells you in this conversation when each one finishes a turn; don't poll or wait for them. Sessions started this way cannot fan out themselves.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				sessions: {
+					type: "array",
+					maxItems: 5,
+					items: {
+						type: "object",
+						properties: {
+							name: {
+								type: "string",
+								description:
+									"Session name, also its branch and worktree: letters, digits, . _ - (max 40), e.g. api-auth-tests",
+							},
+							prompt: {
+								type: "string",
+								description:
+									"Its first message; self-contained, since it sees nothing of this conversation",
+							},
+						},
+						required: ["name", "prompt"],
+					},
+				},
+				reason: {
+					type: "string",
+					description: "One line for the user: why these sessions",
+				},
+				user_asked: {
+					type: "boolean",
+					description:
+						"true only if the user's latest message asked for new sessions",
+				},
+			},
+			required: ["sessions", "reason"],
+		},
+	},
+] as const;
+
+type Tool = { name: string; description: string; inputSchema: object };
+
 type Message = {
 	jsonrpc: "2.0";
 	id?: number | string;
@@ -229,6 +278,7 @@ type CallTool = (
 export async function handleMcpMessage(
 	msg: Message,
 	callTool: CallTool,
+	tools: readonly Tool[] = MCP_TOOLS,
 ): Promise<object | null> {
 	if (msg.id === undefined) return null;
 	const reply = (result: object) => ({ jsonrpc: "2.0", id: msg.id, result });
@@ -241,7 +291,7 @@ export async function handleMcpMessage(
 				serverInfo: { name: "serenity", version: "1" },
 			});
 		case "tools/list":
-			return reply({ tools: MCP_TOOLS });
+			return reply({ tools });
 		case "tools/call": {
 			const name = String(msg.params?.name ?? "");
 			const raw = msg.params?.arguments ?? {};
@@ -291,12 +341,52 @@ type Peer = Pick<RpcPeer, "request" | "close">;
  * nothing was sent yet; a connection lost mid-call is retried only for a
  * read-only tool, as another may already have acted.
  */
-export async function forwardTool(
+export function forwardTool(
 	connect: () => Promise<Peer | null>,
 	repo: string,
 	name: string,
 	args: Record<string, unknown>,
 	retryMs: readonly number[] = CONNECT_RETRY_MS,
+): Promise<MasterToolResult> {
+	return forwardCall(
+		connect,
+		(peer) =>
+			peer.request(
+				"master.tool",
+				{ repo, name, args },
+				{ timeoutMs: TOOL_TIMEOUT_MS },
+			),
+		READ_ONLY_TOOLS.has(name),
+		retryMs,
+	);
+}
+
+/** forwardTool for an agent session's tools (ADR 0060); none is read-only. */
+export function forwardAgentTool(
+	connect: () => Promise<Peer | null>,
+	sessionId: string,
+	name: string,
+	args: Record<string, unknown>,
+	retryMs: readonly number[] = CONNECT_RETRY_MS,
+): Promise<MasterToolResult> {
+	return forwardCall(
+		connect,
+		(peer) =>
+			peer.request(
+				"agent.tool",
+				{ sessionId, name, args },
+				{ timeoutMs: TOOL_TIMEOUT_MS },
+			),
+		false,
+		retryMs,
+	);
+}
+
+async function forwardCall(
+	connect: () => Promise<Peer | null>,
+	call: (peer: Peer) => Promise<MasterToolResult>,
+	readOnly: boolean,
+	retryMs: readonly number[],
 ): Promise<MasterToolResult> {
 	for (let attempt = 0; ; attempt++) {
 		const retry = attempt < retryMs.length;
@@ -308,15 +398,11 @@ export async function forwardTool(
 			continue;
 		}
 		try {
-			return await peer.request(
-				"master.tool",
-				{ repo, name, args },
-				{ timeoutMs: TOOL_TIMEOUT_MS },
-			);
+			return await call(peer);
 		} catch (error) {
 			const lost =
 				error instanceof RpcError && error.code === RpcErrorCode.Closed;
-			if (!lost || !retry || !READ_ONLY_TOOLS.has(name)) throw error;
+			if (!lost || !retry || !readOnly) throw error;
 		} finally {
 			peer.close();
 		}
@@ -324,9 +410,30 @@ export async function forwardTool(
 	}
 }
 
-export async function runMcpProxy(home: string, repo: string): Promise<void> {
-	const callTool: CallTool = (name, args) =>
-		forwardTool(() => connectDaemon(home), repo, name, args);
+export function runMcpProxy(home: string, repo: string): Promise<void> {
+	return serveMcp(
+		(name, args) => forwardTool(() => connectDaemon(home), repo, name, args),
+		MCP_TOOLS,
+	);
+}
+
+/**
+ * `serenity mcp-agent` (ADR 0060): an agent session's MCP server. claude
+ * starts it with the session's environment, so SERENITY_SESSION_ID names it.
+ */
+export function runAgentMcp(home: string, sessionId: string): Promise<void> {
+	return serveMcp(
+		(name, args) =>
+			forwardAgentTool(() => connectDaemon(home), sessionId, name, args),
+		AGENT_MCP_TOOLS,
+	);
+}
+
+/** Answers MCP over stdio, one JSON message per line. */
+async function serveMcp(
+	callTool: CallTool,
+	tools: readonly Tool[],
+): Promise<void> {
 	// claude may have gone; a failed write must not take the server down with it.
 	const write = (out: object) => {
 		try {
@@ -349,7 +456,7 @@ export async function runMcpProxy(home: string, repo: string): Promise<void> {
 		}
 		// Calls can overlap (a permission request may wait), so answer each when ready.
 		pending.push(
-			handleMcpMessage(msg, callTool).then((out) => {
+			handleMcpMessage(msg, callTool, tools).then((out) => {
 				if (out) write(out);
 			}),
 		);

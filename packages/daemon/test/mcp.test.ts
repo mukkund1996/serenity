@@ -154,3 +154,13 @@ describe("forwardTool", () => {
 		expect(write.calls()).toBe(1);
 	});
 });
+
+test("an agent's MCP server lists request_sessions only (ADR 0060)", async () => {
+	const { AGENT_MCP_TOOLS } = await import("../src/mcp");
+	const out = (await handleMcpMessage(
+		{ jsonrpc: "2.0", id: 9, method: "tools/list" },
+		call,
+		AGENT_MCP_TOOLS,
+	)) as { result: { tools: Array<{ name: string }> } };
+	expect(out.result.tools.map((t) => t.name)).toEqual(["request_sessions"]);
+});

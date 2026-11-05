@@ -49,6 +49,7 @@ serenity runs on your existing Claude Code login and subscription ([what it uses
 | **Pull requests** | Each card shows its PR and checks via `gh`. `o` opens it, ready PRs get a review request from CODEOWNERS, and a merged PR finishes the session. |
 | **Safe cleanup** | Removing a session checks for uncommitted changes, unpushed commits and PR state before it touches a worktree. |
 | **Worktrees** | New sessions get their own git worktree beside the repo, or reuse an existing branch. |
+| **Fan-out** | An agent can split its work into new sessions with serenity's `request_sessions` tool. Ask it ("split this into 3 sessions") and they start at once; if it decides by itself, they wait in NEEDS YOU for `y`. They show under the agent that asked, report each finished turn back to it, and cannot fan out again. |
 | **Import** | Claude sessions you already run in tmux join the map with `I` and stay in their windows. |
 | **Pinned sessions** | `p` pins a session you reuse: it is never marked finished or cleaned up, and resumes with `claude --resume` when you attach after it ended. |
 | **Slack (optional)** | Mentions and DMs that need you to act, at most three, join NEEDS YOU. The master proposes a follow-up from your sessions and PRs: a reply, a message to the session it is about, or a new session. `y` runs it, Enter marks it seen and opens it, `x` dismisses it. Messages you have written after on Slack drop out. |
@@ -129,6 +130,7 @@ serenity          # opens the map for this repo
 - Each session is a real `claude` process in its own tmux pane, usually in its own git worktree. Attaching shows you that pane as it is.
 - A background daemon owns the state (SQLite), receives status from Claude Code hooks, polls PRs through `gh`, and runs the master.
 - The master proposes actions through MCP; nothing runs until you approve it.
+- Each agent session also gets a small serenity MCP server, passed with `--mcp-config`, through which it can ask for more sessions (fan-out). Like the hooks, it lives in serenity's own state directory and never touches `~/.claude`.
 - One map per repo: serenity is scoped to the repo you launch it in.
 
 The reasoning behind each of these choices is in the [architecture decision records](docs/adr/README.md).

@@ -535,13 +535,18 @@ export class MasterSupervisor {
 
 	// ------------------------------------------------------------- suggestions
 
-	/** Pending suggestions of a session (or only those of `kind`) that no longer apply. */
-	supersede(sessionId: string, kind?: SuggestionKind): void {
+	/**
+	 * Pending suggestions of a session (or only those of `kind`) that no
+	 * longer apply. A session's own fanout request is left alone: it stays
+	 * until the user answers it, whatever the session does (ADR 0060).
+	 */
+	supersede(sessionId: string, kind?: SuggestionKind, notify = true): void {
 		const session = this.host.storage.sessions.get(sessionId);
 		if (!session) return;
 		let changed = false;
 		for (const g of this.host.storage.suggestions.listPending(session.repo)) {
-			if (g.sessionId !== sessionId || (kind && g.kind !== kind)) continue;
+			if (g.sessionId !== sessionId) continue;
+			if (kind ? g.kind !== kind : g.kind === "fanout") continue;
 			this.host.storage.suggestions.put({
 				...g,
 				status: "superseded",
@@ -549,10 +554,14 @@ export class MasterSupervisor {
 			});
 			changed = true;
 		}
-		if (changed) this.host.broadcast(session.repo);
+		if (changed && notify) this.host.broadcast(session.repo);
 	}
 
-	/** Creates a pending suggestion, replacing the session's earlier ones. */
+	/**
+	 * Creates a pending suggestion, replacing the session's earlier ones in
+	 * one broadcast: maps never see the session without either, which would
+	 * drop it from NEEDS YOU for a moment and move the selection off it.
+	 */
 	propose(
 		session: Session,
 		kind: SuggestionKind,
@@ -560,7 +569,7 @@ export class MasterSupervisor {
 		text: string | null,
 		source: Suggestion["source"],
 	): Suggestion {
-		this.supersede(session.id);
+		this.supersede(session.id, undefined, false);
 		const at = this.host.now();
 		const suggestion: Suggestion = {
 			id: randomUUID(),
