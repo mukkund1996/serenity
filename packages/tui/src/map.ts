@@ -482,7 +482,7 @@ function drawMaster(
 		canvas.text(x + 1, row, "▸", { fg: "whiteBright", bold: true });
 	if (m.empty) {
 		wrap(
-			"No sessions yet. Press n to start your first session.",
+			"No sessions yet. Press n to start your first session, or I to import the Claude sessions you already have.",
 			iw,
 			3,
 		).forEach((line, i) => {

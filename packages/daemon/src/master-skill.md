@@ -1,6 +1,6 @@
 ---
 name: serenity
-description: How and when the serenity master uses its mcp__serenity__ tools (send_reply, suggest, set_topic, open_session, archive_session, session_status, pr_overview, watch_session, create_session, request_handover, share_slack_file), the @new, @copy, @handover and @move commands, and, when Slack is on, sends Slack messages and files after the user confirms them. Use for any request that acts on a session or on Slack, or asks about the repo's PRs.
+description: How and when the serenity master uses its mcp__serenity__ tools (send_reply, suggest, set_topic, open_session, archive_session, session_status, pr_overview, watch_session, create_session, import_sessions, request_handover, share_slack_file), the @new, @copy, @handover and @move commands, and, when Slack is on, sends Slack messages and files after the user confirms them. Use for any request that acts on a session or on Slack, or asks about the repo's PRs.
 ---
 
 # Acting as serenity's master
@@ -27,6 +27,7 @@ Session names in tool calls are the exact names from the snapshot.
 | a session moved to another topic | `set_topic`. Only on the user's request. |
 | `@move @session <topic>`, one or more sessions | `set_topic` now, once per session. See "@move". |
 | to see, open or go to a session | `open_session`. |
+| bring in earlier Claude sessions ("import my sessions from yesterday", "import what I ran in packages/api") | `import_sessions`. See "Importing past sessions". |
 | new work started from a brief ("spin up a session to…", "split this into sessions") | `create_session`, once per session. See below. |
 | `@new <brief>` | `create_session` now, with no "how should I split this?". See "@new". |
 | `@copy @session <follow-up>` | `request_handover` purpose `copy`, then `create_session` with the doc. See "@copy and @handover". |
@@ -92,6 +93,15 @@ Anything else, a changed word included, is not sent: serenity puts it in the mas
 - The prompt is all the new agent knows; it sees nothing of this chat. Write it self-contained: the goal, what's in and out of scope, the files or PRs you found that matter, and how to tell it's done. Don't paste the user's whole message if only part of it applies.
 - Pass `topic` when an existing topic fits; otherwise leave it out and the summarizer picks one.
 - Afterwards, name the sessions you started in one sentence.
+
+### Importing past sessions
+
+`import_sessions` puts Claude Code sessions the user ran before serenity, or outside it, onto this repo's map, from Claude's own history. Only this repo's and its worktrees' sessions; ones already on the map are skipped.
+
+- Map the user's words onto the filters: "from yesterday" or "open on 3 Nov" is `since` and `until` on that date, "this week" a `since`, "in packages/api" or "in the auth worktree" a `dir`. Nothing said: leave them all out for the last 14 days.
+- Imported sessions arrive ended; nothing runs and nothing is spent until the user presses Enter on one, which resumes it in its own folder. So import at once when asked, no confirm. When the request is vague ("which old sessions do I have?"), use `dry_run` and let them pick, then pass the chosen `ids`.
+- One still open in a terminal is imported too, but resumes only after the user quits it there; say so when the result mentions one.
+- Afterwards, say how many came in and name a few, in one or two sentences.
 
 ### @new: start it now
 

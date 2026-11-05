@@ -6,6 +6,8 @@ import {
 	completeMention,
 	type DependencyIssue,
 	groupTopics,
+	HISTORY_DAYS,
+	type HistorySession,
 	type ImportCandidate,
 	isQueued,
 	type MasterState,
@@ -129,7 +131,12 @@ type Overlay =
 	| { kind: "kill"; sessionId: string; busy: boolean; error: string | null }
 	| { kind: "archived"; scroll: number }
 	| { kind: "replies"; selected: number }
-	| { kind: "import"; candidates: ImportCandidate[] }
+	| {
+			kind: "import";
+			candidates: ImportCandidate[];
+			history: HistorySession[];
+			gone: number;
+	  }
 	| { kind: "rename"; sessionId: string }
 	| { kind: "settings" }
 	| null;
@@ -271,6 +278,12 @@ function useInputInTurn(
 	}, []);
 }
 
+/** Where `I` starts looking back in Claude Code's history (ADR 0064). */
+const historySince = () => Date.now() - HISTORY_DAYS * 86_400_000;
+
+/** How long the first-boot import hint stays (ADR 0064); other notices stay 4 s. */
+const HINT_MS = 15_000;
+
 export function App({ home, repo, tmuxPane }: AppProps) {
 	const { exit } = useApp();
 	const { columns, rows } = useWindowSize();
@@ -307,6 +320,10 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const [chatEnd, setChatEnd] = useState<number | null>(null);
 	const [search, setSearch, searchRef] = useLiveState<Search | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
+	/** How long the current notice stays. */
+	const noticeMs = useRef(4000);
+	/** Whether this map has looked for past sessions to suggest importing. */
+	const hinted = useRef(false);
 	/** The queued reply Enter shows in full, if any (ADR 0040). */
 	const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -707,9 +724,33 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 
 	useEffect(() => {
 		if (!notice) return;
-		const timer = setTimeout(() => setNotice(null), 4000);
+		const timer = setTimeout(() => {
+			setNotice(null);
+			noticeMs.current = 4000;
+		}, noticeMs.current);
 		return () => clearTimeout(timer);
 	}, [notice]);
+
+	// A map with nothing on it yet (but the tour) points at Claude Code
+	// sessions the user already has here, once per map (ADR 0064).
+	useEffect(() => {
+		if (hinted.current || link !== "connected" || !state) return;
+		hinted.current = true;
+		const own = state.sessions.filter(
+			(s) => s.status !== "archived" && s.name !== "learn-serenity",
+		);
+		if (own.length) return;
+		call("history.discover", { repo, since: historySince() }).then(
+			({ sessions: found }) => {
+				if (!found.length) return;
+				noticeMs.current = HINT_MS;
+				setNotice(
+					`${found.length} Claude Code ${found.length === 1 ? "session" : "sessions"} from the last ${HISTORY_DAYS} days in this repo · I imports them`,
+				);
+			},
+			() => {},
+		);
+	}, [link, state, call, repo]);
 
 	const fail = (e: unknown) =>
 		setNotice(e instanceof Error ? e.message : String(e));
@@ -1252,10 +1293,14 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				case "H":
 					return setOverlay({ kind: "archived", scroll: 0 });
 				case "I":
-					call("session.discover", { repo }).then((candidates) => {
-						if (candidates.length) setOverlay({ kind: "import", candidates });
-						else setNotice("no other claude sessions running in tmux here");
-					}, fail);
+					Promise.all([
+						call("session.discover", { repo }),
+						call("history.discover", { repo, since: historySince() }),
+					]).then(
+						([candidates, { sessions: history, gone }]) =>
+							setOverlay({ kind: "import", candidates, history, gone }),
+						fail,
+					);
 					return;
 				case "n":
 					// On a suggestion, n declines it; anywhere else it starts a session.
@@ -1345,15 +1390,29 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		},
 	);
 
-	const importSessions = async (claudeSessionIds: string[]) => {
-		const adopted = await call("session.adopt", { repo, claudeSessionIds });
+	const importSessions = async (live: string[], past: string[]) => {
+		const adopted = live.length
+			? await call("session.adopt", { repo, claudeSessionIds: live })
+			: [];
+		const imported = past.length
+			? await call("history.import", { repo, claudeSessionIds: past })
+			: [];
 		setOverlay(null);
-		if (adopted[0]) {
-			arriving.current = adopted[0].id;
-			focusNode(adopted[0].id);
+		const first = [...adopted, ...imported].find((s) => s.repo === repo);
+		if (first) {
+			arriving.current = first.id;
+			focusNode(first.id);
 		}
+		const count = adopted.length + imported.length;
+		const elsewhere = imported.filter((s) => s.repo !== repo).length;
 		setNotice(
-			`imported ${adopted.length} ${adopted.length === 1 ? "session" : "sessions"}`,
+			[
+				`imported ${count} ${count === 1 ? "session" : "sessions"}`,
+				imported.length ? "Enter on one resumes it" : null,
+				elsewhere ? `${elsewhere} on other repos' maps` : null,
+			]
+				.filter(Boolean)
+				.join(" · "),
 		);
 	};
 
@@ -1518,6 +1577,14 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				<Centered rows={rows}>
 					<ImportDialog
 						candidates={overlay.candidates}
+						history={overlay.history}
+						gone={overlay.gone}
+						days={HISTORY_DAYS}
+						onAllRepos={() =>
+							call("history.discover", { since: historySince() }).then(
+								(r) => r.sessions,
+							)
+						}
 						onSubmit={importSessions}
 						onClose={() => setOverlay(null)}
 					/>

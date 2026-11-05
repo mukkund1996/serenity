@@ -93,4 +93,15 @@ describe("checkSessionName (ADR 0063)", () => {
 			error: "a session named kept already exists",
 		});
 	});
+
+	test("an imported session not resumed yet keeps its name (ADR 0064)", () => {
+		const parked = makeSession({
+			name: "login-fix",
+			status: "dead",
+			origin: "imported",
+		});
+		expect(check("Login-Fix", [parked])).toEqual({
+			error: "a session named login-fix already exists",
+		});
+	});
 });

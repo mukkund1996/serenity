@@ -39,11 +39,14 @@ export const NAME_RULE = "name: letters, digits, . _ - (max 40)";
 
 /**
  * Whether `session` keeps its name from others: it is not archived, and not
- * ended unless pinned (attaching resumes a pinned one under its name).
+ * ended unless pinned or imported and not resumed yet (ADR 0064): attaching
+ * resumes those under their name.
  */
 function holdsName(session: Session): boolean {
 	if (session.status === "archived") return false;
-	return session.status !== "dead" || session.pinned;
+	return (
+		session.status !== "dead" || session.pinned || session.origin === "imported"
+	);
 }
 
 /**

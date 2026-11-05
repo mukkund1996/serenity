@@ -31,6 +31,13 @@ describe("needsYou", () => {
 		expect(list).toEqual([]);
 	});
 
+	test("a session imported from Claude's history waits to be resumed, not on you (ADR 0064)", () => {
+		const list = needsYou([
+			makeSession({ id: "past", status: "dead", origin: "imported" }),
+		]);
+		expect(list).toEqual([]);
+	});
+
 	test("a dismissed session stays out until a newer suggestion, a waiting one too (x, ADR 0057)", () => {
 		const dead = makeSession({ id: "dead", status: "dead", dismissedAt: 10 });
 		const wait = makeSession({

@@ -168,6 +168,40 @@ export const MCP_TOOLS = [
 		},
 	},
 	{
+		name: "import_sessions",
+		description:
+			'Bring past Claude Code sessions of this repo (and its worktrees) onto the map, from Claude\'s own history: ones the user ran before serenity or outside it. Filter by when they were open (since/until, e.g. "2026-11-03") and/or the folder they ran in (dir). Leave all out for the last 14 days. They arrive ended; nothing runs until the user presses Enter on one, which resumes it. Sessions already on the map are skipped. Use when the user asks to import, bring in or pick up their earlier or other Claude sessions. dry_run lists them without importing; ids imports just those from a listing.',
+		inputSchema: {
+			type: "object",
+			properties: {
+				since: {
+					type: "string",
+					description:
+						"Open on or after this date or time: YYYY-MM-DD or ISO 8601",
+				},
+				until: {
+					type: "string",
+					description: "Started on or before this date (the whole day) or time",
+				},
+				dir: {
+					type: "string",
+					description:
+						"Only sessions that ran in this folder or below it; absolute, or relative to the repo",
+				},
+				ids: {
+					type: "array",
+					items: { type: "string" },
+					description:
+						"Session ids (or their first 8 characters) from a dry_run",
+				},
+				dry_run: {
+					type: "boolean",
+					description: "List what matches without importing",
+				},
+			},
+		},
+	},
+	{
 		name: "request_handover",
 		description:
 			"For the user's @copy or @handover of a session: ask its agent to write a handover doc (goal, state, decisions, open questions, key files/branches/PRs, next steps). Returns at once; serenity messages you with the doc's path when the session's turn ends. With purpose share, an up-to-date doc is returned at once instead. Needs the user's latest message to say @copy or @handover and @-mention the session.",

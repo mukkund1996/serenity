@@ -48,6 +48,8 @@ Point out the status glyphs while it works: blue `●` working, green `✓` done
 
 Docs: https://getserenity.dev/docs/#sessions
 
+If they already have Claude Code sessions from before serenity, mention once that `I` on the map (or `serenity import` in any terminal) brings them in: they arrive ended and `Enter` resumes one where it ran. Docs: https://getserenity.dev/docs/#import
+
 ### 4. Attach and come back
 
 Try it: on the map, press `Enter` on `practice` to attach. Its pane opens next to the map, exactly as Claude Code shows it. Read its answer, then press `Ctrl+q` to go back to the map. Then come back here.

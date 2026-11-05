@@ -48,7 +48,9 @@ export interface Session {
 	/**
 	 * "spawned": serenity started it in its own tmux window. "adopted": a
 	 * claude the user already ran in their own tmux window (ADR 0016); its
-	 * pane stays there and attaching switches to it.
+	 * pane stays there and attaching switches to it. "imported": brought in
+	 * from Claude Code's history (ADR 0064) and not resumed yet; it waits,
+	 * ended, until Enter resumes it, which makes it "spawned".
 	 */
 	origin: SessionOrigin;
 	/**
@@ -113,7 +115,7 @@ export interface Session {
 
 export type WaitingOn = "permission" | "question" | "startup";
 
-export type SessionOrigin = "spawned" | "adopted";
+export type SessionOrigin = "spawned" | "adopted" | "imported";
 
 export type SessionTracking = "hooks" | "observed";
 

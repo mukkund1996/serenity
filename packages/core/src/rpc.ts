@@ -7,6 +7,7 @@ import type {
 	RepoState,
 	Session,
 } from "./domain";
+import type { HistoryFilter, HistoryResult } from "./history";
 
 /**
  * JSON-RPC 2.0 over a unix socket, one JSON message per line (ADR 0005).
@@ -123,6 +124,19 @@ export interface Methods {
 	"session.discover": { params: { repo: string }; result: ImportCandidate[] };
 	"session.adopt": {
 		params: { repo: string; claudeSessionIds: string[] };
+		result: Session[];
+	};
+	/**
+	 * Past Claude Code sessions not on any map (ADR 0064), from their
+	 * transcripts; every repo's when `repo` is left out.
+	 */
+	"history.discover": { params: HistoryFilter; result: HistoryResult };
+	/**
+	 * Puts past sessions on their repos' maps, ended until Enter resumes
+	 * them. `repo`: the map asking, whose key wins for its own repo.
+	 */
+	"history.import": {
+		params: { claudeSessionIds: string[]; repo?: string };
 		result: Session[];
 	};
 	/** Restarts an adopted session with `claude --resume` under serenity's hooks. */

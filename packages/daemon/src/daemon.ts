@@ -13,6 +13,7 @@ import {
 	type ConfigChange,
 	type CreateSessionParams,
 	checkSessionName,
+	claudeConfigDir,
 	configPath,
 	DependencyHealth,
 	handoversDir,
@@ -73,6 +74,7 @@ import {
 	resolveBase,
 	siblingWorktreePath,
 } from "./git";
+import { ClaudeHistory } from "./history";
 import {
 	AGENT_WRAPPER,
 	agentCommand,
@@ -282,6 +284,8 @@ export class Daemon {
 	/** The Slack MCP server entry, for the inbox worker and the chat. */
 	private readonly slackMcp: Record<string, unknown>;
 	private readonly observer: ClaudeObserver;
+	/** Past Claude Code sessions to import (ADR 0064). */
+	private readonly history: ClaudeHistory;
 	/** session id → when its last hook arrived; the observer checks Claude's status against it. */
 	private readonly hookAt = new Map<string, number>();
 	/** Plan usage is per account, so the latest report covers every repo. */
@@ -355,6 +359,12 @@ export class Daemon {
 						share,
 					),
 				prOverview: (repo, pr) => this.prOverview.answer(repo, pr),
+				discoverHistory: (filter) => this.history.discover(filter),
+				importHistory: async (repo, ids) => {
+					const imported = await this.history.import(ids, repo);
+					if (imported.length) this.broadcast(repo);
+					return imported;
+				},
 				pluginDir: masterPluginPath(opts.home),
 				mcpConfig: (repo) => this.mcpConfig(repo),
 				slack: (repo) =>
@@ -489,6 +499,10 @@ export class Daemon {
 				log: this.log,
 			},
 			opts.claudeConfigDir,
+		);
+		this.history = new ClaudeHistory(
+			{ storage: opts.storage, now: this.now, log: this.log },
+			opts.claudeConfigDir ?? claudeConfigDir(),
 		);
 		this.usage = opts.storage.recovery.get("usage");
 		this.done = new Promise((resolve) => {
@@ -815,6 +829,12 @@ export class Daemon {
 		"session.adopt": ({ repo, claudeSessionIds }) =>
 			this.observer.adopt(repo, claudeSessionIds),
 
+		"history.discover": (filter) => this.history.discover(filter),
+		"history.import": async ({ claudeSessionIds, repo }) => {
+			const imported = await this.history.import(claudeSessionIds, repo);
+			for (const r of new Set(imported.map((s) => s.repo))) this.broadcast(r);
+			return imported;
+		},
 		"session.upgrade": async ({ id }) => {
 			await this.upgrade(this.requireSession(id));
 			return null;
@@ -1454,10 +1474,14 @@ export class Daemon {
 
 	/**
 	 * Joins the session's pane beside the map pane, or switches to an adopted
-	 * one. A pinned session that ended is resumed first.
+	 * one. A pinned session that ended, or one imported from Claude Code's
+	 * history (ADR 0064), is resumed first.
 	 */
 	private async attach(found: Session, clientPane: string): Promise<void> {
-		const session = found.pinned ? await this.resume(found) : found;
+		const session =
+			found.pinned || found.origin === "imported"
+				? await this.resume(found)
+				: found;
 		const pane = await this.requireLivePane(session);
 		const current = this.attached.get(session.repo);
 		if (current) await this.detach(current.sessionId);
@@ -1506,6 +1530,15 @@ export class Daemon {
 			throw new RpcError(
 				RpcErrorCode.InvalidParams,
 				`${session.name} cannot resume: ${session.cwd} is gone`,
+			);
+		// Two claudes on one conversation would interleave its transcript.
+		const elsewhere =
+			session.claudeSessionId &&
+			this.history.running().get(session.claudeSessionId);
+		if (elsewhere)
+			throw new RpcError(
+				RpcErrorCode.InvalidParams,
+				`${session.name} is still open in another terminal (pid ${elsewhere.pid}); quit it there (/exit), then press Enter again`,
 			);
 		if (session.tracking === "observed") this.observer.forget(session.id);
 		const pane = await this.launchAgent(

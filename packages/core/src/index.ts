@@ -6,6 +6,7 @@ export * from "./domain";
 export * from "./fanout";
 export * from "./handover";
 export * from "./health";
+export * from "./history";
 export * from "./master";
 export * from "./mentions";
 export * from "./observed";

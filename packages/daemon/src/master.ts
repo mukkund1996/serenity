@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import {
+	ago,
 	applySummary,
 	type CreateSessionParams,
 	capTopic,
@@ -25,12 +26,17 @@ import {
 	HANDOVER_DIR,
 	type HandoverDoc,
 	type HandoverPurpose,
+	HISTORY_DAYS,
+	type HistoryFilter,
+	type HistoryResult,
 	handoverDraftPath,
 	handoverFileName,
 	handoverMissingMessage,
 	handoverPrompt,
 	handoverReadyMessage,
 	handoverRequest,
+	historyLabel,
+	LARGE_HISTORY_BYTES,
 	MASTER_SLACK_PROMPT,
 	MASTER_SYSTEM_PROMPT,
 	type MasterOutboxItem,
@@ -48,6 +54,7 @@ import {
 	PINNED,
 	type Ping,
 	PRIVATE_FILE,
+	parseDateArg,
 	parseSuggestion,
 	parseSummary,
 	type Session,
@@ -60,6 +67,7 @@ import {
 	type SuggestionKind,
 	sameSlackText,
 	sessionStatusText,
+	sizeLabel,
 	suggestionPrompt,
 	summaryPrompt,
 	summarySchema,
@@ -97,6 +105,10 @@ export interface MasterHost {
 	shareSlackFile(share: SlackFileUpload): Promise<string | null>;
 	/** The repo's open PRs grouped, or one PR in depth (ADR 0061). */
 	prOverview(repo: string, pr: number | null): Promise<MasterToolResult>;
+	/** Past Claude Code sessions no map has yet (ADR 0064). */
+	discoverHistory(filter: HistoryFilter): Promise<HistoryResult>;
+	/** Puts past sessions on `repo`'s map, ended until Enter resumes them. */
+	importHistory(repo: string, claudeSessionIds: string[]): Promise<Session[]>;
 	/** `--plugin-dir` for the chat: the plugin with the master's skill (writeMasterPlugin). */
 	pluginDir: string;
 	/** `--mcp-config` JSON for a repo's chat; its server is `serenity mcp <repo>`. */
@@ -129,6 +141,9 @@ export const CHAT_RESTART_BACKOFF_MS = [1_000, 5_000, 30_000];
 /** How long one of serenity's tools may run before the chat is told it timed out. */
 export const TOOL_TIMEOUT_MS = 2 * 60_000;
 /** A Slack upload takes two model calls and a POST. */
+/** Most past sessions one import_sessions call brings in. */
+const IMPORT_MAX = 50;
+
 const SLOW_TOOL_TIMEOUT_MS: Record<string, number> = {
 	share_slack_file: 6 * 60_000,
 };
@@ -990,6 +1005,7 @@ export class MasterSupervisor {
 			return { text: this.snapshot(repo) };
 		if (name === "create_session") return this.createSession(repo, args);
 		if (name === "share_slack_file") return this.shareSlackFile(repo, args);
+		if (name === "import_sessions") return this.importSessions(repo, args);
 		if (name === "pr_overview") {
 			const pr = prArg(args.pr);
 			if (pr === "invalid")
@@ -1214,6 +1230,92 @@ export class MasterSupervisor {
 				session.status === "working"
 					? `Sent to ${session.name}. It is working; its agent reads it when this turn ends.`
 					: `Sent to ${session.name}.`,
+		};
+	}
+
+	/**
+	 * The chat's import_sessions (ADR 0064): past Claude Code sessions of
+	 * this repo, open in a date range and/or run under a folder, put on the
+	 * map ended. Nothing runs until the user presses Enter on one, so it acts
+	 * at once like create_session; `dry_run` only lists them.
+	 */
+	private async importSessions(
+		repo: string,
+		args: Record<string, unknown>,
+	): Promise<MasterToolResult> {
+		const since = parseDateArg(args.since);
+		const until = parseDateArg(args.until, true);
+		if (args.since !== undefined && args.since !== "" && since === null)
+			return {
+				text: `since: not a date: ${String(args.since)}`,
+				isError: true,
+			};
+		if (args.until !== undefined && args.until !== "" && until === null)
+			return {
+				text: `until: not a date: ${String(args.until)}`,
+				isError: true,
+			};
+		const dir =
+			typeof args.dir === "string" && args.dir.trim()
+				? args.dir.trim().startsWith("/")
+					? args.dir.trim()
+					: join(repo, args.dir.trim())
+				: undefined;
+		const ids = Array.isArray(args.ids)
+			? args.ids.filter((i): i is string => typeof i === "string" && !!i)
+			: [];
+		const filter: HistoryFilter = {
+			repo,
+			since:
+				since ??
+				(until === null && !dir && !ids.length
+					? this.host.now() - HISTORY_DAYS * 86_400_000
+					: undefined),
+			until: until ?? undefined,
+			dir,
+		};
+		const { sessions: found, gone } = await this.host.discoverHistory(filter);
+		const matched = ids.length
+			? found.filter((s) => ids.some((i) => s.claudeSessionId.startsWith(i)))
+			: found;
+		const goneNote = gone
+			? ` ${gone} more matched but their folder is gone, so they cannot resume.`
+			: "";
+		if (!matched.length)
+			return {
+				text: `No past Claude Code sessions of this repo (or its worktrees) match that, beyond those already on the map.${goneNote}`,
+			};
+		const now = this.host.now();
+		const line = (s: (typeof found)[number], name = s.name) =>
+			`- ${name}: ${historyLabel(s)} (${[
+				s.branch,
+				`last active ${ago(s.lastActiveAt, now)}`,
+				s.bytes >= LARGE_HISTORY_BYTES ? sizeLabel(s.bytes) : null,
+				s.runningPid ? `still open in a terminal, pid ${s.runningPid}` : null,
+				`id ${s.claudeSessionId.slice(0, 8)}`,
+			]
+				.filter(Boolean)
+				.join(", ")})`;
+		const chosen = matched.slice(0, IMPORT_MAX);
+		const more =
+			matched.length > chosen.length
+				? ` Only the newest ${IMPORT_MAX} of ${matched.length}; narrow the dates or folder for the rest.`
+				: "";
+		if (args.dry_run === true)
+			return {
+				text: `${matched.length} past sessions match:${more}${goneNote}\n${chosen.map((s) => line(s)).join("\n")}`,
+			};
+		const imported = await this.host.importHistory(
+			repo,
+			chosen.map((s) => s.claudeSessionId),
+		);
+		const byId = new Map(chosen.map((s) => [s.claudeSessionId, s]));
+		const lines = imported.map((session) => {
+			const s = byId.get(session.claudeSessionId as string);
+			return s ? line(s, session.name) : `- ${session.name}`;
+		});
+		return {
+			text: `Imported ${imported.length} onto the map, ended: nothing runs until the user presses Enter on one, which resumes it with claude --resume in its own folder.${more}${goneNote}\n${lines.join("\n")}`,
 		};
 	}
 

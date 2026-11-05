@@ -21,13 +21,13 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0013](0013-testing-strategy.md) | Testing strategy | Accepted |
 | [0014](0014-distribution-and-release.md) | Distribution, release, licence, telemetry | Accepted |
 | [0015](0015-workflow-and-milestones.md) | Workflow and milestones | Accepted |
-| [0016](0016-importing-running-sessions.md) | Importing Claude sessions already running in tmux | Accepted |
+| [0016](0016-importing-running-sessions.md) | Importing Claude sessions already running in tmux | Amended by 0064 |
 | [0017](0017-topics-zoom-shows-every-topic.md) | The topics zoom shows every topic; "topic" replaces "category" | Accepted |
 | [0018](0018-map-zoom-and-navigation.md) | Map zoom layout; `z` `Z` `Esc` `c` `/` `r` | Accepted |
 | [0019](0019-topic-focus-shelves-and-topic-cap.md) | WASD between topics on the map; `z` out, `Z` in; shelves in the topics zoom; at most 10 topics; roomier master and cards | Amended by 0047 |
 | [0020](0020-usage-bar.md) | Usage bar in the header: session and weekly plan limits from the status line, average wait on you | Accepted |
 | [0021](0021-z-into-session-counts-in-header.md) | `Z` on a card attaches; session counts in the header, no SESSIONS section; roomier topics zoom | Accepted |
-| [0022](0022-pinned-sessions.md) | `p` pins a session for reuse: a `pinned` topic, never done or cleaned up, resumed on attach | Amended by 0044 |
+| [0022](0022-pinned-sessions.md) | `p` pins a session for reuse: a `pinned` topic, never done or cleaned up, resumed on attach | Amended by 0044, 0064 |
 | [0023](0023-slack-for-the-master.md) | Slack for the master: threads and mentions waiting on you, per repo, read through Slack's MCP server; `[` `]` cycle them | Amended by 0031 |
 | [0024](0024-slack-reply-suggestions.md) | Slack suggestions: a reply from sessions, PRs and reviews, or ask a session first; `y` posts it in the thread | Amended by 0050 |
 | [0025](0025-install-script-and-homebrew.md) | Installer and Homebrew formula install tmux, git, gh and Claude Code too; release-please and the release workflow | Amended by 0056 |
@@ -69,6 +69,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0061](0061-master-pr-overview.md) | The master's `pr_overview` tool: every open PR in the repo, sessions or not, grouped into needs you, yours and others, one line each (number, title, author, session, checks, review, why it waits on you); with a number, one PR in depth; one cached `gh pr list`, and it says when gh is not logged in | Accepted |
 | [0062](0062-first-boot-tutorial.md) | The installer opens the docs (not in CI, without a display or with `SERENITY_NO_OPEN=1`); the first map on a machine gets a `learn-serenity` session, run once in the repo itself with the learn-serenity skill (also published as a plugin); `onboarding: false` or `SERENITY_NO_ONBOARDING=1` skips it | Accepted |
 | [0063](0063-rename-checks-and-at-move.md) | Session names are checked by one rule set in core (pattern, command words, clashes in any case) in the rename dialog and the daemon; a rename keeps the branch and worktree; `@move @session… <topic>` (cyan) has serenity add a note naming the sessions and topic so the master calls `set_topic` at once, creating the topic only under `maxTopics`; `set_topic` now waits while a session works or the user types | Accepted |
+| [0064](0064-import-past-sessions.md) | Past Claude Code sessions from any repo, no tmux needed: `I` lists them from Claude's history (read-only), `serenity import` for the terminal, the master's `import_sessions` by date or folder; they arrive ended and Enter resumes them with `claude --resume`, never while still open elsewhere; an empty first map points at them | Accepted |
 
 ## System at a glance
 
