@@ -161,7 +161,8 @@
 <tr><td><code>serenity</code></td><td>Open the map for the git repo you are in</td></tr>
 <tr><td><code>serenity import</code></td><td>Bring in your existing Claude Code sessions (<code>--help</code> for options)</td></tr>
 <tr><td><code>serenity doctor</code></td><td>Check tmux, claude, git and gh</td></tr>
-<tr><td><code>serenity slack login</code></td><td>Sign in to Slack for the master (once)</td></tr>
+<tr><td><code>serenity slack login</code></td><td>Sign in to Slack for the master (once); asks to turn Slack on for the repo you are in</td></tr>
+<tr><td><code>serenity slack on</code> / <code>off</code> / <code>status</code></td><td>Show Slack on this repo's map, or not</td></tr>
 <tr><td><code>serenity restart</code></td><td>Restart the background daemon (sessions keep running)</td></tr>
 <tr><td><code>serenity stop</code></td><td>Stop the background daemon</td></tr>
 <tr><td><code>serenity version</code></td><td>Print the version</td></tr>
@@ -242,7 +243,7 @@
 </tbody>
 </table></div>
 <p>Replies the master wants to send to a session wait in their own <strong>QUEUE</strong> under NEEDS YOU, so they never make an idle session look like it needs you. <kbd>Enter</kbd> shows the whole message, <kbd>y</kbd> sends it.</p>
-<p class="d-note"><strong>Slack is optional.</strong> Run <code>serenity slack login</code> once and list the repo under <code>slack.repos</code> in <code>~/.config/serenity/config.json</code>. A Slack item drops out as soon as you write after it on Slack.</p>
+<p class="d-note"><strong>Slack is optional.</strong> Run <code>serenity slack login</code> once, then turn it on for a repo: <code>serenity slack on</code> inside it, or <kbd>Ctrl+,</kbd> → Slack on its map. (Advanced: the list lives under <code>slack.repos</code> in <code>~/.config/serenity/config.json</code>.) A Slack item drops out as soon as you write after it on Slack.</p>
 </section>
 
 <!-- ============ MASTER ============ -->
@@ -275,7 +276,7 @@
 <tr><td>Chat</td><td>Opus</td><td>The master's chat gets a message: one you send with <kbd>i</kbd>, or serenity's note that a session you asked it to watch has finished. It does nothing between messages.</td></tr>
 </tbody>
 </table></div>
-<p><strong>Slack</strong> (off by default) adds calls only while the map of a repo in <code>slack.repos</code> is open: the summarizer's model reads your mentions and DMs once a minute and when you open the map, the suggester's model proposes a follow-up for each new item (and again when a session you told about it answers), and the summarizer's model posts a reply or shares a file you approved.</p>
+<p><strong>Slack</strong> (off by default) adds calls only while the map of a repo you turned it on for is open: the summarizer's model reads your mentions and DMs once a minute and when you open the map, the suggester's model proposes a follow-up for each new item (and again when a session you told about it answers), and the summarizer's model posts a reply or shares a file you approved.</p>
 <p>Status, PRs, cleanup and the map itself use no model. To change a model, press <kbd>Ctrl</kbd>+<kbd>,</kbd> on the map: the summarizer and suggester switch at once, the chat after <code>serenity restart</code>. Or set any alias or model id <code>claude --model</code> accepts in <code>~/.config/serenity/config.json</code>, then run <code>serenity restart</code>:</p>
 <div class="d-cmd"><pre>{ "models": { "chat": "sonnet", "summarizer": "haiku", "suggester": "haiku" } }</pre><button type="button" class="d-copy" aria-label="Copy the config"><span class="done"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7fc77f" stroke-width="2" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span><span class="idle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg></span></button></div>
 <p>Leave out the ones you don't change; they keep their defaults. The <a href="https://github.com/mukkund1996/serenity#configuration">configuration reference</a> lists every field.</p>

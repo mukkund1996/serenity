@@ -1399,6 +1399,33 @@ describe("robustness (ADR 0046)", () => {
 		);
 	});
 
+	test("Slack turned on or off replaces an idle chat, resuming it", () => {
+		master.message(REPO, "hello");
+		runner.emit({ type: "session", sessionId: "chat-1" });
+		result("hi");
+		master.refresh(REPO);
+		expect(runner.stops).toBe(1);
+		// Its exit is expected, not a crash.
+		exit(0);
+		expect(master.state(REPO)).toEqual({ status: "idle", error: null });
+		master.message(REPO, "again");
+		expect(runner.chatStarts).toBe(2);
+		expect(runner.resumes).toEqual([null, "chat-1"]);
+		expect(runner.sent[1]).not.toContain("your process restarted");
+	});
+
+	test("a chat mid-turn is replaced only once its turn ends", () => {
+		master.message(REPO, "hello");
+		runner.emit({ type: "session", sessionId: "chat-1" });
+		master.refresh(REPO);
+		expect(runner.stops).toBe(0);
+		result("hi");
+		expect(runner.stops).toBe(1);
+		expect(master.state(REPO)).toEqual({ status: "idle", error: null });
+		master.message(REPO, "again");
+		expect(runner.resumes).toEqual([null, "chat-1"]);
+	});
+
 	test("a chat that dies mid-turn is resumed and sent the message again", () => {
 		jest.useFakeTimers();
 		master.message(REPO, "hello");
