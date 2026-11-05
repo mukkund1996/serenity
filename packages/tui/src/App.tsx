@@ -1551,7 +1551,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					</Text>
 				)}
 				<Text color="gray">
-					<Key>?</Key> shortcuts
+					{" "}
+					<Key>,</Key> settings · <Key>?</Key> shortcuts
 				</Text>
 			</Box>
 			{overlay?.kind === "new" ? (
