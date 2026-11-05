@@ -84,6 +84,7 @@ import {
 	MasterSupervisor,
 	writeMasterPlugin,
 } from "./master";
+import { PrOverview } from "./pr-overview";
 import { PrWatcher, workDir } from "./prs";
 import { recoveryPlan } from "./recover";
 import { ReviewWatcher } from "./reviews";
@@ -266,6 +267,7 @@ export class Daemon {
 	private readonly gh: Gh;
 	private readonly prs: PrWatcher;
 	private readonly reviews: ReviewWatcher;
+	private readonly prOverview: PrOverview;
 	private readonly slack: SlackWatcher;
 	private readonly advisor: SlackAdvisor;
 	private readonly slackRepos: Set<string>;
@@ -350,6 +352,7 @@ export class Daemon {
 						},
 						share,
 					),
+				prOverview: (repo, pr) => this.prOverview.answer(repo, pr),
 				pluginDir: masterPluginPath(opts.home),
 				mcpConfig: (repo) => this.mcpConfig(repo),
 				slack: (repo) =>
@@ -401,6 +404,12 @@ export class Daemon {
 			pollMs:
 				opts.reviewPollMs ??
 				envNumber("SERENITY_REVIEW_POLL_MS", DEFAULT_REVIEW_POLL_MS),
+		});
+		this.prOverview = new PrOverview({
+			storage: opts.storage,
+			gh: this.gh,
+			reviewRequests: (repo) => this.reviews.state(repo).reviewRequests,
+			now: this.now,
 		});
 		const models = this.models;
 		const slackMcpConfig = JSON.stringify({

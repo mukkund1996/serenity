@@ -3,9 +3,16 @@ import { join } from "node:path";
 import {
 	CODEOWNERS_PATHS,
 	isTransientMessage,
+	OPEN_PR_FIELDS,
+	OPEN_PR_LIMIT,
+	type OpenPr,
+	PR_DETAIL_EXTRA,
 	PR_FIELDS,
+	type PrDetailExtra,
 	type PrInfo,
+	parseOpenPrs,
 	parsePr,
+	parsePrDetailExtra,
 	parseReviewRequests,
 	REVIEW_FIELDS,
 	REVIEW_LIMIT,
@@ -103,6 +110,77 @@ export class Gh {
 			}
 		}
 		return { pr: null, error: classifyGhError(out.stderr) };
+	}
+
+	/**
+	 * The repo's open PRs for the master's overview (ADR 0061), newest
+	 * updated first; `truncated` when gh had more than OPEN_PR_LIMIT.
+	 */
+	async openPrs(
+		cwd: string,
+	): Promise<{ prs: OpenPr[]; truncated: boolean; error: string | null }> {
+		const out = await this.read(
+			[
+				"pr",
+				"list",
+				"--state",
+				"open",
+				"--limit",
+				String(OPEN_PR_LIMIT + 1),
+				"--json",
+				OPEN_PR_FIELDS,
+			],
+			cwd,
+		);
+		if (!out.ok)
+			return {
+				prs: [],
+				truncated: false,
+				error: classifyGhError(out.stderr) ?? "no GitHub repo",
+			};
+		try {
+			const all = parseOpenPrs(JSON.parse(out.stdout));
+			return {
+				prs: all.slice(0, OPEN_PR_LIMIT),
+				truncated: all.length > OPEN_PR_LIMIT,
+				error: null,
+			};
+		} catch {
+			return { prs: [], truncated: false, error: "unreadable gh output" };
+		}
+	}
+
+	/** One PR in depth: what a card knows, plus its description and size. */
+	async prDetail(
+		cwd: string,
+		number: number,
+	): Promise<{
+		pr: PrInfo | null;
+		extra: PrDetailExtra | null;
+		error: string | null;
+	}> {
+		const out = await this.read(
+			[
+				"pr",
+				"view",
+				String(number),
+				"--json",
+				`${PR_FIELDS},${PR_DETAIL_EXTRA}`,
+			],
+			cwd,
+		);
+		if (!out.ok)
+			return {
+				pr: null,
+				extra: null,
+				error: classifyGhError(out.stderr) ?? `no PR #${number}`,
+			};
+		try {
+			const raw = JSON.parse(out.stdout);
+			return { pr: parsePr(raw), extra: parsePrDetailExtra(raw), error: null };
+		} catch {
+			return { pr: null, extra: null, error: "unreadable gh output" };
+		}
 	}
 
 	/** Open PRs in the repo asking the user for a review, newest updated first. */

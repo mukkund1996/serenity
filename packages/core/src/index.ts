@@ -11,6 +11,7 @@ export * from "./mentions";
 export * from "./observed";
 export * from "./paths";
 export * from "./pr";
+export * from "./pr-overview";
 export * from "./private";
 export * from "./respawn";
 export * from "./retry";

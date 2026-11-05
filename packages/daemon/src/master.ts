@@ -67,6 +67,7 @@ import {
 } from "@serenity/core";
 import type { ChatProcess, ClaudeRunner } from "./claude";
 import MASTER_SKILL from "./master-skill.md" with { type: "text" };
+import { prArg } from "./pr-overview";
 
 export interface MasterModels {
 	chat: string;
@@ -93,6 +94,8 @@ export interface MasterHost {
 	handoversDir(repo: string): string;
 	/** Uploads a file to Slack and shares it as confirmed; returns its link (ADR 0049). */
 	shareSlackFile(share: SlackFileUpload): Promise<string | null>;
+	/** The repo's open PRs grouped, or one PR in depth (ADR 0061). */
+	prOverview(repo: string, pr: number | null): Promise<MasterToolResult>;
 	/** `--plugin-dir` for the chat: the plugin with the master's skill (writeMasterPlugin). */
 	pluginDir: string;
 	/** `--mcp-config` JSON for a repo's chat; its server is `serenity mcp <repo>`. */
@@ -879,6 +882,15 @@ export class MasterSupervisor {
 			return { text: this.snapshot(repo) };
 		if (name === "create_session") return this.createSession(repo, args);
 		if (name === "share_slack_file") return this.shareSlackFile(repo, args);
+		if (name === "pr_overview") {
+			const pr = prArg(args.pr);
+			if (pr === "invalid")
+				return {
+					text: "pr must be a PR number, e.g. 123.",
+					isError: true,
+				};
+			return this.host.prOverview(repo, pr);
+		}
 		const session = findSessionByName(
 			this.host.storage.sessions.listByRepo(repo),
 			args.session,

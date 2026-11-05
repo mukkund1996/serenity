@@ -1,6 +1,6 @@
 # 0011 · PR status via `gh`, refreshed on events
 
-**Status:** Accepted · 2026-10-25 · revised 2026-10-25 (milestone 3: reviewers, merged PRs, squash merges) · revised 2026-10-26 (review requests for the master panel) · Amended by [0043](0043-dependency-retries-and-health.md): reads retry; a blip keeps the PR and reads again · Amended by [0055](0055-session-prs-found-kept-and-polled.md): the PR is found under the head it was pushed as, kept on any failure, refreshed after pushes and polled while open; the label is blue
+**Status:** Accepted · 2026-10-25 · revised 2026-10-25 (milestone 3: reviewers, merged PRs, squash merges) · revised 2026-10-26 (review requests for the master panel) · Amended by [0043](0043-dependency-retries-and-health.md): reads retry; a blip keeps the PR and reads again · Amended by [0055](0055-session-prs-found-kept-and-polled.md): the PR is found under the head it was pushed as, kept on any failure, refreshed after pushes and polled while open; the label is blue · Amended by [0061](0061-master-pr-overview.md): the master reads every open PR in the repo with `pr_overview`
 
 ## Decision
 - PR data comes from `gh pr view <branch> --json number,url,title,state,isDraft,statusCheckRollup,reviewDecision,reviewRequests,latestReviews,author,headRefOid,baseRefName,files`, run in the session's worktree.
