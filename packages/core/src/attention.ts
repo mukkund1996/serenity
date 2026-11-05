@@ -19,11 +19,19 @@ export interface TopicGroup {
 	counts: { waiting: number; working: number; done: number };
 }
 
+/**
+ * An ended session is news, unless it waits to be resumed: a pinned one
+ * (ADR 0022) or one imported from Claude Code's history (ADR 0064).
+ */
+export function endedNeedsYou(s: Session): boolean {
+	return s.status === "dead" && !s.pinned && s.origin !== "imported";
+}
+
 function needRank(s: Session, suggested: Set<string>): number {
 	if (s.watched && s.status === "done") return 0;
 	if (s.status === "waiting") return 1;
-	// A pinned session that ended waits to be resumed; it needs nothing.
-	if (s.status === "dead" && !s.pinned) return 2;
+	// A pinned or imported session that ended waits to be resumed; it needs nothing.
+	if (endedNeedsYou(s)) return 2;
 	if (suggested.has(s.id)) return 3;
 	return -1;
 }
@@ -88,7 +96,7 @@ function attentionOf(sessions: Session[]): number {
 	let score = 0;
 	for (const s of sessions) {
 		if (s.status === "waiting") score += 100;
-		else if (s.status === "dead" && !s.pinned) score += 10;
+		else if (endedNeedsYou(s)) score += 10;
 		else if (s.status === "done" && s.watched) score += 1;
 	}
 	return score;

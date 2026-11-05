@@ -20,6 +20,7 @@ import {
 	waitForDaemonGone,
 } from "@serenity/core";
 import { printChecks, runChecks } from "./doctor";
+import { runImport } from "./import";
 import {
 	runUserStatusLine,
 	type StatusLineInput,
@@ -30,6 +31,8 @@ const USAGE = `serenity ${VERSION} · a mind map of your Claude Code sessions
 
 usage:
   serenity            open the map for the git repo you are in
+  serenity import     bring in the Claude Code sessions you already have
+                      (serenity import --help for options)
   serenity doctor     check tmux, claude, git and gh
   serenity slack login  sign in to Slack for the master (once)
   serenity stop       stop the background daemon
@@ -327,6 +330,9 @@ switch (command) {
 	case "daemon":
 		if (arg === "--worker") await runDaemon();
 		else await superviseDaemon();
+		break;
+	case "import":
+		process.exit(await runImport(home, process.argv.slice(3)));
 		break;
 	case "doctor": {
 		const ok = printChecks(runChecks());

@@ -50,7 +50,7 @@ serenity runs on your existing Claude Code login and subscription ([what it uses
 | **Safe cleanup** | Removing a session checks for uncommitted changes, unpushed commits and PR state before it touches a worktree. |
 | **Worktrees** | New sessions get their own git worktree beside the repo, or reuse an existing branch. |
 | **Fan-out** | An agent can split its work into new sessions with serenity's `request_sessions` tool. Ask it ("split this into 3 sessions") and they start at once; if it decides by itself, they wait in NEEDS YOU for `y`. They show under the agent that asked, report each finished turn back to it, and cannot fan out again. |
-| **Import** | Claude sessions you already run in tmux join the map with `I` and stay in their windows. |
+| **Import** | Bring the Claude Code sessions you already have, no tmux needed: `I` on the map, `serenity import` in any terminal, or ask the master ("import my sessions from yesterday"). Past sessions arrive ended and `Enter` resumes one with `claude --resume` in its own folder; ones running in your tmux join in place. |
 | **Pinned sessions** | `p` pins a session you reuse: it is never marked finished or cleaned up, and resumes with `claude --resume` when you attach after it ended. |
 | **Slack (optional)** | Mentions and DMs that need you to act, at most three, join NEEDS YOU. The master proposes a follow-up from your sessions and PRs: a reply, a message to the session it is about, or a new session. `y` runs it, Enter marks it seen and opens it, `x` dismisses it. Messages you have written after on Slack drop out. |
 
@@ -104,9 +104,20 @@ serenity          # opens the map for this repo
 
 **First time?** The first map you open has one session on it, `learn-serenity`, prompted with "teach me how to use serenity". Press `Enter` on it for a hands-on tour: the map, sessions, NEEDS YOU, the master, PRs and the keys, one step at a time. It runs in the repo itself and changes nothing; press `K` on it when you're done and it won't come back. It only appears once per machine, and never if you already have sessions. Set `"onboarding": false` in the config or `SERENITY_NO_ONBOARDING=1` to skip it. To take the tour again, install the [learn-serenity](plugins/learn-serenity/) plugin (`/plugin install learn-serenity@serenity`) and ask any session "teach me how to use serenity" ([ADR 0062](docs/adr/0062-first-boot-tutorial.md)).
 
+**Already have Claude Code sessions?** Bring them along, whether or not you use tmux ([ADR 0064](docs/adr/0064-import-past-sessions.md)):
+
+```bash
+serenity import               # this repo's sessions from the last 14 days, pick which
+serenity import --all-repos   # every repo; each goes onto its own repo's map
+serenity import --since 2026-11-01 --dir packages/api --yes
+```
+
+Or press `I` on the map (`g` in the picker adds every repo), or ask the master: "import my sessions from yesterday". serenity reads Claude's history in `~/.claude/projects` and never changes it. Imported sessions arrive ended, so nothing runs and nothing is spent until you press `Enter` on one: it resumes with `claude --resume` in the folder or worktree it ran in. If a session is still open in another terminal, quit it there (`/exit`) first; serenity won't run one conversation twice. Sessions whose folder was deleted can't resume and are left out. Claudes already running in your tmux join in place, as before.
+
 | Command | What it does |
 |---------|--------------|
 | `serenity` | Open the map for the git repo you are in |
+| `serenity import` | Bring in your existing Claude Code sessions (`--help` for options) |
 | `serenity doctor` | Check tmux, claude, git and gh |
 | `serenity slack login` | Sign in to Slack for the master (once) |
 | `serenity restart` | Restart the background daemon (sessions keep running) |
@@ -155,7 +166,7 @@ serenity is keyboard-only. The footer shows the moves; `?` opens the full list.
 | `Tab` | Jump to the next session that needs you |
 | `y` `e` `n` | Approve, edit or decline the master's suggestion |
 | `[` `]` | Previous / next topic |
-| `N` `I` | New session · import from tmux |
+| `N` `I` | New session · import (running in tmux, or from Claude's history) |
 | `o` `f` `p` | Open the PR · watch · pin |
 | `r` `K` `x` | Rename · kill the agent · clean up, on a session's card (`r` and `K` on its NEEDS YOU row too); on any NEEDS YOU item `x` only dismisses it (until something new happens). A rename keeps the branch and worktree; names are letters, digits, `. _ -`, at most 40, unique in any case, and never a command word (`new`, `copy`, `handover`, `move`) |
 | `/` `c` `H` | Search sessions · centre on the master · archived sessions |

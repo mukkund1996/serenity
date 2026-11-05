@@ -13,6 +13,8 @@ import { join } from "node:path";
 import {
 	type CreateSessionParams,
 	createMemoryStorage,
+	type HistoryFilter,
+	type HistorySession,
 	type Session,
 	type Storage,
 } from "@serenity/core";
@@ -97,6 +99,9 @@ let created: CreateSessionParams[];
 let replies: Array<{ name: string; text: string }>;
 let shared: SlackFileUpload[];
 let overviews: Array<number | null>;
+let historyFilters: HistoryFilter[];
+let historyImports: Array<{ repo: string; ids: string[] }>;
+let history: HistorySession[];
 /** A temp dir per test: session worktrees and the handovers folder. */
 let tmp: string;
 let handovers: string;
@@ -105,6 +110,9 @@ beforeEach(() => {
 	replies = [];
 	shared = [];
 	overviews = [];
+	historyFilters = [];
+	historyImports = [];
+	history = [];
 	tmp = mkdtempSync(join(tmpdir(), "srmaster-"));
 	handovers = join(tmp, "handovers");
 	killed = [];
@@ -150,6 +158,22 @@ beforeEach(() => {
 		prOverview: async (_repo, pr) => {
 			overviews.push(pr);
 			return { text: pr === null ? "Open PRs: 0" : `#${pr} detail` };
+		},
+		discoverHistory: async (filter) => {
+			historyFilters.push(filter);
+			return { sessions: history, gone: 1 };
+		},
+		importHistory: async (repo, ids) => {
+			historyImports.push({ repo, ids });
+			return ids.map((id) =>
+				put({
+					id: `imp-${id}`,
+					name: history.find((h) => h.claudeSessionId === id)?.name ?? id,
+					claudeSessionId: id,
+					origin: "imported",
+					status: "dead",
+				}),
+			);
 		},
 		pluginDir: "/tmp/master-plugin",
 		mcpConfig: () => "{}",
@@ -1949,5 +1973,67 @@ describe("pr_overview (ADR 0061)", () => {
 		const out = await master.handleTool(REPO, "pr_overview", { pr: "latest" });
 		expect(out.isError).toBe(true);
 		expect(overviews).toEqual([]);
+	});
+});
+
+describe("import_sessions (ADR 0064)", () => {
+	const past = (id: string, name: string): HistorySession => ({
+		claudeSessionId: id,
+		cwd: `${REPO}-wt`,
+		repo: REPO,
+		branch: "fix/login",
+		title: `Title of ${name}`,
+		firstPrompt: null,
+		lastPrompt: null,
+		startedAt: 0,
+		lastActiveAt: now,
+		bytes: 2048,
+		runningPid: null,
+		name,
+	});
+
+	test("with no filters, the last 14 days of this repo are imported at once", async () => {
+		history = [past("aaaaaaaa-1", "login"), past("bbbbbbbb-2", "docs")];
+		const out = await master.handleTool(REPO, "import_sessions", {});
+		expect(out.isError).toBeUndefined();
+		expect(historyFilters[0]?.repo).toBe(REPO);
+		expect(historyFilters[0]?.since).toBeGreaterThan(now - 15 * 86_400_000);
+		expect(historyImports).toEqual([
+			{ repo: REPO, ids: ["aaaaaaaa-1", "bbbbbbbb-2"] },
+		]);
+		expect(out.text).toContain("Imported 2");
+		expect(out.text).toContain("- login: Title of login (fix/login");
+		expect(out.text).toContain("folder is gone");
+	});
+
+	test("a date is that whole day; a relative dir is under the repo", async () => {
+		await master.handleTool(REPO, "import_sessions", {
+			since: "2026-11-03",
+			until: "2026-11-03",
+			dir: "packages/api",
+		});
+		const f = historyFilters[0];
+		expect(f?.dir).toBe(`${REPO}/packages/api`);
+		expect(new Date(f?.since as number).getHours()).toBe(0);
+		expect((f?.until as number) - (f?.since as number)).toBe(86_400_000 - 1);
+	});
+
+	test("dry_run only lists; ids import just those", async () => {
+		history = [past("aaaaaaaa-1", "login"), past("bbbbbbbb-2", "docs")];
+		const listed = await master.handleTool(REPO, "import_sessions", {
+			dry_run: true,
+		});
+		expect(listed.text).toContain("2 past sessions match");
+		expect(historyImports).toEqual([]);
+		await master.handleTool(REPO, "import_sessions", { ids: ["bbbbbbbb"] });
+		expect(historyImports).toEqual([{ repo: REPO, ids: ["bbbbbbbb-2"] }]);
+	});
+
+	test("a date it cannot read is refused", async () => {
+		const out = await master.handleTool(REPO, "import_sessions", {
+			since: "last tuesday-ish",
+		});
+		expect(out.isError).toBe(true);
+		expect(historyFilters).toEqual([]);
 	});
 });

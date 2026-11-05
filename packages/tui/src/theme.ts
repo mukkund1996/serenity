@@ -88,6 +88,7 @@ export function cardText(session: Session): string {
 /** A dead session's card line, with why claude was not restarted (ADR 0044). */
 export function endedText(session: Session): string {
 	if (session.pinned) return "Ended. Enter resumes it.";
+	if (session.origin === "imported") return "Imported. Enter resumes it.";
 	return session.exitNote
 		? `Session ended: ${session.exitNote}.`
 		: "Session ended.";

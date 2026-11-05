@@ -1,12 +1,19 @@
+import { basename } from "node:path";
 import {
+	ago,
 	archivedTopics,
 	type CleanupPlan,
 	type CreateSessionParams,
 	checkSessionName,
+	groupByRepo,
+	type HistorySession,
+	historyLabel,
 	type ImportCandidate,
+	LARGE_HISTORY_BYTES,
 	type ResolvedBase,
 	type Session,
 	type SessionMode,
+	sizeLabel,
 } from "@serenity/core";
 import { Box, Text, useInput } from "ink";
 import { useEffect, useState } from "react";
@@ -619,23 +626,62 @@ export function RecentReplies({
 	);
 }
 
+/** One row of the import picker: a claude running in tmux, or a past session. */
+type ImportItem =
+	| { kind: "live"; id: string; c: ImportCandidate }
+	| { kind: "past"; id: string; s: HistorySession };
+
+/** Rows shown at once; each takes two lines, plus a section header now and then. */
+const IMPORT_ROWS = 7;
+
 /**
- * Import picker (ADR 0016): claude sessions running in tmux in this repo
- * that the map does not track. All are ticked; Space toggles, Enter imports.
+ * Import picker. "Running in tmux": claudes in this repo the map does not
+ * track, adopted in place (ADR 0016). "From history": past Claude Code
+ * sessions of the last days (ADR 0064), put on the map ended until Enter
+ * resumes them; `g` adds every other repo's, unticked, grouped by repo.
+ * This repo's are ticked; Space toggles, `a` all or none, Enter imports.
  */
 export function ImportDialog({
 	candidates,
+	history,
+	gone,
+	days,
+	onAllRepos,
 	onSubmit,
 	onClose,
 }: {
 	candidates: ImportCandidate[];
-	onSubmit: (claudeSessionIds: string[]) => Promise<void>;
+	history: HistorySession[];
+	/** Past sessions left out because their folder is gone. */
+	gone: number;
+	days: number;
+	/** Every repo's past sessions, for `g`. */
+	onAllRepos: () => Promise<HistorySession[]>;
+	onSubmit: (live: string[], past: string[]) => Promise<void>;
 	onClose: () => void;
 }) {
+	const [past, setPast] = useState(history);
+	const [allRepos, setAllRepos] = useState(false);
+	const here = useState(() => new Set(history.map((s) => s.repo)))[0];
+	const items: ImportItem[] = [
+		...candidates.map((c) => ({
+			kind: "live" as const,
+			id: c.claudeSessionId,
+			c,
+		})),
+		...groupByRepo(past)
+			// This repo's first.
+			.sort((a, b) => Number(here.has(b.repo)) - Number(here.has(a.repo)))
+			.flatMap((g) =>
+				g.sessions.map((s) => ({
+					kind: "past" as const,
+					id: s.claudeSessionId,
+					s,
+				})),
+			),
+	];
 	const [selected, setSelected] = useState(0);
-	const [chosen, setChosen] = useState(
-		() => new Set(candidates.map((c) => c.claudeSessionId)),
-	);
+	const [chosen, setChosen] = useState(() => new Set(items.map((i) => i.id)));
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -653,25 +699,64 @@ export function ImportDialog({
 		if (key.upArrow || input === "w")
 			return setSelected((i) => Math.max(0, i - 1));
 		if (key.downArrow || input === "s")
-			return setSelected((i) => Math.min(candidates.length - 1, i + 1));
-		const current = candidates[selected];
-		if (input === " " && current) return toggle(current.claudeSessionId);
+			return setSelected((i) => Math.min(items.length - 1, i + 1));
+		const current = items[selected];
+		if (input === " " && current) return toggle(current.id);
 		if (input === "a")
 			return setChosen(
-				chosen.size === candidates.length
+				chosen.size === items.length
 					? new Set()
-					: new Set(candidates.map((c) => c.claudeSessionId)),
+					: new Set(items.map((i) => i.id)),
 			);
+		if (input === "g" && !allRepos) {
+			setBusy(true);
+			onAllRepos().then(
+				(all) => {
+					setPast(all);
+					setAllRepos(true);
+					setBusy(false);
+				},
+				(e: Error) => {
+					setBusy(false);
+					setError(e.message);
+				},
+			);
+			return;
+		}
 		if (key.return) {
 			if (!chosen.size) return onClose();
 			setBusy(true);
 			setError(null);
-			onSubmit([...chosen]).catch((e: Error) => {
+			const ids = (kind: ImportItem["kind"]) =>
+				items
+					.filter((i) => i.kind === kind && chosen.has(i.id))
+					.map((i) => i.id);
+			onSubmit(ids("live"), ids("past")).catch((e: Error) => {
 				setBusy(false);
 				setError(e.message);
 			});
 		}
 	});
+
+	const first = Math.max(
+		0,
+		Math.min(
+			selected - Math.floor(IMPORT_ROWS / 2),
+			items.length - IMPORT_ROWS,
+		),
+	);
+	const shown = items.slice(first, first + IMPORT_ROWS);
+	const now = Date.now();
+	const header = (i: number): string | null => {
+		const item = items[i];
+		const prev = items[i - 1];
+		if (!item) return null;
+		if (item.kind === "live")
+			return prev ? null : "Running in your tmux · stays where it is";
+		if (prev?.kind === "past" && prev.s.repo === item.s.repo) return null;
+		const where = allRepos ? ` · ${basename(item.s.repo)}` : "";
+		return `From history, last ${days} days${where} · Enter on a card resumes it`;
+	};
 
 	return (
 		<TitledBox
@@ -679,51 +764,91 @@ export function ImportDialog({
 			titleColor="whiteBright"
 			borderStyle="single"
 			borderColor="white"
-			width={72}
+			width={76}
 			fill="black"
 			right={<Text color="white"> ↑↓ Space Enter Esc </Text>}
 		>
-			<Text color="white">
-				Claude sessions running in your tmux, in this repo. They stay where they
-				are; Enter on a card jumps to their window.
-			</Text>
-			{candidates.map((c, i) => {
-				const g = glyph(c.status);
-				// A pointer and bright text, not inverse: inverse turns the row and
-				// its grey and status colours into light backgrounds that are hard to read.
+			{items.length === 0 ? (
+				<Text color="white">
+					No Claude sessions to import in this repo. g looks in every repo.
+				</Text>
+			) : null}
+			{shown.map((item, k) => {
+				const i = first + k;
 				const current = i === selected;
+				const title = header(i);
+				const dim = current ? "white" : "gray";
+				const g = item.kind === "live" ? glyph(item.c.status) : null;
+				const name = item.kind === "live" ? item.c.name : item.s.name;
+				const branch = item.kind === "live" ? item.c.branch : item.s.branch;
+				const right =
+					item.kind === "live"
+						? item.c.location
+						: [
+								ago(item.s.lastActiveAt, now),
+								item.s.bytes >= LARGE_HISTORY_BYTES
+									? sizeLabel(item.s.bytes)
+									: null,
+							]
+								.filter(Boolean)
+								.join(" · ");
+				const line =
+					item.kind === "live"
+						? (item.c.title ?? item.c.lastPrompt ?? "no prompt yet")
+						: historyLabel(item.s);
 				return (
-					<Box key={c.claudeSessionId} flexDirection="column" marginTop={1}>
+					<Box key={item.id} flexDirection="column">
+						{title ? (
+							<Box marginTop={1}>
+								<Text color="cyan" wrap="truncate">
+									{title}
+								</Text>
+							</Box>
+						) : null}
 						<Box justifyContent="space-between">
 							<Text color={current ? "whiteBright" : undefined} wrap="truncate">
 								<Text color="magenta">{current ? "› " : "  "}</Text>
-								{chosen.has(c.claudeSessionId) ? "[x] " : "[ ] "}
+								{chosen.has(item.id) ? "[x] " : "[ ] "}
 								{g ? <Text color={g.color}>{g.ch} </Text> : "  "}
-								<Text bold>{c.name}</Text>
-								{c.branch ? (
-									<Text color={current ? "white" : "gray"}> · {c.branch}</Text>
-								) : null}
+								<Text bold>{name}</Text>
+								{branch ? <Text color={dim}> · {branch}</Text> : null}
 							</Text>
 							<Box flexShrink={0} marginLeft={1}>
-								<Text color={current ? "white" : "gray"}>{c.location}</Text>
+								<Text color={dim}>{right}</Text>
 							</Box>
 						</Box>
-						<Text color="white" wrap="truncate">
-							{"        "}
-							{c.title ?? c.lastPrompt ?? "no prompt yet"}
-						</Text>
+						{item.kind === "past" && item.s.runningPid ? (
+							<Text color="yellow" wrap="truncate">
+								{"        "}open in a terminal (pid {item.s.runningPid}): quit
+								it there before resuming
+							</Text>
+						) : (
+							<Text color="white" wrap="truncate">
+								{"        "}
+								{line}
+							</Text>
+						)}
 					</Box>
 				);
 			})}
 			<Box marginTop={1} justifyContent="space-between">
 				<Text color="white">
 					<Key>a</Key> all / none
+					{allRepos ? null : (
+						<>
+							{"  "}
+							<Key>g</Key> every repo
+						</>
+					)}
+					{gone ? (
+						<Text color="gray">{`  ${gone} with folder gone`}</Text>
+					) : null}
 				</Text>
 				<Text color={error ? "red" : "white"} wrap="truncate">
 					{error ??
 						(busy
-							? "importing…"
-							: `Enter imports ${chosen.size} of ${candidates.length}`)}
+							? "working…"
+							: `Enter imports ${chosen.size} of ${items.length}`)}
 				</Text>
 			</Box>
 		</TitledBox>

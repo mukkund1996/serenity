@@ -37,6 +37,7 @@ test("tools/list names serenity's three tools", async () => {
 		"pr_overview",
 		"watch_session",
 		"create_session",
+		"import_sessions",
 		"request_handover",
 		"share_slack_file",
 		"request_permission",

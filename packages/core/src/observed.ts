@@ -55,6 +55,36 @@ export function parseClaudeProcess(raw: unknown): ClaudeProcess | null {
 	};
 }
 
+/**
+ * Any running interactive claude, in tmux or not (ADR 0064): enough to tell
+ * whether a conversation is still open somewhere before it is resumed.
+ */
+export interface RunningClaude {
+	pid: number;
+	sessionId: string;
+	cwd: string;
+	/** Whether it runs in a tmux pane (and so can be adopted in place). */
+	inTmux: boolean;
+}
+
+export function parseRunningClaude(raw: unknown): RunningClaude | null {
+	if (!raw || typeof raw !== "object") return null;
+	const o = raw as Record<string, unknown>;
+	if (
+		o.kind !== "interactive" ||
+		typeof o.pid !== "number" ||
+		typeof o.sessionId !== "string" ||
+		typeof o.cwd !== "string"
+	)
+		return null;
+	return {
+		pid: o.pid,
+		sessionId: o.sessionId,
+		cwd: o.cwd,
+		inTmux: typeof o.tmux === "string" && TMUX_FIELD.test(o.tmux),
+	};
+}
+
 /** Where Claude Code keeps a session's transcript. */
 export function transcriptPathFor(
 	configDir: string,
