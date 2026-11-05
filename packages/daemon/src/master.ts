@@ -164,6 +164,8 @@ interface Chat {
 	/** The last stream line: when, and what kind of event it was. */
 	lastOutputAt: number;
 	lastOutput: string;
+	/** Its tools changed (Slack turned on or off): replaced once its turn ends. */
+	stale?: boolean;
 }
 
 /** A repo's chat that died mid-turn: how often it was restarted, and the pending restart. */
@@ -871,8 +873,31 @@ export class MasterSupervisor {
 		else if (silent)
 			this.errors.set(repo, "master finished without a reply; ask again");
 		else this.errors.delete(repo);
+		if (chat.stale) this.retire(repo, chat);
 		this.host.broadcast(repo);
 		this.pump(repo);
+	}
+
+	/**
+	 * The repo's tools changed (Slack turned on or off): the chat is replaced,
+	 * resuming the same conversation, so the next message gets them. A chat
+	 * in a turn finishes it first.
+	 */
+	refresh(repo: string): void {
+		const chat = this.chats.get(repo);
+		if (!chat) return;
+		if (chat.thinking) chat.stale = true;
+		else this.retire(repo, chat);
+	}
+
+	/** Stops an idle chat on purpose; the next message starts one with --resume. */
+	private retire(repo: string, chat: Chat): void {
+		if (this.chats.get(repo) !== chat) return;
+		this.chats.delete(repo);
+		if (chat.watchdog) clearTimeout(chat.watchdog);
+		chat.watchdog = null;
+		chat.process.stop();
+		this.host.log(`master chat for ${repo} replaced: its tools changed`);
 	}
 
 	/**
@@ -1484,7 +1509,10 @@ export class MasterSupervisor {
 		args: Record<string, unknown>,
 	): Promise<MasterToolResult> {
 		if (!this.host.slack(repo))
-			return { text: "Slack is off for this repo.", isError: true };
+			return {
+				text: "Slack is off for this repo. The user can turn it on with Ctrl+, → Slack on the map, or `serenity slack on` in the repo.",
+				isError: true,
+			};
 		const str = (v: unknown) =>
 			typeof v === "string" && v.trim() ? v.trim() : null;
 		const path = str(args.path);

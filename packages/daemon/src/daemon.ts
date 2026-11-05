@@ -231,8 +231,8 @@ function applies(change: ConfigChange): string {
 			return "applies now";
 		case "slack":
 			return change.value
-				? "Slack shows on this map now; the master gets its Slack tools after serenity restart"
-				: "Slack is off on this map now; the master keeps its Slack tools until serenity restart";
+				? "Slack shows on this map now, and the master can read it from your next message"
+				: "Slack is off on this map now, and for the master from your next message";
 	}
 }
 
@@ -1681,6 +1681,10 @@ export class Daemon {
 			const before = new Set(this.slackRepos);
 			this.slackRepos.clear();
 			for (const repo of next.slack.repos) this.slackRepos.add(repo);
+			// The master gets or loses its Slack tools with its next message.
+			for (const repo of new Set([...before, ...this.slackRepos]))
+				if (before.has(repo) !== this.slackRepos.has(repo))
+					this.master.refresh(repo);
 			for (const repo of this.openRepos()) {
 				const on = this.slackRepos.has(repo);
 				if (on === before.has(repo)) continue;

@@ -52,7 +52,7 @@ serenity runs on your existing Claude Code login and subscription ([what it uses
 | **Fan-out** | An agent can split its work into new sessions with serenity's `request_sessions` tool. Ask it ("split this into 3 sessions") and they start at once; if it decides by itself, they wait in NEEDS YOU for `y`. They show under the agent that asked, report each finished turn back to it, and cannot fan out again. |
 | **Import** | Bring the Claude Code sessions you already have, no tmux needed: `I` on the map, `serenity import` in any terminal, or ask the master ("import my sessions from yesterday"). Past sessions arrive ended and `Enter` resumes one with `claude --resume` in its own folder; ones running in your tmux join in place. |
 | **Pinned sessions** | `p` pins a session you reuse: it is never marked finished or cleaned up, and resumes with `claude --resume` when you attach after it ended. |
-| **Slack (optional)** | Mentions and DMs that need you to act, at most three, join NEEDS YOU. The master proposes a follow-up from your sessions and PRs: a reply, a message to the session it is about, or a new session. `y` runs it, Enter marks it seen and opens it, `x` dismisses it. Messages you have written after on Slack drop out. |
+| **Slack (optional)** | Mentions and DMs that need you to act, at most three, join NEEDS YOU. The master proposes a follow-up from your sessions and PRs: a reply, a message to the session it is about, or a new session. `y` runs it, Enter marks it seen and opens it, `x` dismisses it. Messages you have written after on Slack drop out. Turn it on per repo: `serenity slack login` once, then `serenity slack on` in the repo (or `Ctrl+,` → Slack). |
 
 ## Install
 
@@ -119,7 +119,8 @@ Or press `I` on the map (`g` in the picker adds every repo), or ask the master: 
 | `serenity` | Open the map for the git repo you are in |
 | `serenity import` | Bring in your existing Claude Code sessions (`--help` for options) |
 | `serenity doctor` | Check tmux, claude, git and gh |
-| `serenity slack login` | Sign in to Slack for the master (once) |
+| `serenity slack login` | Sign in to Slack for the master (once); asks to turn Slack on for the repo you are in |
+| `serenity slack on` / `off` / `status` | Show Slack on this repo's map, or not (`serenity slack on ~/code/app` names another repo) |
 | `serenity restart` | Restart the background daemon (sessions keep running) |
 | `serenity stop` | Stop the background daemon |
 | `serenity version` | Print the version |
@@ -196,12 +197,12 @@ Config lives in `~/.config/serenity/config.json`. Every field is optional. `Ctrl
 | `maxTopics` | `10` | How many topics the master groups sessions into |
 | `baseBranch` | `"default"` | What new session worktrees branch off: `"default"` (origin's HEAD), `"current"` (the branch the main checkout is on) or `{ "branch": "develop" }` (local first, else `origin/develop`). If it can't be followed, the repo default is used and the panel and New session dialog say why. The dialog's Base field overrides it for one session |
 | `repos.<path>.baseBranch` | none | The same, for one repo (`~` allowed); a repo without one follows `baseBranch` |
-| `slack.repos` | none | Repos whose maps show Slack mentions and DMs that need you ([ADR 0023](docs/adr/0023-slack-for-the-master.md), [0024](docs/adr/0024-slack-reply-suggestions.md), [0031](docs/adr/0031-slack-joins-needs-you.md), [0034](docs/adr/0034-dismiss-slack-items.md), [0050](docs/adr/0050-needs-you-seen-and-explicit-actions.md)); run `serenity slack login` once |
+| `slack.repos` | none | Repos whose maps show Slack mentions and DMs that need you. Easier: `serenity slack on` in the repo, or `Ctrl+,` → Slack, which write this list for you ([ADR 0023](docs/adr/0023-slack-for-the-master.md), [0024](docs/adr/0024-slack-reply-suggestions.md), [0031](docs/adr/0031-slack-joins-needs-you.md), [0034](docs/adr/0034-dismiss-slack-items.md), [0050](docs/adr/0050-needs-you-seen-and-explicit-actions.md)); run `serenity slack login` once |
 | `crashReports.enabled` | `false` | File daemon crashes as GitHub issues through your `gh`, scrubbed of paths, tokens and emails, one issue per crash signature ([ADR 0045](docs/adr/0045-daemon-supervisor-crash-reports-recovery.md)). Reports are always kept in `crash-reports/` in the state directory |
 | `crashReports.repo` | `mukkund1996/serenity` | Where crash issues go |
 | `onboarding` | `true` | Start the `learn-serenity` tutorial on the first map you open ([ADR 0062](docs/adr/0062-first-boot-tutorial.md)); `false` skips it, as does `SERENITY_NO_ONBOARDING=1` |
 
-Model names are anything `claude --model` accepts (an alias like `sonnet` or a full model id). The daemon reads the file when it starts and again whenever the settings panel opens. From the panel, the base branch applies to new sessions; the summarizer and suggester models, max topics and Slack on the map apply at once. The master's chat model and its Slack tools change after `serenity restart`. After editing other fields by hand, run `serenity restart`.
+Model names are anything `claude --model` accepts (an alias like `sonnet` or a full model id). The daemon reads the file when it starts and again whenever the settings panel opens. From the panel, the base branch applies to new sessions; the summarizer and suggester models, max topics and Slack apply at once (the master gets or drops its Slack tools with your next message). `serenity slack on|off` applies at once the same way. The master's chat model changes after `serenity restart`. After editing other fields by hand, run `serenity restart`.
 
 A supervisor restarts the daemon if it crashes, and it picks up where it left off (ADR 0045). State (SQLite, socket, daemon log, crash reports) lives in `~/.local/state/serenity`. Set `SERENITY_HOME` to use another directory.
 
@@ -215,7 +216,7 @@ serenity has no API key or model access of its own. Every model call goes throug
 | `suggester` | Sonnet | A session starts waiting on you or finishes, its question changes, or its PR merges. One call proposes the next step for `y` / `e` / `n`. |
 | `chat` | Opus | The master's chat gets a message: one you send with `i`, or serenity's note that a session you asked it to watch has finished. It does nothing between messages. |
 
-**Slack** (off by default) adds calls only while the map of a repo in `slack.repos` is open: the `summarizer` model reads your mentions and DMs once a minute and when you open the map, the `suggester` model proposes a follow-up for each new item (and again when a session you told about it answers), and the `summarizer` model posts a reply or shares a file you approved.
+**Slack** (off by default) adds calls only while the map of a repo you turned it on for is open: the `summarizer` model reads your mentions and DMs once a minute and when you open the map, the `suggester` model proposes a follow-up for each new item (and again when a session you told about it answers), and the `summarizer` model posts a reply or shares a file you approved.
 
 Status, PRs, cleanup and the map itself use no model. To use smaller models, set them in `~/.config/serenity/config.json` and run `serenity restart`; fields you leave out keep their defaults:
 

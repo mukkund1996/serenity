@@ -1,10 +1,9 @@
 #!/usr/bin/env bun
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
 	BUILD_ID,
-	configPath,
 	connectDaemon,
 	daemonCrashPath,
 	doctorMarkerPath,
@@ -22,6 +21,15 @@ import {
 import { printChecks, runChecks } from "./doctor";
 import { runImport } from "./import";
 import {
+	askYes,
+	gitRoot,
+	runSlackCommand,
+	SLACK_USAGE,
+	setSlack,
+	slackIsOn,
+	turnOnHint,
+} from "./slack";
+import {
 	runUserStatusLine,
 	type StatusLineInput,
 	userStatusLineCommand,
@@ -35,6 +43,8 @@ usage:
                       (serenity import --help for options)
   serenity doctor     check tmux, claude, git and gh
   serenity slack login  sign in to Slack for the master (once)
+  serenity slack on|off|status [repo]
+                      show Slack on a repo's map (default: the repo you are in)
   serenity stop       stop the background daemon
   serenity restart    restart it (sessions keep running)
   serenity version
@@ -265,7 +275,7 @@ async function stopDaemon(
  * server is registered only for serenity's workers folder, then `claude mcp
  * login` runs the OAuth flow; later `claude -p` calls reuse the token.
  */
-function slackLogin(): void {
+async function slackLogin(): Promise<void> {
 	const claude = process.env.SERENITY_CLAUDE_BIN ?? "claude";
 	const config = loadConfig();
 	const cwd = join(home, "workers");
@@ -287,11 +297,20 @@ function slackLogin(): void {
 		console.log("A stdio server signs in through its own settings.");
 	else if (run(["mcp", "login", SLACK_SERVER]).status !== 0)
 		fail("Slack login did not finish");
-	console.log(
-		config.slack.repos.length
-			? `Slack is on for: ${config.slack.repos.join(", ")}`
-			: `Slack is off for every repo. List repos under slack.repos in ${configPath()}, then run serenity restart.`,
-	);
+	// Logged in from inside a repo: offer to turn Slack on for it right away.
+	const repo = gitRoot();
+	if (repo && slackIsOn(repo)) {
+		console.log(`Slack is on for ${basename(repo)}.`);
+		return;
+	}
+	if (repo && (await askYes(`Show Slack on ${basename(repo)}'s map now?`))) {
+		const applies = await setSlack(home, repo, true).catch((e: Error) =>
+			fail(e.message),
+		);
+		console.log(`Slack is on for ${basename(repo)}: ${applies}.`);
+		return;
+	}
+	console.log(turnOnHint(repo, true));
 }
 
 const [command, arg] = process.argv.slice(2);
@@ -341,8 +360,13 @@ switch (command) {
 		break;
 	}
 	case "slack":
-		if (arg !== "login") fail("usage: serenity slack login");
-		slackLogin();
+		if (arg === "login") await slackLogin();
+		else if (arg === "on" || arg === "off" || arg === "status")
+			process.exit(await runSlackCommand(home, arg, process.argv[4]));
+		else {
+			console.error(SLACK_USAGE);
+			process.exit(2);
+		}
 		break;
 	case "stop":
 		await stopDaemon();

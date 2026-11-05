@@ -41,7 +41,7 @@ serenity stores no tokens. GitHub access is `gh`'s login. The Slack OAuth token 
 
 ## Disconnect Slack and delete your data
 
-Turn Slack off: remove the repos from `slack.repos` in the config, then run `serenity restart`.
+Turn Slack off: run `serenity slack off` in each repo (or `Ctrl+,` → Slack on its map). `serenity slack status` tells you whether it is on. It applies at once; by hand, remove the repos from `slack.repos` in `~/.config/serenity/config.json`.
 
 Sign out and remove the Slack server serenity registered:
 

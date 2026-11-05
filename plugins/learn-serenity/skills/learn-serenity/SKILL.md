@@ -58,7 +58,7 @@ Explain that `Enter` and `Ctrl+q` are how they move between the overview and a s
 
 ### 5. NEEDS YOU
 
-NEEDS YOU is the single list of what's waiting on the user: sessions asking a question or a permission, the master's suggestions, and (if they turn Slack on) mentions and DMs. The yellow **N need you** chip counts them. Everything else stays quiet.
+NEEDS YOU is the single list of what's waiting on the user: sessions asking a question or a permission, the master's suggestions, and (if they turn Slack on: `serenity slack login` once, then `serenity slack on` in the repo or Ctrl+, → Slack) mentions and DMs. The yellow **N need you** chip counts them. Everything else stays quiet.
 
 Try it:
 1. On the map, focus `practice`, press `i` and send: `Ask me a yes/no question about this repo, then wait for my answer.`
