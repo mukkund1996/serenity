@@ -3,15 +3,22 @@ import {
 	backoffMs,
 	type DependencyIssue,
 	RECONNECT_BACKOFF,
+	StaleClientError,
 } from "@serenity/core";
 
 /**
  * The map's link to the daemon (ADR 0043). It reconnects forever with
  * backoff; "reconnecting" turns to "down" once the daemon has been away
  * DOWN_AFTER_MS. Calls made meanwhile wait a little for the link, never
- * queued to run later.
+ * queued to run later. "outdated": serenity was upgraded while the map ran,
+ * so it leaves the newer daemon alone until the map is restarted.
  */
-export type LinkStatus = "connecting" | "connected" | "reconnecting" | "down";
+export type LinkStatus =
+	| "connecting"
+	| "connected"
+	| "reconnecting"
+	| "down"
+	| "outdated";
 
 /** How long without the daemon before the header turns red. */
 export const DOWN_AFTER_MS = 15_000;
@@ -120,7 +127,14 @@ export class DaemonLink<P extends LinkPeer> {
 	}
 
 	private async connect(): Promise<void> {
-		const peer = await this.opts.connect().catch(() => null);
+		const peer = await this.opts.connect().catch((error) => {
+			if (error instanceof StaleClientError) {
+				// No "down", and no starting a daemon: one of the installed build runs.
+				this.clearTimers();
+				this.setStatus("outdated");
+			}
+			return null;
+		});
 		if (this.stopped) return peer?.close();
 		if (!peer) return this.retry();
 		let up = false;
@@ -163,6 +177,8 @@ export function linkBadge(status: LinkStatus): Badge | null {
 		return { text: " reconnecting… ", color: "yellow" };
 	if (status === "down")
 		return { text: " daemon down · see daemon.log ", color: "red" };
+	if (status === "outdated")
+		return { text: " serenity was upgraded · restart this map ", color: "red" };
 	return null;
 }
 

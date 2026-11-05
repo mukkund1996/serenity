@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, fchmodSync, openSync } from "node:fs";
 import { BUILD_ID } from "./domain";
 import { daemonLockPath, daemonLogPath, socketPath } from "./paths";
@@ -18,32 +18,75 @@ export async function waitForDaemonGone(home: string): Promise<void> {
 		await sleep(50);
 }
 
-/** Connects to a running daemon of the same version, or returns null. */
-export async function connectDaemon(home: string): Promise<RpcPeer | null> {
+/**
+ * This process is an older build than the running daemon: serenity was
+ * upgraded while it ran. It must not shut that daemon down, or it and a
+ * current client restart and stop it in turn until both give up.
+ */
+export class StaleClientError extends Error {
+	constructor(readonly daemonVersion: string) {
+		super(
+			`this serenity (${BUILD_ID}) is older than the running daemon (${daemonVersion}); restart it`,
+		);
+		this.name = "StaleClientError";
+	}
+}
+
+/** The build `selfCommand` would start now, or null if it can't be told. */
+export function installedBuild(): string | null {
+	const [command, ...args] = selfCommand();
+	const result = spawnSync(command as string, [...args, "version"], {
+		encoding: "utf8",
+		timeout: 2000,
+	});
+	const out = result.status === 0 ? result.stdout.trim() : "";
+	return out || null;
+}
+
+export interface ConnectOptions {
+	/** Defaults to asking the installed binary for its `version`. */
+	installedBuild?: () => string | null;
+}
+
+/**
+ * Connects to a running daemon of the same version, or returns null. A daemon
+ * of another build is asked to go, unless it is the installed build and this
+ * process the outdated one: then this throws StaleClientError.
+ */
+export async function connectDaemon(
+	home: string,
+	opts: ConnectOptions = {},
+): Promise<RpcPeer | null> {
 	let peer: RpcPeer;
 	try {
 		peer = await connectRpc(socketPath(home), 500);
 	} catch {
 		return null;
 	}
+	let daemonVersion: string;
 	try {
 		const hello = await peer.request(
 			"hello",
 			{ clientVersion: BUILD_ID },
 			{ timeoutMs: 1000 },
 		);
-		if (hello.daemonVersion === BUILD_ID) return peer;
-		// Another build: ask it to go, and wait for it to be gone.
-		await peer
-			.request("daemon.shutdown", {}, { timeoutMs: 1000 })
-			.catch(() => {});
-		peer.close();
-		await waitForDaemonGone(home);
-		return null;
+		daemonVersion = hello.daemonVersion;
 	} catch {
 		peer.close();
 		return null;
 	}
+	if (daemonVersion === BUILD_ID) return peer;
+	if ((opts.installedBuild ?? installedBuild)() === daemonVersion) {
+		peer.close();
+		throw new StaleClientError(daemonVersion);
+	}
+	// Another build, and not the installed one: ask it to go, and wait for it to be gone.
+	await peer
+		.request("daemon.shutdown", {}, { timeoutMs: 1000 })
+		.catch(() => {});
+	peer.close();
+	await waitForDaemonGone(home);
+	return null;
 }
 
 /** Spawns `serenity daemon` in the background, logging to daemon.log. */

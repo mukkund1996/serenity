@@ -44,7 +44,7 @@ const HOME_AND_ERASE_SCREEN = "\x1b[H\x1b[2J";
  * goes; otherwise its Claude pane is left filling the map's window.
  */
 async function parkAttached(home: string, clientPane: string): Promise<void> {
-	const peer = await connectDaemon(home);
+	const peer = await connectDaemon(home).catch(() => null);
 	await peer
 		?.request("session.detach", { clientPane }, { timeoutMs: 2000 })
 		.catch(() => {});
