@@ -34,7 +34,7 @@ world off camera, presses the keys, and writes `website/docs/media/<name>.gif`:
 
 | Tape | Section | Shows |
 | --- | --- | --- |
-| `onboarding.tape` | First boot (and the README's) | `serenity` in a fresh home: the Setup panel logs in to GitHub and Slack in popups, then `Enter` on the tutorial |
+| `onboarding.tape` | First boot (and the README's) | `serenity` in a fresh home: the welcome panel logs in to GitHub and Slack in popups, imports the repo's past sessions, then `Enter` on the tutorial |
 | `map.tape` | The map | moving between topics, `Z` into the topics, `Esc` out |
 | `sessions.tape` | Sessions | `/` to a card, `Enter` into its pane, `Ctrl+q` back |
 | `needs-you.tape` | NEEDS YOU | a permission prompt, a question and a Slack mention; `y`, `y`, `Enter`, `x` |

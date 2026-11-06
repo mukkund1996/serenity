@@ -52,11 +52,11 @@ test("GitHub: not logged in, or gh missing", async () => {
 	});
 	expect(await githubStatus(join(dir, "no-such-gh"))).toMatchObject({
 		connected: false,
-		problem: "gh is not installed (brew install gh)",
+		problem: "gh not installed · brew install gh",
 	});
 });
 
-test("Slack: not set up, then needs a login, then connected", async () => {
+test("Slack: not set up, then not logged in, then connected", async () => {
 	const check = { claude: FAKE_CLAUDE, workers, on: false, user: "Sam" };
 	expect((await slackLogin(FAKE_CLAUDE, workers)).login).toBe("missing");
 	expect(await slackStatus(check)).toEqual({
@@ -70,7 +70,7 @@ test("Slack: not set up, then needs a login, then connected", async () => {
 	claude("mcp", "add-json", "-s", "local", "slack", "{}");
 	expect(await slackStatus(check)).toMatchObject({
 		connected: false,
-		problem: "needs a login",
+		problem: "not logged in",
 	});
 
 	claude("mcp", "login", "slack");

@@ -1,5 +1,5 @@
 /**
- * The setup steps of onboarding (ADR 0065): logins serenity uses but does
+ * The setup steps of onboarding (ADR 0065, 0066): logins serenity uses but does
  * not own. Each step is one entry in SETUP_STEPS; the first-boot Setup panel,
  * the settings panel and `serenity doctor` all list them from here. Pure:
  * the texts, the status shape, and parsing what `gh` and `claude` print.
@@ -24,10 +24,10 @@ export interface SetupStatus {
 export interface SetupStep {
 	id: SetupStepId;
 	title: string;
-	/** What it enables, one short line each. */
-	enables: string[];
-	/** What doesn't work without it. */
-	without: string;
+	/** What it gives, in one short line. */
+	gives: string;
+	/** A privacy note, one line, with `link` behind `o`. */
+	note?: string;
 	/** Where to read more, if anywhere. */
 	link?: string;
 	/** The command that runs the step in a terminal. */
@@ -39,23 +39,14 @@ export const SETUP_STEPS: SetupStep[] = [
 	{
 		id: "github",
 		title: "GitHub",
-		enables: [
-			"PR badges and checks on cards, and adding reviewers",
-			"the master's overview of the repo's PRs",
-			"crash reports filed as issues, if you turn them on",
-		],
-		without: "Without it, cards show no PRs and the master can't see them.",
+		gives: "PRs and checks on your cards",
 		command: "serenity setup github",
 	},
 	{
 		id: "slack",
 		title: "Slack",
-		enables: [
-			"your mentions and DMs that need you, in NEEDS YOU",
-			"replies the master drafts; nothing is sent until you press y",
-			"sharing handover docs to a thread",
-		],
-		without: "Off by default: without it, serenity never reads Slack.",
+		gives: "Mentions and DMs that need you, in NEEDS YOU",
+		note: "Nothing is sent until you press y",
 		link: "https://github.com/mukkund1996/serenity/blob/main/PRIVACY.md#what-is-sent-and-where",
 		command: "serenity setup slack",
 	},
@@ -107,4 +98,46 @@ export function parseMcpGet(ok: boolean, text: string): McpLogin {
 	if (/Connected/i.test(status)) return "connected";
 	if (/auth/i.test(status)) return "needs-login";
 	return "failed";
+}
+
+/**
+ * The first-boot panel's import step (ADR 0066). Not in SETUP_STEPS: it is
+ * no login, so doctor and the settings panel don't list it.
+ */
+export const IMPORT_STEP = {
+	title: "Import",
+	gives: "Past Claude sessions here, parked until you resume one",
+} as const;
+
+/** How many of the newest past sessions the import step lists. */
+export const IMPORT_PREVIEW = 3;
+
+/** "3 optional steps." for the panel's intro. */
+export function setupIntro(steps: number): string {
+	const words = ["No", "One", "Two", "Three", "Four", "Five"];
+	const n = words[steps] ?? String(steps);
+	return `${n} optional ${steps === 1 ? "step" : "steps"}. More: getserenity.dev/docs`;
+}
+
+/** The import step's status line: what was found, or what happened to it. */
+export function importSummary(
+	found: number,
+	days: number,
+	state: "todo" | "done" | "skipped",
+	imported = 0,
+): string {
+	if (state === "done") return `imported ${imported}`;
+	if (state === "skipped") return "skipped";
+	return `${found} past ${found === 1 ? "session" : "sessions"}, last ${days} days`;
+}
+
+/**
+ * Where a step's Enter or s goes next: the first step after `at` still to
+ * do, else any before it, else `count`, the "You're set" line.
+ */
+export function nextOpenStep(open: boolean[], at: number): number {
+	const after = open.findIndex((o, i) => o && i > at);
+	if (after >= 0) return after;
+	const before = open.findIndex((o, i) => o && i !== at);
+	return before >= 0 ? before : open.length;
 }

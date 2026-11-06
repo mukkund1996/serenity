@@ -922,8 +922,8 @@ export function MasterPanel({
 					<Text color="gray">No sessions yet.</Text>
 					<Text> </Text>
 					<Text>
-						Press <Key>n</Key> to start your first session, or <Key>I</Key> to
-						import the Claude sessions you already have.
+						<Key>n</Key> starts a session · <Key>I</Key> imports your past
+						Claude sessions
 					</Text>
 					{slackError}
 					{needsYou}
