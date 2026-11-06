@@ -182,8 +182,8 @@ type Row =
 	| { kind: "import"; title: string };
 
 /**
- * The first-boot panel (ADR 0065, 0066): GitHub, Slack, then this repo's
- * past sessions when there are any, then "You're set". One line per step
+ * The first-boot panel (ADR 0065, 0066): this repo's past sessions when
+ * there are any, then GitHub and Slack, then "You're set". One line per step
  * says what it gives; Enter does it, s skips it, Esc closes.
  */
 export function SetupPanel({
@@ -204,16 +204,18 @@ export function SetupPanel({
 	const statusOf = (id: SetupStepId) => setup.steps?.find((s) => s.id === id);
 	const past = importStep?.found ?? [];
 
+	// Import first, then the logins. While it is still looking, the import
+	// row shows "checking…"; with no past sessions it isn't shown at all.
+	const looking = !!importStep && importStep.found === null;
 	const rows: Row[] = [
+		...(looking || past.length
+			? [{ kind: "import" as const, title: IMPORT_STEP.title }]
+			: []),
 		...SETUP_STEPS.map((s) => ({
 			kind: "login" as const,
 			id: s.id,
 			title: s.title,
 		})),
-		// No past sessions here: the step isn't shown at all.
-		...(past.length
-			? [{ kind: "import" as const, title: IMPORT_STEP.title }]
-			: []),
 	];
 	const open = (row: Row): boolean => {
 		if (row.kind === "import") return importStep?.state === "todo";
@@ -227,7 +229,8 @@ export function SetupPanel({
 	// Once checked, start at the first step left to do (gh is often logged
 	// in already), unless a key was pressed meanwhile.
 	const moved = useRef(false);
-	const checked = !!setup.steps && (!importStep || !!importStep.found);
+	const checked =
+		(!!setup.steps || !!setup.error) && (!importStep || !!importStep.found);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: only when the first checks land
 	useEffect(() => {
 		if (!checked || moved.current) return;
@@ -245,8 +248,10 @@ export function SetupPanel({
 	useInput(
 		(input, key) => {
 			if (busy) return;
-			moved.current = true;
 			if (key.escape) return onClose();
+			// Rows can still change (the import row) until both checks land.
+			if (!checked) return;
+			moved.current = true;
 			if (key.upArrow) return setAt(Math.max(0, Math.min(at, rows.length) - 1));
 			if (key.downArrow || key.tab) return setAt(Math.min(rows.length, at + 1));
 			if (finished || !row) {
