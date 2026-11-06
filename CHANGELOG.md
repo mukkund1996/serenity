@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.12.0](https://github.com/mukkund1996/serenity/compare/v0.11.0...v0.12.0) (2026-11-06)
+
+
+### Features
+
+* **master:** [@copy](https://github.com/copy), [@handover](https://github.com/handover) and [@move](https://github.com/move) lead on to sessions and topics ([#119](https://github.com/mukkund1996/serenity/issues/119)) ([845554b](https://github.com/mukkund1996/serenity/commit/845554b14dd1f5490e863c197e3ed3a6331787c3))
+* **onboarding:** welcome panel with an import step and tighter copy (ADR 0066) ([#120](https://github.com/mukkund1996/serenity/issues/120)) ([52a9446](https://github.com/mukkund1996/serenity/commit/52a9446ad75feea7a76b99e39fa0cda661c5c08c))
+
+
+### Bug Fixes
+
+* an outdated client no longer stops the installed build's daemon ([#116](https://github.com/mukkund1996/serenity/issues/116)) ([2166c79](https://github.com/mukkund1996/serenity/commit/2166c79dbfa726e8773ea7bf86ffbc56096458e9))
+
 ## [0.11.0](https://github.com/mukkund1996/serenity/compare/v0.10.0...v0.11.0) (2026-11-05)
 
 
