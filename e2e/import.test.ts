@@ -260,11 +260,11 @@ test(
 	"an empty map points at the sessions the user already has",
 	async () => {
 		await until(
-			() => screen().includes("from the last 14 days in this repo · I imports"),
+			() => screen().includes("past Claude sessions here · I imports them"),
 			"the import hint",
 		);
 		// README, the worktree's login fix and the one open in a terminal.
-		expect(screen()).toContain("3 Claude Code sessions");
+		expect(screen()).toContain("3 past Claude sessions here");
 	},
 	TIMEOUT,
 );

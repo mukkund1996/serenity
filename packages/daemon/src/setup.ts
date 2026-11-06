@@ -67,7 +67,7 @@ export async function githubStatus(
 		connected: false,
 		user: null,
 		problem: out.missing
-			? "gh is not installed (brew install gh)"
+			? "gh not installed · brew install gh"
 			: "not logged in",
 	};
 }
@@ -108,7 +108,7 @@ export async function slackStatus(check: SlackCheck): Promise<SetupStatus> {
 			login === "missing"
 				? "not connected"
 				: login === "needs-login"
-					? "needs a login"
+					? "not logged in"
 					: `can't reach Slack: ${
 							text
 								.split("\n")

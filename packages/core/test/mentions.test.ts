@@ -357,7 +357,7 @@ describe("parseMove (ADR 0063)", () => {
 	});
 });
 
-describe("command completion (ADR 0066)", () => {
+describe("command completion (ADR 0067)", () => {
 	const sessions = [api, web, gone];
 	const topics = ["release", "auth work", "docs"];
 	const offered = (before: string) => {
@@ -496,7 +496,7 @@ describe("command completion (ADR 0066)", () => {
 	});
 });
 
-describe("moveTopicSpan (ADR 0066)", () => {
+describe("moveTopicSpan (ADR 0067)", () => {
 	const sessions = [api, web];
 	const span = (text: string) => {
 		const at = moveTopicSpan(text, sessions);

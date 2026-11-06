@@ -121,7 +121,7 @@ export function stepSelection(
 
 /**
  * Per character of `text`, the colour of the resolving `@` mention it is in
- * (ADR 0052), or of the topic an `@move` names (ADR 0066), or null for
+ * (ADR 0052), or of the topic an `@move` names (ADR 0067), or null for
  * plain text.
  */
 export function mentionColors(
@@ -150,7 +150,7 @@ export interface MentionList {
 /**
  * How the @ list shows one of its names: a session or command as `@name`
  * in its colour, with a command's hint; a topic bare, in the topic colour,
- * labelled "topic" so it reads apart from the sessions (ADR 0066).
+ * labelled "topic" so it reads apart from the sessions (ADR 0067).
  */
 export function listEntry(
 	name: string,
@@ -162,7 +162,7 @@ export function listEntry(
 }
 
 /**
- * The dim hint after the cursor while no list is open (ADR 0066): what the
+ * The dim hint after the cursor while no list is open (ADR 0067): what the
  * command typed so far needs next. Null when there is nothing to say.
  */
 export function completionHint(completion: Completion | null): string | null {

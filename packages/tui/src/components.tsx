@@ -252,7 +252,7 @@ function MasterInput({
 	field: Field | null;
 	selected?: boolean;
 	mentions?: MentionList | null;
-	/** Dim, after the cursor: what the command typed needs next (ADR 0066). */
+	/** Dim, after the cursor: what the command typed needs next (ADR 0067). */
 	hint?: string | null;
 	width?: number;
 	sessions?: readonly Session[];
@@ -829,7 +829,7 @@ export function MasterPanel({
 	selected: string | null;
 	input: Field | null;
 	mentions: MentionList | null;
-	/** Dim, after the input's cursor (ADR 0066). */
+	/** Dim, after the input's cursor (ADR 0067). */
 	hint?: string | null;
 	reply: Field | null;
 	/** The master's queue section (ADR 0040), drawn under NEEDS YOU. */
@@ -932,8 +932,8 @@ export function MasterPanel({
 					<Text color="gray">No sessions yet.</Text>
 					<Text> </Text>
 					<Text>
-						Press <Key>n</Key> to start your first session, or <Key>I</Key> to
-						import the Claude sessions you already have.
+						<Key>n</Key> starts a session · <Key>I</Key> imports your past
+						Claude sessions
 					</Text>
 					{slackError}
 					{needsYou}

@@ -1,4 +1,4 @@
-# 0066 · `@copy`, `@handover` and `@move` lead on to what they need: sessions, then "to" and the topics
+# 0067 · `@copy`, `@handover` and `@move` lead on to what they need: sessions, then "to" and the topics
 
 **Status:** Accepted · 2026-11-06 · Amends 0036, 0052, 0063
 

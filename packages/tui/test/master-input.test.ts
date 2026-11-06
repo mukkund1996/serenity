@@ -183,7 +183,7 @@ describe("mention colours (ADR 0052)", () => {
 	});
 });
 
-describe("command completion in the input (ADR 0066)", () => {
+describe("command completion in the input (ADR 0067)", () => {
 	const sessions = [makeSession({ id: "a", name: "api-auth", status: "idle" })];
 
 	test("the topic an @move names gets the topic colour", () => {

@@ -270,7 +270,7 @@ function matchNames(names: readonly string[], query: string): string[] {
 }
 
 /**
- * What the master input completes at its cursor (ADR 0066), from the text
+ * What the master input completes at its cursor (ADR 0067), from the text
  * before the cursor. Each command leads on to what it needs next, so the
  * user never has to remember it:
  * - `mention`: an `@query` being typed; the list offers commands, then live

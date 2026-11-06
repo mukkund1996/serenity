@@ -1,6 +1,6 @@
 # 0062 · The docs open after install, and a learn-serenity tutorial on first boot
 
-**Status:** Accepted · 2026-11-05 · Amended by [0065](0065-setup-logins.md): a Setup panel for the GitHub and Slack logins opens first, and closing it focuses the tutorial
+**Status:** Accepted · 2026-11-05 · Amended by [0065](0065-setup-logins.md): a Setup panel for the GitHub and Slack logins opens first, and closing it focuses the tutorial; [0066](0066-welcome-panel-import-step.md) makes it the welcome panel, with an import step
 
 ## Context
 In early user testing, new users installed serenity, ran it and landed on an empty map with no idea what to do next. The empty map says "Press n to start your first session". That doesn't explain the master, NEEDS YOU, attaching with `Enter` and getting back with `Ctrl+q`, or what happens to PRs. The docs page explains all of it, but nothing leads people there.

@@ -104,7 +104,7 @@ export interface MapMaster {
 	input: Field | null;
 	/** Names the @ list offers at the input's cursor, with the selected one. */
 	mentions?: MentionList | null;
-	/** Dim, after the input's cursor: what the command typed needs next (ADR 0066). */
+	/** Dim, after the input's cursor: what the command typed needs next (ADR 0067). */
 	hint?: string | null;
 	lastMessage: MasterMessage | null;
 	/** The glow's colour while a session's answer lights it (ADR 0039, 0042). */

@@ -1,6 +1,6 @@
 # 0065 · GitHub and Slack logins in onboarding, settings and doctor
 
-**Status:** Accepted · 2026-11-05 · Amends [0062](0062-first-boot-tutorial.md), [0023](0023-slack-for-the-master.md)
+**Status:** Accepted · 2026-11-05 · Amends [0062](0062-first-boot-tutorial.md), [0023](0023-slack-for-the-master.md) · Amended by [0066](0066-welcome-panel-import-step.md): the Setup panel became the welcome panel, with one line per step, an import step and "You're set"
 
 ## Context
 serenity uses two logins it doesn't own. `gh` gives cards their PR status, adds reviewers, feeds the master's `pr_overview` (0061) and files crash reports (0045). Slack's MCP server, signed in through `claude mcp login`, feeds NEEDS YOU, drafted replies and handover sharing (0023, 0024, 0049).

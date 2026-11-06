@@ -33,9 +33,9 @@ export interface SetupOptions {
 function intro(id: SetupStepId): void {
 	const step = setupStep(id);
 	console.log(bold(step.title));
-	for (const line of step.enables) console.log(`  · ${line}`);
-	if (step.link)
-		console.log(dim(`  What serenity reads and sends: ${step.link}`));
+	console.log(`  ${step.gives}`);
+	if (step.note && step.link)
+		console.log(dim(`  ${step.note} · Privacy: ${step.link}`));
 	console.log("");
 }
 

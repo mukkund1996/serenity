@@ -31,7 +31,7 @@ export const MENTION_COLOR: Record<MentionKind, Color> = {
 };
 
 /**
- * A topic named after `@move ... to` (ADR 0066), in the @ list and the
+ * A topic named after `@move ... to` (ADR 0067), in the @ list and the
  * input: sand, apart from every mention colour and the master's magenta.
  */
 export const TOPIC_COLOR: Color = "#d7af87";

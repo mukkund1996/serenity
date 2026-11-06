@@ -388,14 +388,14 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const bodyHeight = rows - 2;
 	const masterWidth = Math.max(38, Math.min(72, columns - 50));
 	const masterInner = masterWidth - 6;
-	/** The topics `@move ... to` offers: the map's, less unsorted and pinned (ADR 0066). */
+	/** The topics `@move ... to` offers: the map's, less unsorted and pinned (ADR 0067). */
 	const topicNames = useMemo(
 		() =>
 			groups.map((g) => g.name).filter((n) => n !== UNSORTED && n !== PINNED),
 		[groups],
 	);
 	/**
-	 * What the input completes at its cursor (ADR 0066), and the names its @
+	 * What the input completes at its cursor (ADR 0067), and the names its @
 	 * list offers there; none once Esc (or picking a topic) closed it.
 	 */
 	const completionOf = (field: Field | null) => {
@@ -779,16 +779,24 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			(s) => s.status !== "archived" && s.name !== "learn-serenity",
 		);
 		if (own.length) return;
-		call("history.discover", { repo, since: historySince() }).then(
-			({ sessions: found }) => {
-				if (!found.length) return;
-				noticeMs.current = HINT_MS;
-				setNotice(
-					`${found.length} Claude Code ${found.length === 1 ? "session" : "sessions"} from the last ${HISTORY_DAYS} days in this repo · I imports them`,
-				);
-			},
-			() => {},
-		);
+		// On first boot the welcome panel's import step offers them instead (ADR 0067).
+		call("setup.pending", {})
+			.then((pending) =>
+				pending
+					? null
+					: call("history.discover", { repo, since: historySince() }),
+			)
+			.then(
+				(r) => {
+					const found = r?.sessions.length ?? 0;
+					if (!found) return;
+					noticeMs.current = HINT_MS;
+					setNotice(
+						`${found} past Claude ${found === 1 ? "session" : "sessions"} here · I imports them`,
+					);
+				},
+				() => {},
+			);
 	}, [link, state, call, repo]);
 
 	const fail = (e: unknown) =>
@@ -1178,7 +1186,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 						return;
 					}
 				}
-				// After `@move @a`, space or Tab writes "to " and opens the topics (ADR 0066).
+				// After `@move @a`, space or Tab writes "to " and opens the topics (ADR 0067).
 				if (
 					completing?.completion.kind === "to" &&
 					completing.after === "" &&
@@ -1649,6 +1657,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					<SetupOverlay
 						repo={repo}
 						call={call}
+						firstBoot={overlay.firstBoot}
 						onClose={() => closeSetup(overlay.firstBoot)}
 					/>
 				</Centered>

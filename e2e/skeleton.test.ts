@@ -326,7 +326,7 @@ step(
 	"first launch starts the daemon and shows the empty master",
 	async () => {
 		await waitFor(/No sessions yet/);
-		expect(screen()).toContain("Press n to start your first session");
+		expect(screen()).toContain("n starts a session · I imports your past");
 		expect(screen()).toContain("session — · week — · avg wait —");
 	},
 	STEP_TIMEOUT,
@@ -1303,7 +1303,7 @@ step(
 );
 
 step(
-	"@copy then a space lists the sessions without another @; picking one asks for the brief (ADR 0066)",
+	"@copy then a space lists the sessions without another @; picking one asks for the brief (ADR 0067)",
 	async () => {
 		await openMasterInput();
 		type("@copy ");
@@ -1322,7 +1322,7 @@ step(
 );
 
 step(
-	"@move lists the sessions, space writes to and lists the topics; a new topic is typed; the master moves it (ADR 0063, 0066)",
+	"@move lists the sessions, space writes to and lists the topics; a new topic is typed; the master moves it (ADR 0063, 0067)",
 	async () => {
 		await openMasterInput();
 		type("@mo");
