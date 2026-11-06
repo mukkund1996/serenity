@@ -22,6 +22,7 @@ import {
 	mkdirSync,
 	realpathSync,
 	rmSync,
+	utimesSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -32,6 +33,7 @@ import {
 	type RpcPeer,
 	type Session,
 	tmuxSessionName,
+	transcriptPathFor,
 } from "../../packages/core/src/index";
 import {
 	type DemoSlackItem,
@@ -190,10 +192,45 @@ function makeWorld(): void {
 	}
 }
 
+/** Past Claude Code sessions in the fresh repo: prompt, branch, hours ago. */
+const PAST_SESSIONS: Array<[string, string, number]> = [
+	["Add a cart badge with the item count", "feat/cart-badge", 3],
+	["Why does checkout double-charge on retry?", "fix/checkout-retry", 26],
+	["Write tests for the coupon parser", "main", 52],
+	["Tidy the product page copy", "copy/product-page", 98],
+];
+
+/** A transcript as Claude Code writes it, last active `hours` ago. */
+function pastSession(
+	id: string,
+	prompt: string,
+	branch: string,
+	hours: number,
+): void {
+	const path = transcriptPathFor(env.CLAUDE_CONFIG_DIR as string, REPO_DIR, id);
+	const at = new Date(Date.now() - hours * 3_600_000);
+	mkdirSync(join(path, ".."), { recursive: true });
+	writeFileSync(
+		path,
+		`${JSON.stringify({
+			type: "user",
+			isSidechain: false,
+			message: { role: "user", content: prompt },
+			timestamp: at.toISOString(),
+			entrypoint: "cli",
+			cwd: REPO_DIR,
+			sessionId: id,
+			gitBranch: branch,
+		})}\n`,
+	);
+	utimesSync(path, at, at);
+}
+
 /**
  * A first boot (onboarding.tape): an empty repo, an empty serenity home and
- * config, no doctor marker, and onboarding on. Writes env.sh, which puts
- * `serenity` (this checkout) and the fake `gh`, logged out, on PATH.
+ * config, no doctor marker, and onboarding on, plus a few past Claude Code
+ * sessions in the repo for the import step (ADR 0066). Writes env.sh, which
+ * puts `serenity` (this checkout) and the fake `gh`, logged out, on PATH.
  */
 function fresh(): void {
 	stop();
@@ -224,6 +261,13 @@ function fresh(): void {
 		"-m",
 		"init",
 	);
+	for (const [i, [prompt, branch, hours]] of PAST_SESSIONS.entries())
+		pastSession(
+			`0d3a7c55-0000-4000-8000-00000000000${i + 1}`,
+			prompt,
+			branch,
+			hours,
+		);
 	const { SERENITY_NO_ONBOARDING: _, ...firstBoot } = env;
 	const lines = Object.entries({
 		...firstBoot,

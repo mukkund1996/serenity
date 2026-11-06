@@ -1,6 +1,6 @@
 # 0064 · Importing past Claude Code sessions, from any repo, without tmux
 
-**Status:** Accepted · 2026-11-05 · Amends [0016](0016-importing-running-sessions.md) (`I` lists past sessions too) and [0022](0022-pinned-sessions.md) (an imported session resumes on attach like a pinned one)
+**Status:** Accepted · 2026-11-05 · Amended by [0066](0066-welcome-panel-import-step.md): on first boot the welcome panel's import step replaces the hint · Amends [0016](0016-importing-running-sessions.md) (`I` lists past sessions too) and [0022](0022-pinned-sessions.md) (an imported session resumes on attach like a pinned one)
 
 ## Context
 `I` (0016) imports only claudes that are running in a tmux pane on serenity's tmux server, in this repo. Most new users don't use tmux. Their Claude Code sessions run in a plain terminal or have ended, so `I` shows them nothing, and they start serenity with an empty map while weeks of conversations sit in Claude's own history.

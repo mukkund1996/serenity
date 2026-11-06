@@ -745,16 +745,24 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			(s) => s.status !== "archived" && s.name !== "learn-serenity",
 		);
 		if (own.length) return;
-		call("history.discover", { repo, since: historySince() }).then(
-			({ sessions: found }) => {
-				if (!found.length) return;
-				noticeMs.current = HINT_MS;
-				setNotice(
-					`${found.length} Claude Code ${found.length === 1 ? "session" : "sessions"} from the last ${HISTORY_DAYS} days in this repo · I imports them`,
-				);
-			},
-			() => {},
-		);
+		// On first boot the welcome panel's import step offers them instead (ADR 0066).
+		call("setup.pending", {})
+			.then((pending) =>
+				pending
+					? null
+					: call("history.discover", { repo, since: historySince() }),
+			)
+			.then(
+				(r) => {
+					const found = r?.sessions.length ?? 0;
+					if (!found) return;
+					noticeMs.current = HINT_MS;
+					setNotice(
+						`${found} past Claude ${found === 1 ? "session" : "sessions"} here · I imports them`,
+					);
+				},
+				() => {},
+			);
 	}, [link, state, call, repo]);
 
 	const fail = (e: unknown) =>
@@ -1600,6 +1608,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					<SetupOverlay
 						repo={repo}
 						call={call}
+						firstBoot={overlay.firstBoot}
 						onClose={() => closeSetup(overlay.firstBoot)}
 					/>
 				</Centered>

@@ -326,7 +326,7 @@ step(
 	"first launch starts the daemon and shows the empty master",
 	async () => {
 		await waitFor(/No sessions yet/);
-		expect(screen()).toContain("Press n to start your first session");
+		expect(screen()).toContain("n starts a session · I imports your past");
 		expect(screen()).toContain("session — · week — · avg wait —");
 	},
 	STEP_TIMEOUT,
