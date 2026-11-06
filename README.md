@@ -101,9 +101,9 @@ serenity          # opens the map for this repo
 
 `serenity doctor` checks your setup. Press `N` to start a session, `?` for the full keymap.
 
-**First time?** The first map you open starts with **Welcome to serenity**, up to three optional steps: **GitHub** (PRs and checks on your cards, through `gh`), **Slack** (mentions and DMs that need you; see [PRIVACY.md](PRIVACY.md)), and **Import**, when the repo has past Claude Code sessions. `Enter` does a step, `s` skips it. Logins run in a popup and tokens stay with gh and Claude Code. Redo them later under `Ctrl+,` or with `serenity setup github|slack` ([ADR 0065](docs/adr/0065-setup-logins.md), [0066](docs/adr/0066-welcome-panel-import-step.md)).
+**First time?** The first map you open starts with **Welcome to serenity**, up to three optional steps: **Import**, when the repo has past Claude Code sessions, then **GitHub** (PRs and checks on your cards, through `gh`) and **Slack** (mentions and DMs that need you; see [PRIVACY.md](PRIVACY.md)). `Enter` does a step, `s` skips it. Logins run in a popup and tokens stay with gh and Claude Code. Redo them later under `Ctrl+,` or with `serenity setup github|slack` ([ADR 0065](docs/adr/0065-setup-logins.md), [0066](docs/adr/0066-welcome-panel-import-step.md)).
 
-![First boot: the welcome panel logs in to GitHub and Slack in popups, imports past sessions, then the learn-serenity tutorial](website/docs/media/onboarding.gif)
+![First boot: the welcome panel imports past sessions, logs in to GitHub and Slack in popups, then the learn-serenity tutorial](website/docs/media/onboarding.gif)
 
 Closing it puts you on the tutorial: one session, `learn-serenity`, prompted with "teach me how to use serenity". Press `Enter` on it for a hands-on tour: the map, sessions, NEEDS YOU, the master, PRs and the keys, one step at a time. It runs in the repo itself and changes nothing; press `K` on it when you're done and it won't come back. It only appears once per machine, and never if you already have sessions. Set `"onboarding": false` in the config or `SERENITY_NO_ONBOARDING=1` to skip it. To take the tour again, install the [learn-serenity](plugins/learn-serenity/) plugin (`/plugin install learn-serenity@serenity`) and ask any session "teach me how to use serenity" ([ADR 0062](docs/adr/0062-first-boot-tutorial.md)).
 
