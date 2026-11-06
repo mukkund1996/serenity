@@ -185,7 +185,11 @@ describe("drawMap", () => {
 			master: {
 				focused: true,
 				input: fieldAt("ask @a"),
-				mentions: { names: ["api-auth", "sync-worker"], selected: 1 },
+				mentions: {
+					names: ["api-auth", "sync-worker"],
+					selected: 1,
+					kind: "mention",
+				},
 			},
 		});
 		const lines = withCursor(canvas).split("\n");
@@ -403,7 +407,7 @@ describe("@ mentions in the map's master are coloured (ADR 0052)", () => {
 		const { canvas } = draw({
 			master: {
 				input: fieldAt("@"),
-				mentions: { names: ["copy", "api-auth"], selected: 0 },
+				mentions: { names: ["copy", "api-auth"], selected: 0, kind: "mention" },
 				lastMessage: {
 					id: 1,
 					repo: "/r",

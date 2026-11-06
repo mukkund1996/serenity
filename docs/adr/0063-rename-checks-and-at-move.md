@@ -1,6 +1,6 @@
 # 0063 · Renaming checks its name in the dialog; `@move @session <topic>` moves sessions, and `set_topic` waits like any move
 
-**Status:** Accepted · 2026-11-05 · Amends 0047, 0048
+**Status:** Accepted · 2026-11-05 · Amends 0047, 0048 · Amended by [0066](0066-command-completion.md): the `@` list leads on from `@move` to sessions, "to" and the topics
 
 ## Context
 `r` already renamed a session: a dialog over the map, the `session.rename` RPC, and `Daemon.rename`, which also renames the tmux window of a session serenity started. A check end to end found it working: the dialog opens on a card in both zooms and on a session's NEEDS YOU row, Esc closes it, the name is stored (so it survives a daemon restart), the summarizer never writes names, and the map and the `@` list show the new name on the next broadcast. The gaps were small:

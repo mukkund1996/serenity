@@ -30,6 +30,12 @@ export const MENTION_COLOR: Record<MentionKind, Color> = {
 	move: "cyan",
 };
 
+/**
+ * A topic named after `@move ... to` (ADR 0066), in the @ list and the
+ * input: sand, apart from every mention colour and the master's magenta.
+ */
+export const TOPIC_COLOR: Color = "#d7af87";
+
 /** The only three status glyphs (design handover, "Status language"). */
 export function glyph(
 	status: SessionStatus,
