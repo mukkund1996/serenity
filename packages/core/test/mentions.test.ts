@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { MasterMessage } from "../src/domain";
 import {
+	applyCompletion,
+	type Completion,
 	commandHint,
-	completeMention,
+	completionAt,
+	completionOptions,
 	isReservedName,
 	masterCommands,
 	matchMentions,
@@ -10,6 +13,7 @@ import {
 	mentionedSessions,
 	mentionSegments,
 	mentionsSession,
+	moveTopicSpan,
 	parseMove,
 } from "../src/mentions";
 import { makeSession } from "../test-support";
@@ -197,11 +201,14 @@ describe("master commands (ADR 0048)", () => {
 	});
 });
 
-describe("completeMention", () => {
+describe("applyCompletion", () => {
+	const complete = (text: string, name: string) =>
+		applyCompletion(text, completionAt(text) as Completion, name);
+
 	test("replaces the typed @word with the name and a space", () => {
-		expect(completeMention("ask @ap", "api-auth")).toBe("ask @api-auth ");
-		expect(completeMention("@", "api-auth")).toBe("@api-auth ");
-		expect(completeMention("a @x and @lo", "login")).toBe("a @x and @login ");
+		expect(complete("ask @ap", "api-auth")).toBe("ask @api-auth ");
+		expect(complete("@", "api-auth")).toBe("@api-auth ");
+		expect(complete("a @x and @lo", "login")).toBe("a @x and @login ");
 	});
 });
 
@@ -347,5 +354,165 @@ describe("parseMove (ADR 0063)", () => {
 			{ text: "@api-auth", kind: "session" },
 			{ text: " infra", kind: null },
 		]);
+	});
+});
+
+describe("command completion (ADR 0067)", () => {
+	const sessions = [api, web, gone];
+	const topics = ["release", "auth work", "docs"];
+	const offered = (before: string) => {
+		const c = completionAt(before);
+		return c ? completionOptions(c, sessions, topics) : [];
+	};
+	/** Types `before`, then picks `name` from the list. */
+	const pick = (before: string, name: string) =>
+		applyCompletion(before, completionAt(before) as Completion, name);
+
+	test("an @ being typed completes commands and sessions, as before", () => {
+		expect(completionAt("ask @ap")).toEqual({
+			kind: "mention",
+			query: "ap",
+			start: 4,
+		});
+		expect(offered("@")).toEqual([
+			"new",
+			"copy",
+			"handover",
+			"move",
+			"api-auth",
+			"web-login",
+		]);
+		expect(pick("ask @ap", "api-auth")).toBe("ask @api-auth ");
+		expect(completionAt("plain text")).toBeNull();
+	});
+
+	test("@copy and @handover then a space offer the live sessions, no @ needed", () => {
+		for (const command of ["copy", "handover"]) {
+			const before = `@${command} `;
+			expect(completionAt(before)).toEqual({
+				kind: "session",
+				query: "",
+				start: before.length,
+			});
+			expect(offered(before)).toEqual(["api-auth", "web-login"]);
+			expect(pick(before, "web-login")).toBe(`@${command} @web-login `);
+		}
+		// The command alone, or a command word in the wrong case, offers nothing yet.
+		expect(completionAt("@copy")?.kind).toBe("mention");
+		expect(completionAt("@Copy ")).toBeNull();
+	});
+
+	test("the bare word after the command filters the sessions", () => {
+		expect(completionAt("@copy we")).toEqual({
+			kind: "session",
+			query: "we",
+			start: 6,
+		});
+		expect(offered("@copy we")).toEqual(["web-login"]);
+		expect(offered("@copy login")).toEqual(["web-login"]);
+		expect(pick("@copy we", "web-login")).toBe("@copy @web-login ");
+		// A second word is free text: the list is gone.
+		expect(completionAt("@copy the auth")).toBeNull();
+		expect(offered("@copy zzz")).toEqual([]);
+	});
+
+	test("archived sessions and command words are never offered after a command", () => {
+		expect(offered("@handover ret")).toEqual([]);
+		expect(offered("@move ")).not.toContain("retired");
+		expect(offered("@move ")).not.toContain("new");
+	});
+
+	test("@new takes no session: no list after it", () => {
+		expect(completionAt("@new ")).toBeNull();
+		expect(completionAt("@new fix")).toBeNull();
+	});
+
+	test("@copy @session leads on to the brief; @handover @session to nothing", () => {
+		expect(completionAt("@copy @api-auth ")).toEqual({
+			kind: "brief",
+			query: "",
+			start: 16,
+		});
+		expect(completionAt("@copy @api-auth fix it")).toBeNull();
+		expect(completionAt("@handover @api-auth ")).toBeNull();
+	});
+
+	test("@move: sessions, then more on @, then to, then the topics", () => {
+		// command → session list
+		let text = "@move ";
+		expect(completionAt(text)?.kind).toBe("session");
+		text = pick(text, "api-auth");
+		expect(text).toBe("@move @api-auth ");
+		// → "to": no list, more sessions on @
+		expect(completionAt(text)).toEqual({
+			kind: "to",
+			query: "",
+			start: text.length,
+		});
+		expect(completionAt(`${text}@we`)?.kind).toBe("mention");
+		text = pick(`${text}@we`, "web-login");
+		expect(text).toBe("@move @api-auth @web-login ");
+		expect(completionAt(text)?.kind).toBe("to");
+		// → topic list once "to " follows (the TUI writes it on space or Tab)
+		text += "to ";
+		expect(completionAt(text)).toEqual({
+			kind: "topic",
+			query: "",
+			start: text.length,
+		});
+		expect(offered(text)).toEqual(topics);
+		expect(offered(`${text}au`)).toEqual(["auth work"]);
+		expect(offered(`${text}work`)).toEqual(["auth work"]);
+		expect(pick(`${text}au`, "auth work")).toBe(
+			"@move @api-auth @web-login to auth work",
+		);
+		// A new name is just typed: nothing matches, nothing is offered.
+		expect(offered(`${text}brand new`)).toEqual([]);
+	});
+
+	test("sessions joined by commas, and, & still lead on to the topics", () => {
+		expect(completionAt("@move @api-auth, @web-login ")?.kind).toBe("to");
+		expect(completionAt("@move @api-auth and @web-login ")?.kind).toBe("to");
+		expect(completionAt("@move @api-auth & @web-login into ")?.kind).toBe(
+			"topic",
+		);
+		// "to" needs a space after the last session, and the topic ends at a clause break.
+		expect(completionAt("@move @api-auth")?.kind).toBe("mention");
+		expect(completionAt("@move @api-auth to release, then")).toBeNull();
+		expect(completionAt("@move @api-auth please ")).toBeNull();
+	});
+
+	test("the last command in the text counts", () => {
+		expect(completionAt("@new a brief. @copy ")?.kind).toBe("session");
+		expect(completionAt("@copy @api-auth then @new ")).toBeNull();
+	});
+
+	test("a topic is offered once, starts-with matches first", () => {
+		const c = completionAt("@move @api-auth to d") as Completion;
+		expect(completionOptions(c, sessions, ["xdocs", "docs", "docs"])).toEqual([
+			"docs",
+			"xdocs",
+		]);
+	});
+});
+
+describe("moveTopicSpan (ADR 0067)", () => {
+	const sessions = [api, web];
+	const span = (text: string) => {
+		const at = moveTopicSpan(text, sessions);
+		return at ? text.slice(at.start, at.end) : null;
+	};
+
+	test("where the topic @move reads sits in the text", () => {
+		expect(span("@move @api-auth to release")).toBe("release");
+		expect(span("@move @api-auth to the auth work topic")).toBe("auth work");
+		expect(span("@move @api-auth")).toBeNull();
+		expect(span("no command to release")).toBeNull();
+	});
+
+	test("never inside an @word, even when a session holds the topic's name", () => {
+		const text = "@move @api-auth to api";
+		const at = moveTopicSpan(text, sessions);
+		expect(at).toEqual({ start: 19, end: 22 });
 	});
 });

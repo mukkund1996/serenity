@@ -1,6 +1,6 @@
 # 0052 · `@` mentions are coloured by what they resolve to: sessions blue, `@new` green, `@copy` and `@handover` yellow
 
-**Status:** Accepted · 2026-11-01 · Builds on 0036, 0048, 0049 · Amended by [0063](0063-rename-checks-and-at-move.md): `@move` is cyan
+**Status:** Accepted · 2026-11-01 · Builds on 0036, 0048, 0049 · Amended by [0063](0063-rename-checks-and-at-move.md): `@move` is cyan; by [0067](0067-command-completion.md): a topic after `@move` is sand
 
 ## Context
 The master's input mixes three kinds of `@word`: a session's name (0036), which the master acts on directly; `@new` (0048), which starts sessions; and `@copy` / `@handover` (0049), which ask a session for a handover doc. All of them look the same as plain text, so it is hard to see at a glance whether a message names the right session, or whether a word is a command at all, before sending it. A typo like `@api-auht` looks just as valid as `@api-auth`.

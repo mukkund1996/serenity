@@ -1,6 +1,11 @@
-import type { Color, MasterCommand, Session } from "@serenity/core";
-import { MASTER_COMMANDS, mentionSegments } from "@serenity/core";
-import { MENTION_COLOR } from "./theme";
+import type { Color, Completion, MasterCommand, Session } from "@serenity/core";
+import {
+	commandHint,
+	MASTER_COMMANDS,
+	mentionSegments,
+	moveTopicSpan,
+} from "@serenity/core";
+import { MENTION_COLOR, TOPIC_COLOR } from "./theme";
 
 /**
  * The master's message input: it grows to INPUT_MAX_ROWS lines, Shift+Enter
@@ -116,16 +121,61 @@ export function stepSelection(
 
 /**
  * Per character of `text`, the colour of the resolving `@` mention it is in
- * (ADR 0052), or null for plain text.
+ * (ADR 0052), or of the topic an `@move` names (ADR 0067), or null for
+ * plain text.
  */
 export function mentionColors(
 	text: string,
 	sessions: readonly Session[],
 ): (Color | null)[] {
+	const topic = moveTopicSpan(text, sessions);
+	let at = 0;
 	return mentionSegments(text, sessions).flatMap((segment) => {
 		const color = segment.kind ? MENTION_COLOR[segment.kind] : null;
-		return [...segment.text].map(() => color);
+		return [...segment.text].map((ch) => {
+			const inTopic = topic && at >= topic.start && at < topic.end;
+			at += ch.length;
+			return inTopic ? TOPIC_COLOR : color;
+		});
 	});
+}
+
+/** The @ list over the master input: what it offers, which is selected, and of what kind. */
+export interface MentionList {
+	names: string[];
+	selected: number;
+	kind: Completion["kind"];
+}
+
+/**
+ * How the @ list shows one of its names: a session or command as `@name`
+ * in its colour, with a command's hint; a topic bare, in the topic colour,
+ * labelled "topic" so it reads apart from the sessions (ADR 0067).
+ */
+export function listEntry(
+	name: string,
+	kind: Completion["kind"],
+): { label: string; color: Color; hint: string | null } {
+	if (kind === "topic")
+		return { label: name, color: TOPIC_COLOR, hint: "topic" };
+	return { label: `@${name}`, color: listColor(name), hint: commandHint(name) };
+}
+
+/**
+ * The dim hint after the cursor while no list is open (ADR 0067): what the
+ * command typed so far needs next. Null when there is nothing to say.
+ */
+export function completionHint(completion: Completion | null): string | null {
+	switch (completion?.kind) {
+		case "brief":
+			return "what should the new session do?";
+		case "to":
+			return "@ another session, or space for a topic";
+		case "topic":
+			return completion.query ? null : "a new topic's name";
+		default:
+			return null;
+	}
 }
 
 /**

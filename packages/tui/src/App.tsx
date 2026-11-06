@@ -1,9 +1,11 @@
 import { basename } from "node:path";
 import {
 	actionLine,
+	applyCompletion,
 	type CleanupPlan,
 	type CreateSessionParams,
-	completeMention,
+	completionAt,
+	completionOptions,
 	type DependencyIssue,
 	groupTopics,
 	HISTORY_DAYS,
@@ -13,9 +15,8 @@ import {
 	type MasterState,
 	MENTION_LIST_MAX,
 	masterQueue,
-	matchMentions,
-	mentionDraft,
 	needsYou,
+	PINNED,
 	type Ping,
 	preferFanout,
 	type Session,
@@ -63,7 +64,14 @@ import {
 } from "./daemon-link";
 import { xAction } from "./dismiss";
 import { drawMap, type MasterItem, rowElements } from "./map";
-import { inputRows, listWindow, PROMPT_W, stepSelection } from "./master-input";
+import {
+	completionHint,
+	inputRows,
+	listWindow,
+	type MentionList,
+	PROMPT_W,
+	stepSelection,
+} from "./master-input";
 import {
 	needLines,
 	planMaster,
@@ -380,20 +388,45 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 	const bodyHeight = rows - 2;
 	const masterWidth = Math.max(38, Math.min(72, columns - 50));
 	const masterInner = masterWidth - 6;
-	/** Names the @ list offers for the text before the input's cursor; none once Esc closed it. */
-	const mentionOptions = (field: Field | null): string[] => {
-		if (field === null || field.text === mentionOffRef.current) return [];
-		const draft = mentionDraft(splitField(field)[0]);
-		return draft ? matchMentions(sessions, draft.query) : [];
+	/** The topics `@move ... to` offers: the map's, less unsorted and pinned (ADR 0067). */
+	const topicNames = useMemo(
+		() =>
+			groups.map((g) => g.name).filter((n) => n !== UNSORTED && n !== PINNED),
+		[groups],
+	);
+	/**
+	 * What the input completes at its cursor (ADR 0067), and the names its @
+	 * list offers there; none once Esc (or picking a topic) closed it.
+	 */
+	const completionOf = (field: Field | null) => {
+		if (field === null) return null;
+		const [before, after] = splitField(field);
+		const completion = completionAt(before);
+		if (!completion) return null;
+		const options =
+			field.text === mentionOffRef.current
+				? []
+				: completionOptions(completion, sessions, topicNames);
+		return { completion, options, before, after };
 	};
-	const mentionNames = mentionOptions(masterField);
-	const mentionList = mentionNames.length
-		? listWindow(
-				mentionNames,
-				Math.min(mentionAt, mentionNames.length - 1),
-				MENTION_LIST_MAX,
-			)
-		: null;
+	const masterCompletion = completionOf(masterField);
+	const mentionNames = masterCompletion?.options ?? [];
+	const mentionList: MentionList | null =
+		masterCompletion && mentionNames.length
+			? {
+					...listWindow(
+						mentionNames,
+						Math.min(mentionAt, mentionNames.length - 1),
+						MENTION_LIST_MAX,
+					),
+					kind: masterCompletion.completion.kind,
+				}
+			: null;
+	/** The dim hint after the cursor: what the command typed needs next. */
+	const masterHint =
+		masterCompletion && !mentionNames.length && masterCompletion.after === ""
+			? completionHint(masterCompletion.completion)
+			: null;
 
 	const github = state?.github ?? { user: null, reviewRequests: [] };
 	const slack = state?.slack ?? null;
@@ -598,6 +631,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					inputSelected: onMaster && selected === MASTER_INPUT,
 					input: masterField,
 					mentions: mentionList,
+					hint: masterHint,
 					lastMessage: conversation[conversation.length - 1] ?? null,
 					pulse: pulse.master,
 				},
@@ -745,7 +779,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 			(s) => s.status !== "archived" && s.name !== "learn-serenity",
 		);
 		if (own.length) return;
-		// On first boot the welcome panel's import step offers them instead (ADR 0066).
+		// On first boot the welcome panel's import step offers them instead (ADR 0067).
 		call("setup.pending", {})
 			.then((pending) =>
 				pending
@@ -1115,7 +1149,8 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 					setMentionOff(null);
 					if (text.trim()) call("master.message", { repo, text }).catch(fail);
 				};
-				const options = mentionOptions(toMaster);
+				const completing = completionOf(toMaster);
+				const options = completing?.options ?? [];
 				// Esc closes the @ list first; with no list it closes the input.
 				if (key.escape) {
 					if (options.length) return setMentionOff(toMaster.text);
@@ -1125,7 +1160,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 				// Shift+Enter, Alt+Enter and Ctrl+J start a new line; Enter sends.
 				if (isNewlineKey(input, key))
 					return setMasterField(insertText(toMaster, "\n"));
-				if (options.length) {
+				if (completing && options.length) {
 					const at = Math.min(mentionRef.current, options.length - 1);
 					if (key.upArrow || key.downArrow)
 						return setMentionAt(
@@ -1133,18 +1168,31 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 						);
 					// Tab, and Enter while the list is open, complete the name.
 					if (key.tab || key.return) {
-						const [before, after] = splitField(toMaster);
-						const done = completeMention(before, options[at] as string);
+						const { completion, before, after } = completing;
+						const done = applyCompletion(
+							before,
+							completion,
+							options[at] as string,
+						);
+						const topic = completion.kind === "topic";
 						// The name's trailing space stands in for one already after the cursor.
-						const rest = after.startsWith(" ") ? after.slice(1) : after;
-						setMasterField({
-							text: done + rest,
-							cursor: [...done].length,
-						});
+						const rest =
+							!topic && after.startsWith(" ") ? after.slice(1) : after;
+						const text = done + rest;
+						setMasterField({ text, cursor: [...done].length });
 						setMentionAt(0);
+						// A picked topic is whole: its list stays closed until the text changes.
+						if (topic) setMentionOff(text);
 						return;
 					}
 				}
+				// After `@move @a`, space or Tab writes "to " and opens the topics (ADR 0067).
+				if (
+					completing?.completion.kind === "to" &&
+					completing.after === "" &&
+					(key.tab || (input === " " && !key.ctrl && !key.meta))
+				)
+					return setMasterField(insertText(toMaster, "to "));
 				if (key.tab) return;
 				if (key.return) return send(toMaster.text);
 				const edit = editField(toMaster, input, key);
@@ -1545,6 +1593,7 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 							selected={onMaster ? selected : null}
 							input={masterField}
 							mentions={mentionList}
+							hint={masterHint}
 							reply={onMaster ? reply : null}
 							queue={
 								<QueueSection

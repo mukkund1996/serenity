@@ -241,23 +241,158 @@ export function matchMentions(
 	query: string,
 ): string[] {
 	const q = query.toLowerCase();
-	const names = [
+	const names = liveNames(sessions);
+	return [
+		...Object.keys(MASTER_COMMANDS).filter((c) => c.startsWith(q)),
+		...matchNames(names, q),
+	];
+}
+
+/** Live sessions' names, once each, in the order given; none named like a command. */
+function liveNames(sessions: readonly Session[]): string[] {
+	return [
 		...new Set(
 			sessions
 				.filter((s) => s.status !== "archived" && !isReservedName(s.name))
 				.map((s) => s.name),
 		),
 	];
+}
+
+/** `names` starting with `query`, then those containing it; case does not matter. */
+function matchNames(names: readonly string[], query: string): string[] {
+	const q = query.toLowerCase();
 	const lower = (name: string) => name.toLowerCase();
 	return [
-		...Object.keys(MASTER_COMMANDS).filter((c) => c.startsWith(q)),
 		...names.filter((n) => lower(n).startsWith(q)),
 		...names.filter((n) => !lower(n).startsWith(q) && lower(n).includes(q)),
 	];
 }
 
-/** `text` with the `@query` being typed replaced by `@name `. */
-export function completeMention(text: string, name: string): string {
-	const draft = mentionDraft(text);
-	return `${draft ? text.slice(0, draft.start) : text}@${name} `;
+/**
+ * What the master input completes at its cursor (ADR 0067), from the text
+ * before the cursor. Each command leads on to what it needs next, so the
+ * user never has to remember it:
+ * - `mention`: an `@query` being typed; the list offers commands, then live
+ *   sessions (ADR 0036).
+ * - `session`: right after `@copy `, `@handover ` or `@move `, before any
+ *   session is named; the list offers live sessions, filtered by the bare
+ *   word being typed, and picking one writes `@name `.
+ * - `brief`: `@copy @a `; no list, the new session's brief comes next.
+ * - `to`: `@move @a ` (any more sessions joined by `,` `and` `&`); no list,
+ *   another `@` names one more, and space or Tab writes `to `.
+ * - `topic`: `@move @a to `; the list offers the map's topics, filtered by
+ *   what follows "to", and picking one writes its name.
+ * `start` is where the text a pick replaces begins. The last command in the
+ * text counts; `@new` takes no session, so it completes nothing.
+ */
+export type Completion =
+	| { kind: "mention" | "session" | "topic"; query: string; start: number }
+	| { kind: "brief" | "to"; query: ""; start: number };
+
+/** The sessions after `@move`, and what joins them: " @a, @b and @c". */
+const MOVE_NAMES = /^(?:[ \t,&+]+(?:and[ \t]+)?@[a-z0-9][a-z0-9._-]*)+/i;
+
+/** What the master input completes at the end of `before` (see Completion). */
+export function completionAt(before: string): Completion | null {
+	const draft = mentionDraft(before);
+	if (draft) return { kind: "mention", ...draft };
+	let command: { word: MasterCommand; end: number } | null = null;
+	for (const match of before.matchAll(MENTION)) {
+		const token = match[1] as string;
+		if (Object.hasOwn(MASTER_COMMANDS, token))
+			command = {
+				word: token as MasterCommand,
+				end: match.index + 1 + token.length,
+			};
+	}
+	if (!command || command.word === "new") return null;
+	const end = before.length;
+	const rest = before.slice(command.end);
+	const bare = /^[ \t]+([a-z0-9._-]*)$/i.exec(rest);
+	if (bare) {
+		const query = bare[1] as string;
+		return { kind: "session", query, start: end - query.length };
+	}
+	if (command.word === "handover") return null;
+	const names = MOVE_NAMES.exec(rest);
+	if (!names) return null;
+	const tail = rest.slice(names[0].length);
+	if (/^[ \t]+$/.test(tail))
+		return {
+			kind: command.word === "copy" ? "brief" : "to",
+			query: "",
+			start: end,
+		};
+	if (command.word !== "move") return null;
+	const topic = /^[ \t]+(?:in)?to[ \t]+([^,;!?\n]*)$/i.exec(tail);
+	if (!topic) return null;
+	const query = topic[1] as string;
+	return { kind: "topic", query, start: end - query.length };
+}
+
+/**
+ * The names the list offers for `completion`: commands and live sessions for
+ * a `mention` (matchMentions), live sessions alone for a `session`, and
+ * `topics` (the map's, in its order) for a `topic`; those starting with the
+ * query first, then those containing it. Nothing for `brief` and `to`.
+ */
+export function completionOptions(
+	completion: Completion,
+	sessions: readonly Session[],
+	topics: readonly string[],
+): string[] {
+	switch (completion.kind) {
+		case "mention":
+			return matchMentions(sessions, completion.query);
+		case "session":
+			return matchNames(liveNames(sessions), completion.query);
+		case "topic":
+			return matchNames([...new Set(topics)], completion.query.trim());
+		default:
+			return [];
+	}
+}
+
+/**
+ * `before` (the text before the cursor) with `name` picked from the list:
+ * `@name ` for a session or command, the topic's bare name for a topic.
+ */
+export function applyCompletion(
+	before: string,
+	completion: Completion,
+	name: string,
+): string {
+	const head = before.slice(0, completion.start);
+	return completion.kind === "topic" ? head + name : `${head}@${name} `;
+}
+
+/**
+ * Where the topic an `@move` reads (parseMove) sits in `text`, so the input
+ * can colour it; null when there is none. The first place after `@move`
+ * that is not inside an `@word`.
+ */
+export function moveTopicSpan(
+	text: string,
+	sessions: readonly Session[],
+): { start: number; end: number } | null {
+	const topic = parseMove(text, sessions)?.topic;
+	if (!topic) return null;
+	const words = [...text.matchAll(MENTION)].map((m) => ({
+		start: m.index,
+		end: m.index + m[0].length,
+	}));
+	const from = words.find(
+		(w) => text.slice(w.start + 1, w.end).replace(/[._-]+$/, "") === "move",
+	)?.end;
+	if (from === undefined) return null;
+	const lower = text.toLowerCase();
+	const want = topic.toLowerCase();
+	for (let at = lower.indexOf(want, from); at >= 0; ) {
+		const end = at + want.length;
+		if (!words.some((w) => at < w.end && end > w.start))
+			return { start: at, end };
+		at = lower.indexOf(want, at + 1);
+	}
+	return null;
 }
