@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/mukkund1996/serenity/compare/v0.13.0...v0.14.0) (2026-11-08)
+
+
+### Features
+
+* **install:** add serenity to PATH; readable CLI errors ([#129](https://github.com/mukkund1996/serenity/issues/129)) ([f34ffe0](https://github.com/mukkund1996/serenity/commit/f34ffe09914ac785559247427755a726fd5f5786))
+
 ## [0.13.0](https://github.com/mukkund1996/serenity/compare/v0.12.0...v0.13.0) (2026-11-08)
 
 
