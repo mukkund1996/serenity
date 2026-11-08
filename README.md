@@ -22,6 +22,12 @@ Working agents stay quiet. Waiting agents call you. The master keeps the overvie
 
 </div>
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/mukkund1996/serenity/main/scripts/install.sh | sh
+```
+
+<sub>macOS and Linux · [Homebrew and other install options](#install)</sub>
+
 ---
 
 ## Why serenity
