@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.12.0](https://github.com/mukkund1996/serenity/compare/v0.11.0...v0.12.0) (2026-11-08)
+
+
+### Features
+
+* **master:** [@copy](https://github.com/copy), [@handover](https://github.com/handover) and [@move](https://github.com/move) lead on to sessions and topics ([#119](https://github.com/mukkund1996/serenity/issues/119)) ([845554b](https://github.com/mukkund1996/serenity/commit/845554b14dd1f5490e863c197e3ed3a6331787c3))
+* **onboarding:** import comes first in the welcome panel ([#121](https://github.com/mukkund1996/serenity/issues/121)) ([0d2c011](https://github.com/mukkund1996/serenity/commit/0d2c0114220b002507a5df49ae448c080944f136))
+* **onboarding:** welcome panel with an import step and tighter copy (ADR 0066) ([#120](https://github.com/mukkund1996/serenity/issues/120)) ([52a9446](https://github.com/mukkund1996/serenity/commit/52a9446ad75feea7a76b99e39fa0cda661c5c08c))
+
+
+### Bug Fixes
+
+* an outdated client no longer stops the installed build's daemon ([#116](https://github.com/mukkund1996/serenity/issues/116)) ([2166c79](https://github.com/mukkund1996/serenity/commit/2166c79dbfa726e8773ea7bf86ffbc56096458e9))
+* **ci:** a dispatched ci run reports to the release PR as commit statuses ([#124](https://github.com/mukkund1996/serenity/issues/124)) ([6c82968](https://github.com/mukkund1996/serenity/commit/6c829687bf6dfef637b1ca48984f65b9785c8bdc))
+* **ci:** an action_required ci run does not stop the release PR's dispatch ([#125](https://github.com/mukkund1996/serenity/issues/125)) ([098d349](https://github.com/mukkund1996/serenity/commit/098d3495a5fbfbe9959b6907a5a5c47150e8836d))
+* **ci:** dispatch ci on the release PR by looking it up, not from release-please's outputs ([#123](https://github.com/mukkund1996/serenity/issues/123)) ([b6bce52](https://github.com/mukkund1996/serenity/commit/b6bce52a0c7a62fe1fab3b9082f9a0eb6ed513be))
+
 ## [0.11.0](https://github.com/mukkund1996/serenity/compare/v0.10.0...v0.11.0) (2026-11-05)
 
 
