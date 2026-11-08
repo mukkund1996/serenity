@@ -67,9 +67,14 @@ class Serenity < Formula
         brew install --cask claude-code
       Log in to GitHub for PR status:
         gh auth login
-      Then run \`serenity\` inside any git repo. The first map you open
-      starts learn-serenity, a short tour of serenity.
-      Docs: https://getserenity.dev/docs/
+
+      Next:
+        1. cd into a git repo you work in   cd ~/path/to/your/repo
+        2. open serenity                    serenity
+        First run: import past sessions, connect GitHub and Slack, take a short tour.
+        Docs: https://getserenity.dev/docs/
+
+      ★ Like it? Star the repo: https://github.com/mukkund1996/serenity
     EOS
   end
 
