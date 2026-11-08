@@ -1,15 +1,18 @@
 import { describe, expect, test } from "bun:test";
+import { completionAt } from "@serenity/core";
 import { makeSession } from "@serenity/core/testing";
 import {
+	completionHint,
 	INPUT_MAX_ROWS,
 	inputRows,
 	listColor,
+	listEntry,
 	listWindow,
 	mentionColors,
 	rowRuns,
 	stepSelection,
 } from "../src/master-input";
-import { MENTION_COLOR } from "../src/theme";
+import { MENTION_COLOR, TOPIC_COLOR } from "../src/theme";
 import { showRows } from "./cursor";
 
 const rowsOf = (text: string, width: number, cursor?: number) =>
@@ -177,5 +180,55 @@ describe("mention colours (ADR 0052)", () => {
 			{ text: "w", color: "green", cursor: false },
 			{ text: " go", color: null, cursor: false },
 		]);
+	});
+});
+
+describe("command completion in the input (ADR 0067)", () => {
+	const sessions = [makeSession({ id: "a", name: "api-auth", status: "idle" })];
+
+	test("the topic an @move names gets the topic colour", () => {
+		const text = "@move @api-auth to release";
+		expect(mentionColors(text, sessions)).toEqual([
+			...Array(5).fill("cyan"),
+			null,
+			...Array(9).fill("blueBright"),
+			...Array(4).fill(null),
+			...Array(7).fill(TOPIC_COLOR),
+		]);
+		expect(TOPIC_COLOR).not.toBe(MENTION_COLOR.session);
+		expect(Object.values(MENTION_COLOR)).not.toContain(TOPIC_COLOR);
+	});
+
+	test("the list shows topics bare and labelled, sessions and commands with @", () => {
+		expect(listEntry("release", "topic")).toEqual({
+			label: "release",
+			color: TOPIC_COLOR,
+			hint: "topic",
+		});
+		expect(listEntry("api-auth", "session")).toEqual({
+			label: "@api-auth",
+			color: "blueBright",
+			hint: null,
+		});
+		expect(listEntry("move", "mention")).toEqual({
+			label: "@move",
+			color: "cyan",
+			hint: "move sessions to a topic",
+		});
+	});
+
+	test("the hint says what the command needs next", () => {
+		expect(completionHint(completionAt("@copy @api-auth "))).toBe(
+			"what should the new session do?",
+		);
+		expect(completionHint(completionAt("@move @api-auth "))).toBe(
+			"@ another session, or space for a topic",
+		);
+		expect(completionHint(completionAt("@move @api-auth to "))).toBe(
+			"a new topic's name",
+		);
+		expect(completionHint(completionAt("@move @api-auth to rel"))).toBeNull();
+		expect(completionHint(completionAt("@copy "))).toBeNull();
+		expect(completionHint(null)).toBeNull();
 	});
 });

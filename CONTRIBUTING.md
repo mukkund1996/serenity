@@ -68,10 +68,35 @@ Bug fixes that restore intended behaviour don't need an ADR. Where an ADR and th
 - **One change per PR,** branched from `main`.
 - **The PR title is a [conventional commit](https://www.conventionalcommits.org/)** (`feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`). PRs are squash-merged, so the title becomes the commit on `main`. Add the ADR number when there is one, e.g. `feat: @new starts sessions from a brief at once (ADR 0048)`.
 - **Releases come from those titles.** [release-please](release-please-config.json) turns `feat:` and `fix:` commits into the next version and its [CHANGELOG.md](CHANGELOG.md) entry. Don't edit the changelog or version numbers by hand.
-- **CI must be green** before merge. A maintainer squash-merges once it is.
+- **CI must be green** before merge, on macOS and Ubuntu. A maintainer squash-merges once it is (never with auto-merge).
 - **Update the docs** that your change makes wrong: the README (keys, config, commands) and any ADR it amends.
 
 ## Maintainers
+
+### Releases and the guardrails around them
+
+How a change reaches users (ADR 0068):
+
+1. A PR is squash-merged into `main`. `ci` runs on the push, on Ubuntu and macOS.
+2. **Only if that ci run passes, and its commit is still `main`'s head**, the `release` workflow goes on. Its `gate` job (`scripts/release-gate.sh`) checks this. Otherwise it stops with a notice, and nothing is tagged, built or bumped. A red `main` never ships.
+3. release-please opens or updates the release PR (`chore(main): release X.Y.Z`). It pushes with `GITHUB_TOKEN`, which fires no `pull_request` event, so the release workflow dispatches `ci` on the PR's branch. That run reports to the PR as commit statuses named like the ci jobs.
+4. Merging the release PR goes through steps 1 and 2 again. Then release-please tags `vX.Y.Z` and creates the GitHub release, and the `build` and `publish` jobs attach the binaries and `SHA256SUMS` and bump the Homebrew tap.
+5. `publish` then dispatches `install-smoke` for the new tag (installing from the release run's mirrored artifacts, so download counts stay clean, ADR 0056) and `website` (the page shows the new version). Check that both pass.
+
+Guardrails:
+
+- **A red `main` opens an issue.** `main-health` opens one issue labelled `main-red` (or comments on the open one) and comments on the PR the failing commit came from. The next green run closes it. Fix `main` first: releases wait for it.
+- **Flaky e2e files are retried once and named.** `bun run test:e2e:ci` reruns a failing e2e file once. If it then passes, the job stays green but shows a `FLAKY` warning and a row in the job summary. Treat that as a bug in the test. Unit tests (`bun run test`) are never retried.
+- **Duplicate ADR numbers fail ci** (`bun run check:adr`). Two PRs in flight often take the same next number; rebase on `main` and renumber yours.
+- **Rebuilding a release's binaries:** run the `release` workflow by hand with the tag. It refuses a tag whose commit has no passing ci run on `main`.
+- **Checking the gate by hand,** for any ci run:
+
+  ```bash
+  eval $(gh run view <ci-run-id> --json event,conclusion,headSha --jq '"EVENT=\(.event) CONCLUSION=\(.conclusion) SHA=\(.headSha)"')
+  EVENT=$EVENT CONCLUSION=$CONCLUSION SHA=$SHA scripts/release-gate.sh   # go=true or go=false, and why
+  ```
+
+- `release.yml` and `main-health.yml` run on `workflow_run`, which always uses the copy on `main`. Changes to them take effect only after they merge.
 
 ### Leaving your own visits out of the website analytics
 

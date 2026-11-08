@@ -1,17 +1,28 @@
 import {
+	ago,
 	describeSetupStatus,
+	HISTORY_DAYS,
+	type HistorySession,
+	historyLabel,
+	IMPORT_PREVIEW,
+	IMPORT_STEP,
+	importSummary,
 	type Method,
+	nextOpenStep,
 	type Params,
 	type Result,
 	SETUP_STEPS,
 	type SetupStatus,
 	type SetupStepId,
 	setupDone,
+	setupIntro,
+	setupStep,
 } from "@serenity/core";
 import { Box, Text, useInput } from "ink";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Key, TitledBox } from "./components";
 import { openUrl } from "./open-url";
+import { ImportDialog } from "./overlays";
 import { runInPopup } from "./popup";
 
 const PANEL_W = 72;
@@ -111,84 +122,238 @@ export function StepStatus({
 }
 
 /**
- * The Setup panel (ADR 0065): on first boot, and from the settings panel.
- * One row per step in SETUP_STEPS: what it enables, its status, Enter to
- * connect, s to skip. Every step is optional; Esc closes.
+ * The import step (ADR 0066): this repo's past Claude Code sessions, found
+ * with the same dry run as `I` (`history.discover`) and imported with the
+ * same `history.import`. Ended cards: nothing runs until Enter resumes one.
+ */
+export function useImportStep(call: Call, repo: string) {
+	const [found, setFound] = useState<HistorySession[] | null>(null);
+	const [state, setState] = useState<"todo" | "done" | "skipped">("todo");
+	const [imported, setImported] = useState(0);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		call("history.discover", {
+			repo,
+			since: Date.now() - HISTORY_DAYS * 86_400_000,
+		}).then(
+			(r) => setFound(r.sessions),
+			() => setFound([]),
+		);
+	}, [call, repo]);
+
+	const importIds = async (ids: string[]): Promise<boolean> => {
+		if (!ids.length) return false;
+		setBusy(true);
+		setError(null);
+		try {
+			const sessions = await call("history.import", {
+				repo,
+				claudeSessionIds: ids,
+			});
+			setImported(sessions.length);
+			setState("done");
+			return true;
+		} catch (e) {
+			setError((e as Error).message);
+			return false;
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return {
+		found,
+		state,
+		imported,
+		busy,
+		error,
+		importIds,
+		importAll: () => importIds((found ?? []).map((s) => s.claudeSessionId)),
+		skip: () => setState("skipped"),
+	};
+}
+
+export type ImportStepState = ReturnType<typeof useImportStep>;
+
+type Row =
+	| { kind: "login"; id: SetupStepId; title: string }
+	| { kind: "import"; title: string };
+
+/**
+ * The first-boot panel (ADR 0065, 0066): this repo's past sessions when
+ * there are any, then GitHub and Slack, then "You're set". One line per step
+ * says what it gives; Enter does it, s skips it, Esc closes.
  */
 export function SetupPanel({
 	setup,
+	importStep,
+	firstBoot = true,
 	onClose,
 }: {
 	setup: SetupState;
+	importStep?: ImportStepState;
+	firstBoot?: boolean;
 	onClose: () => void;
 }) {
 	const [at, setAt] = useState(0);
 	const [note, setNote] = useState<string | null>(null);
-	const step = SETUP_STEPS[at] ?? SETUP_STEPS[0];
+	const [skipped, setSkipped] = useState<Set<SetupStepId>>(new Set());
+	const [picking, setPicking] = useState(false);
 	const statusOf = (id: SetupStepId) => setup.steps?.find((s) => s.id === id);
+	const past = importStep?.found ?? [];
 
-	// Once checked, start at the first step left to do: gh is often logged in already.
-	const checked = !!setup.steps;
-	// biome-ignore lint/correctness/useExhaustiveDependencies: only when the first check lands
+	// Import first, then the logins. While it is still looking, the import
+	// row shows "checking…"; with no past sessions it isn't shown at all.
+	const looking = !!importStep && importStep.found === null;
+	const rows: Row[] = [
+		...(looking || past.length
+			? [{ kind: "import" as const, title: IMPORT_STEP.title }]
+			: []),
+		...SETUP_STEPS.map((s) => ({
+			kind: "login" as const,
+			id: s.id,
+			title: s.title,
+		})),
+	];
+	const open = (row: Row): boolean => {
+		if (row.kind === "import") return importStep?.state === "todo";
+		const status = statusOf(row.id);
+		return !skipped.has(row.id) && !(status && setupDone(status));
+	};
+	const row = rows[at];
+	const finished = at >= rows.length;
+	const busy = !!setup.running || !!importStep?.busy;
+
+	// Once checked, start at the first step left to do (gh is often logged
+	// in already), unless a key was pressed meanwhile.
+	const moved = useRef(false);
+	const checked =
+		(!!setup.steps || !!setup.error) && (!importStep || !!importStep.found);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: only when the first checks land
 	useEffect(() => {
-		const todo = SETUP_STEPS.findIndex((s) => {
-			const status = setup.steps?.find((x) => x.id === s.id);
-			return status && !setupDone(status);
-		});
-		if (todo > 0) setAt(todo);
+		if (!checked || moved.current) return;
+		setAt(nextOpenStep(rows.map(open), -1));
 	}, [checked]);
 
-	const last = at + 1 >= SETUP_STEPS.length;
-	const next = () => {
-		if (last) return onClose();
-		setAt(at + 1);
+	const advance = (from = at, skip?: SetupStepId) => {
+		const nowOpen = rows.map(
+			(r, i) => i !== from && (r.kind !== "login" || r.id !== skip) && open(r),
+		);
+		setAt(nextOpenStep(nowOpen, from));
 		setNote(null);
 	};
 
-	useInput((input, key) => {
-		if (setup.running) return;
-		if (key.escape) return onClose();
-		if (key.upArrow) return setAt(Math.max(0, at - 1));
-		if (key.downArrow || key.tab) return setAt((at + 1) % SETUP_STEPS.length);
-		if (input === "s") return next();
-		if (input === "o" && step?.link) return openUrl(step.link, setNote);
-		if (key.return && step) {
+	useInput(
+		(input, key) => {
+			if (busy) return;
+			if (key.escape) return onClose();
+			// Rows can still change (the import row) until both checks land.
+			if (!checked) return;
+			moved.current = true;
+			if (key.upArrow) return setAt(Math.max(0, Math.min(at, rows.length) - 1));
+			if (key.downArrow || key.tab) return setAt(Math.min(rows.length, at + 1));
+			if (finished || !row) {
+				if (key.return) onClose();
+				return;
+			}
+			if (row.kind === "import") {
+				if (importStep?.state !== "todo") {
+					if (key.return) advance();
+					return;
+				}
+				if (input === "s") {
+					importStep.skip();
+					return advance();
+				}
+				if (input === "p") return setPicking(true);
+				if (key.return)
+					void importStep.importAll().then((ok) => ok && advance());
+				return;
+			}
+			const step = SETUP_STEPS.find((s) => s.id === row.id);
+			if (!step) return;
+			if (input === "s") {
+				setSkipped((set) => new Set(set).add(step.id));
+				return advance(at, step.id);
+			}
+			if (input === "o" && step.link) return openUrl(step.link, setNote);
+			if (!key.return) return;
 			const now = statusOf(step.id);
-			if (now && setupDone(now)) return next();
+			if (now && setupDone(now)) return advance();
 			setNote(null);
 			void setup.run(step.id).then((after) => {
 				if (!after) return;
 				if (!setupDone(after))
 					return setNote(`${step.title}: ${describeSetupStatus(after)}`);
-				// The last step stays in view, so its ✓ shows before Enter closes.
-				if (!last) next();
+				advance();
 			});
-		}
-	});
+		},
+		{ isActive: !picking },
+	);
 
-	const allDone =
-		!!setup.steps?.length &&
-		SETUP_STEPS.every((s) => {
-			const status = statusOf(s.id);
-			return status && setupDone(status);
-		});
+	if (picking && importStep)
+		return (
+			<ImportDialog
+				candidates={[]}
+				history={past}
+				gone={0}
+				days={HISTORY_DAYS}
+				onAllRepos={() => Promise.resolve(past)}
+				onSubmit={async (_live, ids) => {
+					const ok = await importStep.importIds(ids);
+					setPicking(false);
+					if (ok) advance();
+				}}
+				onClose={() => setPicking(false)}
+			/>
+		);
+
+	const error = setup.error ?? importStep?.error ?? null;
+	const now = Date.now();
+	// The selected step's keys; the privacy link sits on Slack's note line.
+	const keys: Array<[string, string]> =
+		row && !open(row)
+			? [
+					["Enter", "next"],
+					["↑↓", "move"],
+				]
+			: row?.kind === "import"
+				? [
+						["Enter", "import all"],
+						["p", "pick"],
+						["s", "skip"],
+						["↑↓", "move"],
+					]
+				: [
+						["Enter", "log in"],
+						["s", "skip"],
+						["↑↓", "move"],
+					];
+
 	return (
 		<TitledBox
-			title="Set up serenity"
+			title="Welcome to serenity"
 			titleColor="whiteBright"
 			fill="black"
 			borderStyle="double"
 			borderColor="white"
 			width={PANEL_W}
-			right={<Text color="white"> Esc done </Text>}
+			right={<Text color="white"> Esc close </Text>}
 		>
 			<Text color="white" wrap="wrap">
-				Two optional logins. Skip either; Ctrl+, has them later.
+				{setupIntro(rows.length)}
 			</Text>
-			{SETUP_STEPS.map((s, i) => {
+			{rows.map((r, i) => {
 				const selected = i === at;
+				const step = r.kind === "login" ? setupStep(r.id) : undefined;
 				return (
-					<Box key={s.id} flexDirection="column" marginTop={1}>
+					<Box
+						key={r.kind === "login" ? r.id : "import"}
+						flexDirection="column"
+						marginTop={1}
+					>
 						<Box>
 							<Box width={12} flexShrink={0}>
 								<Text
@@ -196,67 +361,111 @@ export function SetupPanel({
 									bold={selected}
 								>
 									{selected ? "› " : "  "}
-									{s.title}
+									{r.title}
 								</Text>
 							</Box>
-							<StepStatus
-								status={statusOf(s.id)}
-								running={setup.running === s.id}
-							/>
+							{r.kind === "login" ? (
+								<StepStatus
+									status={statusOf(r.id)}
+									running={setup.running === r.id}
+								/>
+							) : (
+								<ImportStatus step={importStep} />
+							)}
 						</Box>
-						{s.enables.map((line) => (
-							<Text
-								key={line}
-								color={selected ? "white" : "gray"}
-								wrap="truncate"
-							>
-								{"    · "}
-								{line}
-							</Text>
-						))}
-						{selected &&
-						statusOf(s.id) &&
-						!setupDone(statusOf(s.id) as SetupStatus) ? (
-							<Text color="gray" wrap="wrap">
+						<Text color={selected ? "white" : "gray"} wrap="truncate">
+							{"    "}
+							{step ? step.gives : IMPORT_STEP.gives}
+						</Text>
+						{selected && step?.note ? (
+							<Text color="gray" wrap="truncate">
 								{"    "}
-								{s.without}
+								{step.note} · <Key>o</Key> PRIVACY.md
 							</Text>
 						) : null}
+						{selected && r.kind === "import" && importStep?.state === "todo"
+							? [
+									...past.slice(0, IMPORT_PREVIEW).map((s) => (
+										<Text key={s.claudeSessionId} color="gray" wrap="truncate">
+											{"    · "}
+											{historyLabel(s)}
+											{s.branch ? ` · ${s.branch}` : ""} ·{" "}
+											{ago(s.lastActiveAt, now)}
+										</Text>
+									)),
+									past.length > IMPORT_PREVIEW ? (
+										<Text key="more" color="gray">
+											{"    "}+{past.length - IMPORT_PREVIEW} more
+										</Text>
+									) : null,
+								]
+							: null}
 					</Box>
 				);
 			})}
 			<Box marginTop={1}>
-				<Text color={setup.error ? "red" : "yellow"} wrap="wrap">
-					{setup.error ?? note ?? " "}
-				</Text>
+				{finished ? (
+					<Text color="green">
+						✓ You're set.{" "}
+						{firstBoot ? "Enter opens the tour." : "Enter closes."}
+					</Text>
+				) : (
+					<Text color={error ? "red" : "yellow"} wrap="wrap">
+						{error ?? note ?? " "}
+					</Text>
+				)}
 			</Box>
-			<Text color="white">
-				<Key>↑↓</Key> move <Key>Enter</Key> {allDone ? "done" : "connect"}{" "}
-				<Key>s</Key> skip
-				{step?.link ? (
-					<>
-						{" "}
-						<Key>o</Key> privacy
-					</>
-				) : null}{" "}
-				<Key>Esc</Key> done
-			</Text>
+			{finished ? null : (
+				<Text color="white">
+					{keys.map(([k, label], n) => (
+						<Text key={k}>
+							{n ? " · " : ""}
+							<Key>{k}</Key> {label}
+						</Text>
+					))}
+				</Text>
+			)}
 		</TitledBox>
 	);
 }
 
-/** The Setup panel with its own checks, as an overlay over the map. */
+/** The import step's status: ○ found, ✓ imported, – skipped. */
+function ImportStatus({ step }: { step: ImportStepState | undefined }) {
+	if (!step?.found) return <Text color="gray">checking…</Text>;
+	if (step.busy) return <Text color="gray">importing…</Text>;
+	const line = importSummary(
+		step.found.length,
+		HISTORY_DAYS,
+		step.state,
+		step.imported,
+	);
+	if (step.state === "done") return <Text color="green">✓ {line}</Text>;
+	if (step.state === "skipped") return <Text color="gray">– {line}</Text>;
+	return <Text color="yellow">○ {line}</Text>;
+}
+
+/** The panel with its own checks, as an overlay over the map. */
 export function SetupOverlay({
 	call,
 	repo,
+	firstBoot = true,
 	onClose,
 	runStep = runStepInPopup,
 }: {
 	call: Call;
 	repo: string;
+	firstBoot?: boolean;
 	onClose: () => void;
 	runStep?: RunStep;
 }) {
 	const setup = useSetup(call, repo, runStep);
-	return <SetupPanel setup={setup} onClose={onClose} />;
+	const importStep = useImportStep(call, repo);
+	return (
+		<SetupPanel
+			setup={setup}
+			importStep={importStep}
+			firstBoot={firstBoot}
+			onClose={onClose}
+		/>
+	);
 }

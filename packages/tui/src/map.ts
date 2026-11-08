@@ -16,7 +16,8 @@ import {
 } from "@serenity/core";
 import {
 	inputRows,
-	listColor,
+	listEntry,
+	type MentionList,
 	mentionColors,
 	PROMPT_W,
 	rowRuns,
@@ -101,8 +102,10 @@ export interface MapMaster {
 	inputSelected: boolean;
 	/** Text being typed to the master, or null when its input is closed. */
 	input: Field | null;
-	/** Session names offered after an `@` in the input, with the selected one. */
-	mentions?: { names: string[]; selected: number } | null;
+	/** Names the @ list offers at the input's cursor, with the selected one. */
+	mentions?: MentionList | null;
+	/** Dim, after the input's cursor: what the command typed needs next (ADR 0067). */
+	hint?: string | null;
 	lastMessage: MasterMessage | null;
 	/** The glow's colour while a session's answer lights it (ADR 0039, 0042). */
 	pulse?: Color | null;
@@ -630,7 +633,12 @@ function drawMaster(
 						: { ...style, fg: run.color ?? "whiteBright" },
 				);
 			if (row.cursor !== null && row.cursor >= [...row.text].length)
-				canvas.text(col, inputRow + i, CURSOR, style);
+				col = canvas.text(col, inputRow + i, CURSOR, style);
+			if (m.hint && row.cursor !== null && i === rows.length - 1)
+				canvas.text(col, inputRow + i, truncate(` ${m.hint}`, ix + iw - col), {
+					fg: "gray",
+					bg: "black",
+				});
 		});
 	}
 
@@ -645,10 +653,16 @@ function drawMaster(
 			bold: on,
 			bg: "black",
 		});
-		canvas.text(col, row, truncate(`@${name}`, iw - 2), {
-			fg: listColor(name),
+		const entry = listEntry(name, m.mentions?.kind ?? "mention");
+		const end = canvas.text(col, row, truncate(entry.label, iw - 2), {
+			fg: entry.color,
 			bold: on,
 			bg: "black",
 		});
+		if (entry.hint && m.mentions?.kind === "topic")
+			canvas.text(end, row, truncate(` ${entry.hint}`, ix + iw - end), {
+				fg: "gray",
+				bg: "black",
+			});
 	});
 }

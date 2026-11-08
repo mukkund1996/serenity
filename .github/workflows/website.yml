@@ -1,19 +1,17 @@
 name: website
 
 # Deploys website/ to GitHub Pages (getserenity.dev) with the latest release's
-# tag written into the page (ADR 0029). release-please creates releases with
-# GITHUB_TOKEN, which does not fire `release` events, so the deploy also runs
-# whenever the release workflow finishes.
+# tag written into the page (ADR 0029). It runs once per reason (ADR 0068):
+# a push to main that changes website/, or a dispatch from release.yml's
+# publish job after a release (a release made with GITHUB_TOKEN fires no
+# `release` event). It used to also run after every release workflow run, so
+# a website push deployed the same commit twice, and the second Pages
+# deployment could still be in progress when the next commit's deploy began.
 
 on:
   push:
     branches: [main]
     paths: [website/**, .github/workflows/website.yml]
-  release:
-    types: [published]
-  workflow_run:
-    workflows: [release]
-    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -21,12 +19,12 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
   build:
+    # A newer run supersedes an older one's build: only the latest page matters.
+    concurrency:
+      group: pages-build
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -53,10 +51,25 @@ jobs:
 
   deploy:
     needs: build
+    # A deploy is never cancelled midway: that can leave a Pages deployment
+    # "in progress" and block the next one. Runs queue here instead.
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.retry.outputs.page_url }}
     steps:
       - id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+      # Pages refuses a deployment while an earlier one is still finishing
+      # ("due to in progress deployment"); wait for it once and try again.
+      - if: steps.deployment.outcome == 'failure'
+        run: |
+          echo "::warning::the Pages deployment failed; retrying once in 60s"
+          sleep 60
+      - id: retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4

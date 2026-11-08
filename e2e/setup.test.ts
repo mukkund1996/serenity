@@ -1,9 +1,10 @@
 /**
- * ADR 0065 end to end: on a first boot the map opens the Setup panel. Enter
- * logs in to GitHub in a popup (the fake gh's device flow), then to Slack
- * (the fake claude's `mcp login`), which turns Slack on for the repo. The
- * panel closes onto the tutorial's card, the settings panel shows both
- * logins, `serenity doctor` names them, and the panel doesn't open again.
+ * ADR 0065 and 0066 end to end: on a first boot the map opens the welcome
+ * panel. Enter imports the repo's past Claude sessions, logs in to GitHub
+ * in a popup (the fake gh's device flow), then to Slack (the fake claude's
+ * `mcp login`), which turns Slack on for the repo. "You're set" closes
+ * onto the tutorial's card, the settings panel shows both logins, `serenity
+ * doctor` names them, and the panel doesn't open again.
  */
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
@@ -13,11 +14,12 @@ import {
 	readFileSync,
 	realpathSync,
 	rmSync,
+	utimesSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { connectDaemon } from "../packages/core/src";
+import { connectDaemon, transcriptPathFor } from "../packages/core/src";
 
 const ROOT = join(import.meta.dir, "..");
 const MAIN = join(ROOT, "packages/cli/src/main.ts");
@@ -126,6 +128,27 @@ function openMap(): void {
 		);
 }
 
+/** A transcript as Claude Code writes it, last active `hours` ago. */
+function past(id: string, prompt: string, hours: number): void {
+	const path = transcriptPathFor(join(dir, "claude"), repo, id);
+	const at = new Date(Date.now() - hours * 3_600_000);
+	mkdirSync(join(path, ".."), { recursive: true });
+	writeFileSync(
+		path,
+		`${JSON.stringify({
+			type: "user",
+			isSidechain: false,
+			message: { role: "user", content: prompt },
+			timestamp: at.toISOString(),
+			entrypoint: "cli",
+			cwd: repo,
+			sessionId: id,
+			gitBranch: "main",
+		})}\n`,
+	);
+	utimesSync(path, at, at);
+}
+
 beforeAll(() => {
 	dir = realpathSync(mkdtempSync(join(tmpdir(), "srsetup-")));
 	repo = join(dir, "repos", "demo");
@@ -151,6 +174,9 @@ beforeAll(() => {
 		"-m",
 		"init",
 	);
+	// Two past Claude Code sessions in this repo, for the import step.
+	past("1b6f0c2e-0000-4000-8000-000000000001", "Fix the login redirect", 2);
+	past("1b6f0c2e-0000-4000-8000-000000000002", "Add a dark mode toggle", 1);
 	env = {
 		SERENITY_HOME: home,
 		SERENITY_TMUX_SOCKET: SOCKET,
@@ -192,17 +218,42 @@ afterAll(() => {
 });
 
 test(
-	"first boot: the Setup panel logs in to GitHub and Slack in popups, then hands over to the tutorial",
+	"first boot: the welcome panel imports past sessions, logs in to GitHub and Slack in popups, then hands over to the tutorial",
 	async () => {
 		await until(
-			() => /Set up serenity[\s\S]*GitHub\s+○ not logged in/.test(terminal()),
-			"the Setup panel with GitHub logged out",
+			() =>
+				/Welcome to serenity[\s\S]*GitHub\s+○ not logged in/.test(terminal()) &&
+				terminal().includes("Import    ○ 2 past sessions, last 14 days"),
+			"the welcome panel with GitHub logged out and two past sessions",
+		);
+		expect(terminal()).toContain(
+			"Three optional steps. More: getserenity.dev/docs",
 		);
 		expect(terminal()).toContain(
 			"Slack     ○ not connected · off for this repo",
 		);
 
-		// GitHub: the popup runs gh's device flow, which waits for Enter.
+		// Import comes first, the newest first: Enter imports both, parked.
+		await until(
+			() =>
+				/› Import[\s\S]*· Add a dark mode toggle · main · 1h ago[\s\S]*· Fix the login redirect · main · 2h ago/.test(
+					text(),
+				) && terminal().includes("Enter import all"),
+			"the import step with the latest sessions",
+		);
+		type("Enter");
+		await until(
+			() => terminal().includes("✓ imported 2"),
+			"both sessions imported",
+		);
+		const state = await rpc((p) => p.request("state.subscribe", { repo }));
+		expect(
+			state.sessions
+				.filter((x) => x.origin === "imported")
+				.map((x) => x.status),
+		).toEqual(["dead", "dead"]);
+
+		// GitHub is next: the popup runs gh's device flow, which waits for Enter.
 		type("Enter");
 		await until(
 			() => terminal().includes("First copy your one-time code"),
@@ -233,11 +284,14 @@ test(
 		expect(config.slack.repos).toEqual([repo]);
 		expect(await rpc((p) => p.request("setup.pending", {}))).toBe(true);
 
-		// Enter closes it, onto the tutorial's card: Enter again attaches it.
-		await until(() => terminal().includes("Enter done"), "every step done");
+		// "You're set": Enter closes it onto the tutorial's card, and Enter again attaches it.
+		await until(
+			() => terminal().includes("You're set. Enter opens the tour."),
+			"every step done",
+		);
 		type("Enter");
 		await until(
-			() => !terminal().includes("Set up serenity"),
+			() => !terminal().includes("Welcome to serenity"),
 			"the panel to close",
 		);
 		expect(await rpc((p) => p.request("setup.pending", {}))).toBe(false);
@@ -317,7 +371,7 @@ test(
 		openMap();
 		await until(() => terminal().includes("learn-serenity"), "the map again");
 		await Bun.sleep(1500);
-		expect(terminal()).not.toContain("Set up serenity");
+		expect(terminal()).not.toContain("Welcome to serenity");
 	},
 	TIMEOUT,
 );

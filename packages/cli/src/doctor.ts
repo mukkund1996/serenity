@@ -63,7 +63,7 @@ export function runChecks(): Check[] {
 			ok: gh.ok,
 			detail: gh.ok
 				? (gh.text.split("\n")[0] ?? "")
-				: "not found · PRs on cards need it (brew install gh)",
+				: "not found · optional, for PRs (brew install gh)",
 		},
 	];
 }

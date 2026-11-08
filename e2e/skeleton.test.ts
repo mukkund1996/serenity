@@ -326,7 +326,7 @@ step(
 	"first launch starts the daemon and shows the empty master",
 	async () => {
 		await waitFor(/No sessions yet/);
-		expect(screen()).toContain("Press n to start your first session");
+		expect(screen()).toContain("n starts a session · I imports your past");
 		expect(screen()).toContain("session — · week — · avg wait —");
 	},
 	STEP_TIMEOUT,
@@ -1303,19 +1303,47 @@ step(
 );
 
 step(
-	"@move from the master input moves a session to a new topic; the master says so (ADR 0063)",
+	"@copy then a space lists the sessions without another @; picking one asks for the brief (ADR 0067)",
+	async () => {
+		await openMasterInput();
+		type("@copy ");
+		// The live sessions, straight away.
+		await waitFor(/› @copy █/);
+		await waitFor(/▸ @[a-z]/);
+		// The bare word filters them.
+		type("newn");
+		await waitFor(/▸ @newname/);
+		keys("Enter");
+		await waitFor(/› @copy @newname █ what should the new session do\?/);
+		expect(screen()).not.toContain("▸ @newname");
+		await closeMasterInput();
+	},
+	STEP_TIMEOUT,
+);
+
+step(
+	"@move lists the sessions, space writes to and lists the topics; a new topic is typed; the master moves it (ADR 0063, 0067)",
 	async () => {
 		await openMasterInput();
 		type("@mo");
 		await waitFor(/▸ @move move sessions to a topic/);
 		keys("Tab");
 		await waitFor(/› @move █/);
-		type("@newn");
+		await waitFor(/▸ @[a-z]/);
+		type("newn");
 		await waitFor(/▸ @newname/);
 		keys("Tab");
-		await waitFor(/› @move @newname █/);
-		type("to release");
-		await Bun.sleep(200);
+		await waitFor(/› @move @newname █ @ another session/);
+		type(" ");
+		await waitFor(/› @move @newname to █/);
+		await waitFor(/backend topic/);
+		// A new topic's name: nothing matches, the list closes, Enter sends.
+		type("release");
+		await until(
+			() => !screen().includes("backend topic"),
+			"the topic list to close",
+		);
+		await waitFor(/› @move @newname to release█/);
 		keys("Enter");
 		// Moved at once, or held for the moment the map still said it was typing.
 		await waitFor(
@@ -1326,6 +1354,20 @@ step(
 			() => /release/.test(mapSide()),
 			"the release topic to show on the map",
 		);
+		// The topic list now offers it; Tab writes "to " too, Enter picks.
+		await openMasterInput();
+		type("@move newn");
+		await waitFor(/▸ @newname/);
+		keys("Tab");
+		await waitFor(/› @move @newname █/);
+		keys("Tab");
+		await waitFor(/› @move @newname to █/);
+		type("rel");
+		await waitFor(/▸ release topic/);
+		keys("Enter");
+		await waitFor(/› @move @newname to release█/);
+		expect(screen()).not.toContain("release topic");
+		await closeMasterInput();
 	},
 	STEP_TIMEOUT,
 );

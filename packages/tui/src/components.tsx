@@ -13,7 +13,6 @@ import type {
 } from "@serenity/core";
 import {
 	actionLine,
-	commandHint,
 	mentionSegments,
 	preferFanout,
 	prLabel,
@@ -27,7 +26,8 @@ import { type ReactNode, useEffect, useState } from "react";
 import {
 	type InputRow,
 	inputRows,
-	listColor,
+	listEntry,
+	type MentionList,
 	mentionColors,
 	PROMPT_W,
 	rowRuns,
@@ -245,12 +245,15 @@ function MasterInput({
 	field,
 	selected = false,
 	mentions = null,
+	hint = null,
 	width = 0,
 	sessions = [],
 }: {
 	field: Field | null;
 	selected?: boolean;
-	mentions?: { names: string[]; selected: number } | null;
+	mentions?: MentionList | null;
+	/** Dim, after the cursor: what the command typed needs next (ADR 0067). */
+	hint?: string | null;
 	width?: number;
 	sessions?: readonly Session[];
 }) {
@@ -262,20 +265,21 @@ function MasterInput({
 	const colors = field === null ? [] : mentionColors(field.text, sessions);
 	return (
 		<Box flexDirection="column" marginTop={1}>
-			{mentions?.names.map((name, i) => (
-				<Text
-					key={name}
-					wrap="truncate"
-					color={i === mentions.selected ? "whiteBright" : "white"}
-					bold={i === mentions.selected}
-				>
-					{i === mentions.selected ? "▸ " : "  "}
-					<Text color={listColor(name)}>@{name}</Text>
-					{commandHint(name) ? (
-						<Text color="gray"> {commandHint(name)}</Text>
-					) : null}
-				</Text>
-			))}
+			{mentions?.names.map((name, i) => {
+				const entry = listEntry(name, mentions.kind);
+				return (
+					<Text
+						key={name}
+						wrap="truncate"
+						color={i === mentions.selected ? "whiteBright" : "white"}
+						bold={i === mentions.selected}
+					>
+						{i === mentions.selected ? "▸ " : "  "}
+						<Text color={entry.color}>{entry.label}</Text>
+						{entry.hint ? <Text color="gray"> {entry.hint}</Text> : null}
+					</Text>
+				);
+			})}
 			<Box
 				flexDirection="column"
 				borderStyle={selected ? "bold" : "single"}
@@ -292,6 +296,9 @@ function MasterInput({
 						<Text key={i} wrap="truncate-end" color="whiteBright">
 							<Text color="magenta">{i === 0 ? "› " : "  "}</Text>
 							<RowWithCursor row={row} colors={colors} />
+							{hint && row.cursor !== null && i === rows.length - 1 ? (
+								<Text color="gray"> {hint}</Text>
+							) : null}
 						</Text>
 					))
 				)}
@@ -802,6 +809,7 @@ export function MasterPanel({
 	selected,
 	input,
 	mentions,
+	hint = null,
 	reply,
 	queue = null,
 	pulse = null,
@@ -820,7 +828,9 @@ export function MasterPanel({
 	focused: boolean;
 	selected: string | null;
 	input: Field | null;
-	mentions: { names: string[]; selected: number } | null;
+	mentions: MentionList | null;
+	/** Dim, after the input's cursor (ADR 0067). */
+	hint?: string | null;
 	reply: Field | null;
 	/** The master's queue section (ADR 0040), drawn under NEEDS YOU. */
 	queue?: ReactNode;
@@ -922,8 +932,8 @@ export function MasterPanel({
 					<Text color="gray">No sessions yet.</Text>
 					<Text> </Text>
 					<Text>
-						Press <Key>n</Key> to start your first session, or <Key>I</Key> to
-						import the Claude sessions you already have.
+						<Key>n</Key> starts a session · <Key>I</Key> imports your past
+						Claude sessions
 					</Text>
 					{slackError}
 					{needsYou}
@@ -965,6 +975,7 @@ export function MasterPanel({
 				field={input}
 				selected={selected === MASTER_INPUT}
 				mentions={mentions}
+				hint={hint}
 				width={inner}
 				sessions={sessions}
 			/>

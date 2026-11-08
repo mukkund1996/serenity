@@ -143,23 +143,24 @@
 <p>serenity is scoped to a repo: run it inside one and you get that repo's map.</p>
 <div class="d-cmd"><pre><span class="p">$ </span>cd ~/your/repo
 <span class="p">$ </span>serenity        <span class="c"># opens the map for this repo</span></pre><button type="button" class="d-copy" aria-label="Copy the commands"><span class="done"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7fc77f" stroke-width="2" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span><span class="idle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg></span></button></div>
-<h3 id="setup">First boot: GitHub and Slack</h3>
-<p>The first map you open starts with <strong>Set up serenity</strong>: two logins serenity uses but doesn't own. Both are optional.</p>
+<h3 id="setup">First boot</h3>
+<p>The first map you open starts with <strong>Welcome to serenity</strong>: up to three optional steps, each one line. <kbd>Enter</kbd> does a step, <kbd>s</kbd> skips it, <kbd>Esc</kbd> closes the panel.</p>
 <ul>
-<li><strong>GitHub</strong>, through <code>gh</code>: PR badges and checks on cards, adding reviewers, the master's overview of the repo's PRs, and crash reports if you turn them on. Without it, cards show no PRs.</li>
-<li><strong>Slack</strong>: your mentions and DMs that need you, in NEEDS YOU, replies the master drafts (nothing is sent until you press <kbd>y</kbd>), and sharing handover docs. It's off by default; <a href="https://github.com/mukkund1996/serenity/blob/main/PRIVACY.md#what-is-sent-and-where">PRIVACY.md</a> says what it reads.</li>
+<li><strong>Import</strong>, when this repo has past Claude Code sessions from the last 14 days: it shows how many and the latest few. <kbd>Enter</kbd> imports them all, <kbd>p</kbd> picks some. They arrive ended, so nothing runs until you resume one (<a href="#import">more</a>).</li>
+<li><strong>GitHub</strong>: PRs and checks on your cards, through <code>gh</code>'s own login.</li>
+<li><strong>Slack</strong>: mentions and DMs that need you, in NEEDS YOU. Nothing is sent until you press <kbd>y</kbd>; <kbd>o</kbd> opens <a href="https://github.com/mukkund1996/serenity/blob/main/PRIVACY.md#what-is-sent-and-where">PRIVACY.md</a>.</li>
 </ul>
-<p><kbd>Enter</kbd> runs a login in a popup over the map: gh's device flow for GitHub, and Claude Code's <code>claude mcp login</code> for Slack, which then turns Slack on for this repo. The panel checks again and shows who you're connected as. <kbd>s</kbd> skips a step, <kbd>o</kbd> opens the privacy notes, and <kbd>Esc</kbd> closes it. serenity never sees a token: gh and Claude Code keep their own.</p>
+<p>Logins run in a popup over the map, and the panel shows who you're connected as. Tokens stay with gh and Claude Code. When every step is done or skipped, <em>You're set</em>, and <kbd>Enter</kbd> takes you to the tour.</p>
 <figure class="d-gif">
-<a class="d-gif-link" href="media/onboarding.gif" aria-label="Open the first boot GIF full size"><img src="media/onboarding.gif" width="1000" height="530" loading="lazy" decoding="async" alt="Running serenity in a new repo opens the map with the Set up serenity panel: GitHub not logged in, Slack not connected. Enter opens a popup running gh's device flow, and the panel shows GitHub connected as sam-demo. Enter on Slack opens a popup logging in through Claude Code; the panel shows Slack connected as Sam (Acme), on for this repo. Enter closes it onto the learn-serenity card, and Enter opens the tutorial, which says hello."></a>
-<figcaption>First boot: <kbd>Enter</kbd> logs in to GitHub, then Slack, then <kbd>Enter</kbd> on the tutorial.</figcaption>
+<a class="d-gif-link" href="media/onboarding.gif" aria-label="Open the first boot GIF full size"><img src="media/onboarding.gif" width="1000" height="530" loading="lazy" decoding="async" alt="Running serenity in a new repo opens the map with the Welcome to serenity panel on its Import step: 4 past Claude sessions, the latest three listed. Enter imports all 4 as ended cards. Enter on GitHub opens a popup running gh's device flow, and the panel shows GitHub connected as sam-demo. Enter on Slack opens a popup logging in through Claude Code; the panel shows Slack connected as Sam (Acme), on for this repo. You're set: Enter closes it onto the learn-serenity card, and Enter opens the tutorial, which says hello."></a>
+<figcaption>First boot: <kbd>Enter</kbd> imports past sessions, logs in to GitHub, then Slack, then opens the tutorial.</figcaption>
 </figure>
 <p>To redo either later, press <kbd>Ctrl+,</kbd> (or <kbd>,</kbd> on the map): the settings show GITHUB › Login and SLACK › Login with their status, and <kbd>Enter</kbd> on one runs the same popup. From a shell, it's <code>serenity setup github</code> or <code>serenity setup slack</code>. <code>serenity doctor</code> shows both.</p>
 <h3 id="tutorial">The first-boot tutorial</h3>
-<p>Once you close the Setup panel, you land on the map's one session, <code>learn-serenity</code>, prompted with <em>teach me how to use serenity</em>. Press <kbd>Enter</kbd> on it for a hands-on tour of the map, sessions, NEEDS YOU, the master, PRs and the keys. It goes one step at a time, asks you to try each one, and links back to this page. It runs in your repo without a worktree and changes nothing. Press <kbd>K</kbd> on it when you're done and it won't come back.</p>
+<p>Once you close the welcome panel, you land on the map's one session, <code>learn-serenity</code>, prompted with <em>teach me how to use serenity</em>. Press <kbd>Enter</kbd> on it for a hands-on tour of the map, sessions, NEEDS YOU, the master, PRs and the keys. It goes one step at a time, asks you to try each one, and links back to this page. It runs in your repo without a worktree and changes nothing. Press <kbd>K</kbd> on it when you're done and it won't come back.</p>
 <p>It appears once per machine, and not at all if you already have sessions. To skip it, set <code>"onboarding": false</code> in <code>~/.config/serenity/config.json</code> or <code>SERENITY_NO_ONBOARDING=1</code>. To take the tour again, install the <a href="https://github.com/mukkund1996/serenity/tree/main/plugins/learn-serenity">learn-serenity</a> plugin (<code>/plugin install learn-serenity@serenity</code>) and ask any session <em>teach me how to use serenity</em>.</p>
 <h3 id="import">Bring your existing sessions</h3>
-<p>Already using Claude Code? Bring those sessions onto the map, whether or not you use tmux. serenity finds them in Claude's own history (<code>~/.claude/projects</code>), which it only reads and never changes. Each one goes onto the map of the repo it ran in, worktrees included. An empty map tells you how many it found and points you to <kbd>I</kbd>.</p>
+<p>Already using Claude Code? Bring those sessions onto the map, whether or not you use tmux. serenity finds them in Claude's own history (<code>~/.claude/projects</code>), which it only reads and never changes. Each one goes onto the map of the repo it ran in, worktrees included. On first boot the welcome panel offers them. After that, an empty map tells you how many it found and points you to <kbd>I</kbd>.</p>
 <div class="d-cmd"><pre><span class="p">$ </span>serenity import               <span class="c"># this repo's, last 14 days: pick which</span>
 <span class="p">$ </span>serenity import --all-repos   <span class="c"># every repo, each onto its own map</span>
 <span class="p">$ </span>serenity import --since 2026-11-01 --dir packages/api --yes</pre><button type="button" class="d-copy" aria-label="Copy the commands"><span class="done"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7fc77f" stroke-width="2" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span><span class="idle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg></span></button></div>
@@ -172,7 +173,7 @@
 <tr><td><code>serenity</code></td><td>Open the map for the git repo you are in</td></tr>
 <tr><td><code>serenity import</code></td><td>Bring in your existing Claude Code sessions (<code>--help</code> for options)</td></tr>
 <tr><td><code>serenity doctor</code></td><td>Check tmux, claude, git and gh, and who GitHub and Slack are logged in as</td></tr>
-<tr><td><code>serenity setup github</code></td><td>Log in to GitHub with <code>gh</code> (the Setup panel runs this)</td></tr>
+<tr><td><code>serenity setup github</code></td><td>Log in to GitHub with <code>gh</code> (the welcome panel runs this)</td></tr>
 <tr><td><code>serenity setup slack</code></td><td>Log in to Slack for the master; asks to turn it on for the repo you are in. <code>serenity slack login</code> is the same</td></tr>
 <tr><td><code>serenity slack on</code> / <code>off</code> / <code>status</code></td><td>Show Slack on this repo's map, or not</td></tr>
 <tr><td><code>serenity restart</code></td><td>Restart the background daemon (sessions keep running)</td></tr>
@@ -255,7 +256,7 @@
 </tbody>
 </table></div>
 <p>Replies the master wants to send to a session wait in their own <strong>QUEUE</strong> under NEEDS YOU, so they never make an idle session look like it needs you. <kbd>Enter</kbd> shows the whole message, <kbd>y</kbd> sends it.</p>
-<p class="d-note"><strong>Slack is optional.</strong> Connect it in the Setup panel on first boot, under <kbd>Ctrl+,</kbd> → Slack › Login, or with <code>serenity setup slack</code>. Then turn it on for a repo: <code>serenity slack on</code> inside it, or <kbd>Ctrl+,</kbd> → Slack on its map. (Advanced: the list lives under <code>slack.repos</code> in <code>~/.config/serenity/config.json</code>.) A Slack item drops out as soon as you write after it on Slack.</p>
+<p class="d-note"><strong>Slack is optional.</strong> Connect it in the welcome panel on first boot, under <kbd>Ctrl+,</kbd> → Slack › Login, or with <code>serenity setup slack</code>. Then turn it on for a repo: <code>serenity slack on</code> inside it, or <kbd>Ctrl+,</kbd> → Slack on its map. (Advanced: the list lives under <code>slack.repos</code> in <code>~/.config/serenity/config.json</code>.) A Slack item drops out as soon as you write after it on Slack.</p>
 </section>
 
 <!-- ============ MASTER ============ -->
@@ -298,9 +299,10 @@
 <section id="mentions">
 <h2><a href="#mentions">@ mentions</a></h2>
 <p>In the master's input, <kbd>@</kbd> opens a list that completes as you type: the commands first, each with a hint, then the live sessions of the repo. <kbd>↑</kbd> <kbd>↓</kbd> move, <kbd>Tab</kbd> or <kbd>Enter</kbd> complete, <kbd>Esc</kbd> closes the list. Names are exact and case-sensitive, which is why the list completes whole names.</p>
+<p>The commands lead you on, so you never have to remember what comes next. A space after <code>@copy</code>, <code>@handover</code> or <code>@move</code> opens the list of live sessions straight away, no second <kbd>@</kbd> needed; type to filter it. After <code>@copy @session</code> a dim hint asks what the new session should do. After <code>@move @session</code>, <kbd>@</kbd> adds another session, and <kbd>Space</kbd> or <kbd>Tab</kbd> writes <code>to</code> and lists the map's topics, labelled "topic". Pick one, or type a new name. The topic turns sand in the input.</p>
 <figure class="d-gif">
 <a class="d-gif-link" href="media/mentions.gif" aria-label="Open the mentions GIF full size"><img src="media/mentions.gif" width="1000" height="530" loading="lazy" decoding="async" alt="Typing @ in the master's input lists @new, @copy, @handover and the sessions. Typing ca and Tab completes @cart-badge in blue; the master asks cart-badge and relays its answer. @new, in green, starts a wishlist session that appears under checkout, and @copy, in yellow, is typed with @checkout-retry."></a>
-<figcaption>Session mentions turn blue, <code>@new</code> green, <code>@copy</code> and <code>@handover</code> yellow. <code>@move</code>, added since this recording, is cyan.</figcaption>
+<figcaption>Session mentions turn blue, <code>@new</code> green, <code>@copy</code> and <code>@handover</code> yellow. <code>@move</code>, added since this recording, is cyan, and the topic it names sand.</figcaption>
 </figure>
 
 <h3><code>@session</code>: talk to a session</h3>
