@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/mukkund1996/serenity/compare/v0.12.0...v0.13.0) (2026-11-08)
+
+
+### Features
+
+* **install:** end the install script with a next-steps block ([#126](https://github.com/mukkund1996/serenity/issues/126)) ([5e9ced8](https://github.com/mukkund1996/serenity/commit/5e9ced817e23afbe6ff76f7fe86158f91f196b98))
+
 ## [0.12.0](https://github.com/mukkund1996/serenity/compare/v0.11.0...v0.12.0) (2026-11-08)
 
 
