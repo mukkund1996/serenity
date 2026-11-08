@@ -8,6 +8,7 @@ import {
 	repoKey,
 	writeConfig,
 } from "@serenity/core";
+import { notInRepo, printError } from "./errors";
 
 export const SLACK_USAGE = `usage:
   serenity slack login          sign in to Slack for the master (once)
@@ -89,8 +90,10 @@ export async function runSlackCommand(
 ): Promise<number> {
 	const repo = gitRoot(target ?? process.cwd());
 	if (!repo) {
-		console.error(
-			`serenity: ${target ? `${target} is not` : "you are not"} in a git repo; run it inside one or name one: serenity slack ${sub} <repo>`,
+		printError(
+			notInRepo(target ?? process.cwd(), `serenity slack ${sub}`, {
+				alternative: ["Or name one:", { cmd: `serenity slack ${sub} <repo>` }],
+			}),
 		);
 		return 1;
 	}
@@ -113,7 +116,7 @@ export async function runSlackCommand(
 		console.log(`Slack is ${sub} for ${name}: ${applies}.`);
 		return 0;
 	} catch (e) {
-		console.error(`serenity: ${(e as Error).message}`);
+		printError({ title: (e as Error).message });
 		return 1;
 	}
 }

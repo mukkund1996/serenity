@@ -14,6 +14,7 @@ import {
 	parseDateArg,
 	sizeLabel,
 } from "@serenity/core";
+import { notInRepo, printError } from "./errors";
 
 /**
  * `serenity import` (ADR 0064): lists the Claude Code sessions you already
@@ -183,7 +184,8 @@ function hereRepo(): string | null {
 export async function runImport(home: string, argv: string[]): Promise<number> {
 	const args = parseImportArgs(argv);
 	if (typeof args === "string") {
-		console.error(`serenity import: ${args}\n\n${IMPORT_USAGE}`);
+		printError({ prefix: "serenity import", title: args });
+		console.error(`\n${IMPORT_USAGE}`);
 		return 2;
 	}
 	if (args.help) {
@@ -192,8 +194,14 @@ export async function runImport(home: string, argv: string[]): Promise<number> {
 	}
 	const repo = args.allRepos ? null : hereRepo();
 	if (!args.allRepos && !repo) {
-		console.error(
-			"serenity import: run it inside a git repository, or pass --all-repos",
+		printError(
+			notInRepo(process.cwd(), "serenity import", {
+				prefix: "serenity import",
+				alternative: [
+					"Or import from every repo:",
+					{ cmd: "serenity import --all-repos" },
+				],
+			}),
 		);
 		return 1;
 	}
