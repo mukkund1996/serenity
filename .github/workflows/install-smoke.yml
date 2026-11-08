@@ -4,15 +4,20 @@ name: install-smoke
 # checks it runs headless: scripts/install-smoke/. Linux in fresh containers,
 # macOS on GitHub's runners (which come with Homebrew, git and gh already).
 
+# release.yml's publish job dispatches it with the new tag once the binaries
+# and the tap bump are in place (ADR 0068): a release made with GITHUB_TOKEN
+# fires no `release` event.
 on:
   workflow_dispatch:
     inputs:
+      tag:
+        description: Release tag to install, e.g. v0.11.0 (default the latest release)
+        required: false
+        default: ""
       allow_release_download:
         description: Download the release's assets if the run that built them has expired (adds one download per asset to its counts)
         type: boolean
         default: false
-  release:
-    types: [published]
   pull_request:
     paths:
       - scripts/install.sh
@@ -29,8 +34,7 @@ jobs:
   # as a workflow artifact (scripts/install-smoke/mirror.sh, ADR 0056). The
   # jobs install from that copy via SERENITY_DOWNLOAD_BASE: GitHub counts every
   # release asset download, the API's too, so the smoke test must not fetch
-  # them. On a release it first waits for the binaries and the tap bump
-  # (release.yml's publish job lands them after the release is published).
+  # them.
   mirror:
     runs-on: ubuntu-latest
     outputs:
@@ -38,23 +42,10 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - if: github.event_name == 'release'
-        env:
-          TAG: ${{ github.event.release.tag_name }}
-        run: |
-          for i in $(seq 60); do
-            if gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -qx SHA256SUMS &&
-              curl -fsSL https://raw.githubusercontent.com/mukkund1996/homebrew-tap/HEAD/Formula/serenity.rb | grep -q "version \"${TAG#v}\""; then
-              exit 0
-            fi
-            sleep 30
-          done
-          echo "::error::$TAG binaries or tap formula did not appear within 30 minutes"
-          exit 1
       - uses: actions/checkout@v4
       - id: fetch
         env:
-          TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+          TAG: ${{ inputs.tag }}
           MIRROR_ALLOW_DOWNLOAD: ${{ inputs.allow_release_download && '1' || '' }}
         run: |
           tag=${TAG:-$(gh release view -R "$GITHUB_REPOSITORY" --json tagName -q .tagName)}

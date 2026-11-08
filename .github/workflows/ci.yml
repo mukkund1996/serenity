@@ -1,9 +1,20 @@
 name: ci
 
+# The release workflow runs only after this one passes on a push to main, for
+# that exact commit (ADR 0068). workflow_dispatch lets the release workflow
+# run it on release-please's PR branch, whose pushes (made with GITHUB_TOKEN)
+# fire no pull_request event.
+
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # A newer push to a PR supersedes its older run; runs on main never cancel.
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('{0}-{1}', github.event_name, github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -22,8 +33,10 @@ jobs:
           if [ "$RUNNER_OS" = "macOS" ]; then brew install tmux; else sudo apt-get update && sudo apt-get install -y tmux; fi
           tmux -V
       - run: bun install --frozen-lockfile
+      - run: bun run check:adr
       - run: bun run lint
       - run: bun run typecheck
       - run: bun run test
-      - run: bun run test:e2e
+      # Retries a failing e2e file once and reports it as flaky (ADR 0068).
+      - run: bun run test:e2e:ci
       - run: bun run build && ./dist/serenity version

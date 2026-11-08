@@ -1,6 +1,6 @@
 # 0056 · CI installs stay out of the release download counts
 
-**Status:** Accepted · 2026-11-03 · Amends 0025
+**Status:** Accepted · 2026-11-03 · Amends 0025 · Amended by [0068](0068-release-gated-on-ci.md)
 
 ## Context
 GitHub's per-asset `download_count` is the only install number a release has, and it can't be filtered: GitHub doesn't record who downloaded what. The install smoke test (`.github/workflows/install-smoke.yml`) installs the way users do, so every run fetched from the release: 15 script jobs each downloaded a binary and `SHA256SUMS`, and 3 Homebrew jobs a binary through the tap formula. That is about 33 downloads a run. Matched against the runs, they account for almost all of v0.7.0–v0.9.0's downloads. Downloads through the authenticated API (`gh release download`) count too, so fetching once per run with a token only shrinks the problem.

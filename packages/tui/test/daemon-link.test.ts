@@ -26,15 +26,30 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 let link: DaemonLink<FakePeer> | null = null;
 afterEach(() => link?.stop());
 
-/** A link whose daemon is unreachable until `up` is set. */
-function make(opts: Partial<LinkOptions<FakePeer>> = {}) {
-	const world = {
+type World = ReturnType<typeof newWorld>;
+
+function newWorld() {
+	return {
 		up: false,
 		tries: 0,
 		starts: 0,
 		peers: [] as FakePeer[],
 		statuses: [] as LinkStatus[],
 	};
+}
+
+/**
+ * A link whose daemon is unreachable until `up` is set. Options that use the
+ * world take it as an argument: a closure over the destructured `world` would
+ * hit its temporal dead zone on the first connect, which start() makes at once.
+ */
+function make(
+	opts:
+		| Partial<LinkOptions<FakePeer>>
+		| ((world: World) => Partial<LinkOptions<FakePeer>>) = {},
+) {
+	const world = newWorld();
+	const extra = typeof opts === "function" ? opts(world) : opts;
 	link = new DaemonLink<FakePeer>({
 		connect: async () => {
 			world.tries++;
@@ -49,7 +64,7 @@ function make(opts: Partial<LinkOptions<FakePeer>> = {}) {
 		backoff: { baseMs: 2, maxMs: 4 },
 		downAfterMs: 60,
 		startAfterMs: 20,
-		...opts,
+		...extra,
 	});
 	link.start();
 	return { world, link };
@@ -133,7 +148,7 @@ test("a call waits for the reconnect, and gives up after its wait", async () => 
 
 test("an outdated map says so, never turns down, and starts no daemon", async () => {
 	let stale = false;
-	const { world } = make({
+	const { world } = make((world) => ({
 		connect: async () => {
 			world.tries++;
 			if (stale) throw new StaleClientError("9.9.9+new");
@@ -141,7 +156,9 @@ test("an outdated map says so, never turns down, and starts no daemon", async ()
 			world.peers.push(peer);
 			return peer;
 		},
-	});
+	}));
+	// The first connect succeeds: no outage, so no start timer left to race.
+	expect(world.tries).toBe(1);
 	await wait(10);
 	stale = true;
 	world.peers[0]?.close();

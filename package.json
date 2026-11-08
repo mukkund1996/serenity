@@ -12,6 +12,8 @@
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"test": "bun test packages",
 		"test:e2e": "bun test e2e",
+		"test:e2e:ci": "bun scripts/test-retry-flaky.ts e2e",
+		"check:adr": "sh scripts/check-adr-numbers.sh",
 		"build": "bun scripts/build.ts",
 		"install:local": "bun scripts/install-local.ts",
 		"package:skill": "sh scripts/package-skill.sh"

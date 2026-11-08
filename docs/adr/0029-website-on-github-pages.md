@@ -1,6 +1,6 @@
 # 0029 · The website: static page on GitHub Pages at getserenity.dev, version filled in at deploy
 
-**Status:** Accepted · 2026-10-28
+**Status:** Accepted · 2026-10-28 · Amended by [0068](0068-release-gated-on-ci.md)
 
 ## Context
 serenity needs a landing page. It was designed on a Claude Design canvas ([source](https://claude.ai/artifact/ES8rj8QgexBYgGDyns5cdp)): one fluid page with a scroll story, an install section and a footer, checked at desktop, tablet (834) and phone (390) widths. The page shows the current release, and must never show an older one than the latest release.

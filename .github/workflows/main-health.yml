@@ -1,0 +1,65 @@
+name: main-health
+
+# When ci fails on main, says so where it is seen (ADR 0068): one open issue
+# labelled main-red, opened or commented on per failing commit, and a comment
+# on the PR that commit came from. A later green run on main comments and
+# closes the issue. A red main never releases (release.yml), so this is how
+# the stall gets noticed.
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: main-health
+  cancel-in-progress: false
+
+jobs:
+  report:
+    if: github.event.workflow_run.event == 'push' && contains(fromJSON('["success","failure","timed_out"]'), github.event.workflow_run.conclusion)
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      RUN_URL: ${{ github.event.workflow_run.html_url }}
+      TITLE: ${{ github.event.workflow_run.display_title }}
+    steps:
+      - name: Open, update or close the main-red issue
+        run: |
+          set -eu
+          short=$(printf %.7s "$SHA")
+          issue=$(gh issue list -R "$REPO" --label main-red --state open --json number --jq '.[0].number // empty')
+          if [ "$CONCLUSION" = success ]; then
+            if [ -n "$issue" ]; then
+              gh issue comment "$issue" -R "$REPO" --body "ci is green again on main at $short ($TITLE): $RUN_URL"
+              gh issue close "$issue" -R "$REPO" --reason completed
+            fi
+            exit 0
+          fi
+
+          failed=$(gh run view "${RUN_URL##*/}" -R "$REPO" --json jobs \
+            --jq '[.jobs[] | select(.conclusion == "failure") | "- \(.name): " + ([.steps[] | select(.conclusion == "failure") | .name] | join(", "))] | join("\n")')
+          pr=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '.[0].number // empty')
+          body=$(printf '%s\n\n%s\n\n%s\n\n%s' \
+            "ci **$CONCLUSION** on main at $short ($TITLE)${pr:+, from #$pr}: $RUN_URL" \
+            "${failed:-"(no failed job found)"}" \
+            "Nothing releases until ci passes on main's head (ADR 0068)." \
+            "Read the failing job's log first: \`gh run view ${RUN_URL##*/} --log-failed\`.")
+
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" -R "$REPO" --body "$body"
+          else
+            gh label create main-red -R "$REPO" --color B60205 --description "ci is failing on main" 2>/dev/null || true
+            gh issue create -R "$REPO" --label main-red --title "ci is red on main" --body "$body"
+          fi
+          if [ -n "$pr" ]; then
+            gh pr comment "$pr" -R "$REPO" --body "After this PR merged, $body"
+          fi

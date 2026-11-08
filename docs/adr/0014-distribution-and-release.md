@@ -1,6 +1,6 @@
 # 0014 · Distribution, release, licence, telemetry
 
-**Status:** Accepted · 2026-10-25
+**Status:** Accepted · 2026-10-25 · Amended by [0068](0068-release-gated-on-ci.md)
 
 ## Decision
 - **Binaries:** `bun build --compile` for darwin-arm64, darwin-x64, linux-x64, linux-arm64, attached to GitHub Releases.
