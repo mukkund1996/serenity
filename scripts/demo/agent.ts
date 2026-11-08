@@ -30,7 +30,7 @@ import {
 	LATER_SESSIONS,
 	SESSIONS,
 	sessionIn,
-	TIMELINE,
+	TIMELINES,
 	TUTORIAL,
 	TUTORIAL_PROMPT,
 } from "./scenario";
@@ -96,11 +96,15 @@ function answer(prompt: string, schema: string): unknown {
 	// A Slack follow-up: the scenario's, for the message in the prompt.
 	if (schema.includes('"tell"')) {
 		const text = prompt.match(/^\S+ wrote: (.*)$/m)?.[1] ?? "";
-		for (const event of TIMELINE) {
+		for (const event of Object.values(TIMELINES).flat()) {
 			if (event.kind !== "slack" || event.item.text !== text) continue;
 			const s = event.item.suggestion;
 			if (s.kind === "tell" && prompt.includes("It answered:"))
 				return { kind: "reply", text: s.reply, session: s.session, name: null };
+			if (s.kind === "start")
+				return prompt.includes("It answered:")
+					? { kind: "reply", text: s.reply, session: s.name, name: null }
+					: { kind: "start", text: s.text, session: null, name: s.name };
 			return s.kind === "reply"
 				? { kind: "reply", text: s.text, session: null, name: null }
 				: { kind: "tell", text: s.text, session: s.session, name: null };
@@ -232,6 +236,13 @@ async function interactive(): Promise<void> {
 	const dashes = args.indexOf("--");
 	const brief = dashes === -1 ? undefined : args[dashes + 1];
 	if (brief) work(brief);
+	// A session started on camera pauses once with its progress, so the
+	// master files it under its topic, then carries on (as demo.ts start does).
+	const later = LATER_SESSIONS.find((s) => s.name === name);
+	if (later?.progress) {
+		setTimeout(() => stop(later.progress), 300);
+		setTimeout(() => work("Carry on"), 2_000);
+	}
 	// The first-boot tutorial: one step of TUTORIAL per prompt.
 	let step = brief === TUTORIAL_PROMPT ? 0 : -1;
 	const teach = () => {
