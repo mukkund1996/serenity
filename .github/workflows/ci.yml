@@ -37,6 +37,8 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
       - run: bun run test
+      - name: TEMP stress daemon-link (revert before merge)
+        run: for i in $(seq 100); do bun test packages/tui/test/daemon-link.test.ts >/tmp/dl.log 2>&1 || { cat /tmp/dl.log; echo "failed on run $i"; exit 1; }; done; echo '100/100 passed'
       # Retries a failing e2e file once and reports it as flaky (ADR 0068).
       - run: bun run test:e2e:ci
       - run: bun run build && ./dist/serenity version
