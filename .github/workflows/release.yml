@@ -69,7 +69,8 @@ jobs:
           if [ -z "$pr" ]; then echo "no open release PR"; exit 0; fi
           branch=$(printf '%s' "$pr" | jq -r .headRefName)
           sha=$(printf '%s' "$pr" | jq -r .headRefOid)
-          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$sha&per_page=1" --jq .total_count)
+          # A pull_request run waiting for approval (action_required) never runs, so it does not count.
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$sha" --jq '[.workflow_runs[] | select(.conclusion != "action_required")] | length')
           if [ "$runs" -gt 0 ]; then echo "ci already ran on $branch at $sha"; exit 0; fi
           gh workflow run ci.yml -R "$GITHUB_REPOSITORY" --ref "$branch"
           echo "dispatched ci on $branch at $sha"
