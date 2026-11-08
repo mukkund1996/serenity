@@ -1,8 +1,9 @@
-# The README demo GIF. Re-record from the repo root with:
+# The first README demo GIF, kept for reference. The README's docs/demo.gif
+# now comes from scripts/demo/reddit (frame.py readme). Record with:
 #   vhs scripts/demo/demo.tape
 # Needs vhs (brew install vhs), tmux and bun. See scripts/demo/README.md.
 
-Output docs/demo.gif
+Output scripts/demo/out/classic.gif
 
 Require tmux
 Require bun

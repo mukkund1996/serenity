@@ -1,16 +1,21 @@
 # The demo GIFs
 
-`docs/demo.gif` (the README's) and the docs page's GIFs in
-`website/docs/media/` are recorded from the real TUI against a made-up world: a
+`docs/demo.gif` (the README's), the Reddit launch clip and the docs page's
+GIFs in `website/docs/media/` are recorded from the real TUI against a made-up world: a
 throwaway git repo, a fake `claude` (`agent.ts`), the E2E fake `gh` and a fake
 Slack inbox, all in a private tmux server. Nothing touches your sessions,
 `~/.claude`, GitHub or Slack, so the GIF shows no real names or messages.
 
-Re-record from the repo root (needs `brew install vhs`, plus tmux and bun):
+The README's GIF and the Reddit clip share one recording, framed two ways;
+see `reddit/README.md`:
 
 ```bash
-vhs scripts/demo/demo.tape
+vhs scripts/demo/reddit/reddit.tape
+uv run --with pillow python scripts/demo/reddit/frame.py readme   # docs/demo.gif
 ```
+
+`demo.tape` is the first README GIF, kept for reference; it writes
+`scripts/demo/out/classic.gif`.
 
 - `scenario.ts`: the sessions, their topics and PRs, a timeline per GIF of
   what happens (permission prompts, questions, Slack messages), and the
@@ -25,7 +30,8 @@ vhs scripts/demo/demo.tape
   map, `stop` deletes it all. `fresh` builds a first boot instead: an empty
   repo and serenity home, and an `env.sh` that puts `serenity` and a
   logged-out fake `gh` on PATH (the fake claude plays Slack's `mcp login`).
-- `demo.tape`: the README GIF's vhs script: size, theme, and the keys pressed.
+- `demo.tape`: the first README GIF's vhs script (see above).
+- `reddit/`: the README GIF and the Reddit clip: `reddit.tape` records, `frame.py` frames it.
 
 ## The docs page's GIFs
 

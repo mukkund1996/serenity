@@ -18,7 +18,7 @@ Working agents stay quiet. Waiting agents call you. The master keeps the overvie
 
 <br>
 
-<img src="docs/demo.gif" alt="The serenity map: five sessions working, a permission prompt, a question and two Slack messages arriving in NEEDS YOU, and y approving and answering them">
+<img src="docs/demo.gif" alt="The serenity map: three Slack messages in NEEDS YOU; y on one starts a new session, fix-csv-export, which files itself under its topic; @new starts another from the master's chat; an @mention asks fix-csv-export to message Slack when done; NEEDS YOU clears and the map is calm">
 
 </div>
 

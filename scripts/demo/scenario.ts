@@ -79,6 +79,21 @@ export const LATER_SESSIONS: DemoSession[] = [
 		brief: "Add a wishlist page: a heart on each product saves it to the list",
 		progress: "",
 	},
+	// The Reddit clip's: one from a Slack request, one from @new.
+	{
+		name: "fix-csv-export",
+		topic: "orders db",
+		brief:
+			"Priya asked in #bugs: the orders CSV export drops the last row. Find out why and fix it.",
+		progress: "Found it: an off-by-one in the export's pagination; fixing it.",
+	},
+	{
+		name: "purchase-dto-fix",
+		topic: "checkout",
+		brief: "Fix the DTO validation of the purchase endpoint",
+		progress:
+			"Reproduced it: an empty quantity passes validation; adding the check.",
+	},
 ];
 
 /** What happens during the recording, in order, `at` ms after it starts. */
@@ -96,6 +111,14 @@ export interface DemoSlackItem {
 	/** The master's proposal for it. */
 	suggestion:
 		| { kind: "reply"; text: string }
+		| {
+				kind: "start";
+				/** The new session's name; a LATER_SESSIONS entry. */
+				name: string;
+				text: string;
+				/** The reply once the session has answered. */
+				reply: string;
+		  }
 		| {
 				kind: "tell";
 				session: string;
@@ -179,6 +202,30 @@ export const TIMELINES: Record<string, DemoEvent[]> = {
 		{ ...priceQuestion, at: 400 },
 	],
 	mentions: [],
+	// The Reddit clip (scripts/demo/reddit): only Slack, so the newest, the
+	// request that starts a session, is the first item in NEEDS YOU.
+	reddit: [
+		{ ...TIMELINE[3], at: 500 } as DemoEvent,
+		{ ...slackMention, at: 1_700 },
+		{
+			at: 3_000,
+			kind: "slack",
+			item: {
+				channel: "#bugs",
+				author: "Priya",
+				text: "the orders CSV export drops the last row, can someone take it?",
+				action: "Fix the orders CSV export dropping its last row",
+				reason: "mention",
+				suggestion: {
+					kind: "start",
+					name: "fix-csv-export",
+					text: "Priya asked in #bugs: the orders CSV export drops the last row. Find out why and fix it.",
+					reply:
+						"On it: an off-by-one in the export's pagination, fix coming today.",
+				},
+			},
+		},
+	],
 };
 
 /** A turn of the master's scripted chat (the mentions and master GIFs). */
@@ -235,6 +282,35 @@ export const CHAT: DemoChatTurn[] = [
 			},
 		],
 		reply: "Started wishlist under checkout.",
+	},
+	{
+		when: /^@new\b.*dto/i,
+		tools: [
+			{
+				name: "create_session",
+				args: {
+					name: "purchase-dto-fix",
+					topic: "checkout",
+					prompt: "Fix the DTO validation of the purchase endpoint",
+				},
+			},
+		],
+		reply:
+			"Started purchase-dto-fix under checkout: it validates the purchase DTO and adds tests.",
+	},
+	{
+		when: /^@fix-csv-export\b/,
+		tools: [
+			{
+				name: "send_reply",
+				args: {
+					session: "fix-csv-export",
+					text: "When you are done, message Priya on Slack (#bugs) that the export is fixed.",
+				},
+			},
+		],
+		reply:
+			"Told fix-csv-export: it will message Priya on Slack when it is done.",
 	},
 ];
 
