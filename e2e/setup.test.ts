@@ -1,8 +1,8 @@
 /**
  * ADR 0065 and 0066 end to end: on a first boot the map opens the welcome
- * panel. Enter logs in to GitHub in a popup (the fake gh's device flow),
- * then to Slack (the fake claude's `mcp login`), which turns Slack on for the
- * repo, then imports the repo's past Claude sessions. "You're set" closes
+ * panel. Enter imports the repo's past Claude sessions, logs in to GitHub
+ * in a popup (the fake gh's device flow), then to Slack (the fake claude's
+ * `mcp login`), which turns Slack on for the repo. "You're set" closes
  * onto the tutorial's card, the settings panel shows both logins, `serenity
  * doctor` names them, and the panel doesn't open again.
  */
@@ -218,7 +218,7 @@ afterAll(() => {
 });
 
 test(
-	"first boot: the welcome panel logs in to GitHub and Slack in popups, imports past sessions, then hands over to the tutorial",
+	"first boot: the welcome panel imports past sessions, logs in to GitHub and Slack in popups, then hands over to the tutorial",
 	async () => {
 		await until(
 			() =>
@@ -233,7 +233,27 @@ test(
 			"Slack     ○ not connected · off for this repo",
 		);
 
-		// GitHub: the popup runs gh's device flow, which waits for Enter.
+		// Import comes first, the newest first: Enter imports both, parked.
+		await until(
+			() =>
+				/› Import[\s\S]*· Add a dark mode toggle · main · 1h ago[\s\S]*· Fix the login redirect · main · 2h ago/.test(
+					text(),
+				) && terminal().includes("Enter import all"),
+			"the import step with the latest sessions",
+		);
+		type("Enter");
+		await until(
+			() => terminal().includes("✓ imported 2"),
+			"both sessions imported",
+		);
+		const state = await rpc((p) => p.request("state.subscribe", { repo }));
+		expect(
+			state.sessions
+				.filter((x) => x.origin === "imported")
+				.map((x) => x.status),
+		).toEqual(["dead", "dead"]);
+
+		// GitHub is next: the popup runs gh's device flow, which waits for Enter.
 		type("Enter");
 		await until(
 			() => terminal().includes("First copy your one-time code"),
@@ -263,26 +283,6 @@ test(
 		);
 		expect(config.slack.repos).toEqual([repo]);
 		expect(await rpc((p) => p.request("setup.pending", {}))).toBe(true);
-
-		// Import is next, the newest first: Enter imports both, parked.
-		await until(
-			() =>
-				/› Import[\s\S]*· Add a dark mode toggle · main · 1h ago[\s\S]*· Fix the login redirect · main · 2h ago/.test(
-					text(),
-				) && terminal().includes("Enter import all"),
-			"the import step with the latest sessions",
-		);
-		type("Enter");
-		await until(
-			() => terminal().includes("✓ imported 2"),
-			"both sessions imported",
-		);
-		const state = await rpc((p) => p.request("state.subscribe", { repo }));
-		expect(
-			state.sessions
-				.filter((x) => x.origin === "imported")
-				.map((x) => x.status),
-		).toEqual(["dead", "dead"]);
 
 		// "You're set": Enter closes it onto the tutorial's card, and Enter again attaches it.
 		await until(
