@@ -115,7 +115,7 @@
 <p>Or with Homebrew (tmux, git and gh come as dependencies):</p>
 <div class="d-cmd"><pre><span class="p">$ </span>brew install mukkund1996/tap/serenity</pre><button type="button" class="d-copy" aria-label="Copy the Homebrew command"><span class="done"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7fc77f" stroke-width="2" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span><span class="idle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg></span></button></div>
 <p class="d-note"><strong>If you don't have Claude Code yet,</strong> install it first with <code>brew install --cask claude-code</code>. Skip this if you already installed it with npm or Anthropic's installer, or you end up with two copies.</p>
-<p><strong>Next:</strong> <code>cd</code> into a git repo you work in and run <code>serenity</code> (<a href="#start">Starting serenity</a>). If your shell can't find it, add the install directory to your PATH (the install script prints the line) or open a new terminal.</p>
+<p><strong>Next:</strong> <code>cd</code> into a git repo you work in and run <code>serenity</code> (<a href="#start">Starting serenity</a>). The install script adds its directory to your shell profile, so open a new terminal if your shell can't find it yet.</p>
 <p>The install script reads these environment variables:</p>
 <div class="d-table"><table>
 <thead><tr><th>VARIABLE</th><th>DEFAULT</th><th>EFFECT</th></tr></thead>
@@ -123,6 +123,7 @@
 <tr><td><code>SERENITY_VERSION</code></td><td>latest release</td><td>Install a specific version</td></tr>
 <tr><td><code>SERENITY_INSTALL_DIR</code></td><td><code>~/.local/bin</code></td><td>Where the binary goes</td></tr>
 <tr><td><code>SERENITY_NO_DEPS</code></td><td>unset</td><td>Set to <code>1</code> to skip installing dependencies</td></tr>
+<tr><td><code>SERENITY_NO_MODIFY_PATH</code></td><td>unset</td><td>Set to <code>1</code> to not add the install directory to your shell profile when it isn't on your PATH; the line to add is printed instead</td></tr>
 <tr><td><code>SERENITY_NO_OPEN</code></td><td>unset</td><td>Set to <code>1</code> to not open this page in your browser when the install finishes. It never opens in CI or without a display; the URL is printed either way</td></tr>
 </tbody>
 </table></div>

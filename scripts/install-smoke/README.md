@@ -7,7 +7,7 @@ Installs serenity the way the README tells users to, on clean machines, and chec
 
 After installing, `check.sh` checks:
 - the binary is in `~/.local/bin` (or the brew prefix);
-- the installer printed PATH guidance if that directory wasn't on PATH;
+- the installer added that directory to the shell profile if it wasn't on PATH;
 - `serenity --version` reports a version, or the `SERENITY_EXPECT_VERSION` you set;
 - tmux 3.2+, git, gh and claude are on PATH;
 - `help` and `doctor` work;
