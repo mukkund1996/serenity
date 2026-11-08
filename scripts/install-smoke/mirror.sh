@@ -7,7 +7,7 @@
 #   scripts/install-smoke/mirror.sh <tag> <dir>
 #
 # The binaries come from the workflow artifacts of the release.yml run that
-# built them: the push that tagged the release, or a rebuild dispatched for it.
+# built them: the run after ci that tagged the release, or a rebuild dispatched for it.
 # SHA256SUMS is rebuilt the way release.yml writes it. Every file must match
 # the sha256 digest GitHub reports for the release asset, so the copy is
 # byte-identical to what users download. Needs gh logged in (GH_TOKEN with

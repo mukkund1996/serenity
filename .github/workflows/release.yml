@@ -3,23 +3,53 @@ name: release
 # release-please keeps a release PR open from conventional commits on main.
 # Merging it tags vX.Y.Z and creates the GitHub release; the jobs below then
 # attach the binaries and their checksums and bump the Homebrew tap (ADR 0014).
+#
+# Nothing here runs for a commit until ci has passed on it (ADR 0068): this
+# workflow starts when ci completes on main, and the gate job lets it go on
+# only for a push whose ci succeeded and that is still main's head. A red main
+# never bumps the release PR, tags, builds or touches the tap.
 
 on:
-  push:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag to (re)build binaries for, e.g. v0.5.0
+        description: Existing tag to (re)build binaries for, e.g. v0.5.0 (needs a passing ci run on its commit)
         required: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
   pull-requests: write
+  actions: write # dispatches ci on the release PR, install-smoke and website
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.gate.outputs.go }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event.workflow_run.event }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          TAG: ${{ inputs.tag }}
+        run: scripts/release-gate.sh >>"$GITHUB_OUTPUT"
+
   release-please:
-    if: github.event_name == 'push'
+    needs: gate
+    if: github.event_name == 'workflow_run' && needs.gate.outputs.go == 'true'
     runs-on: ubuntu-latest
     outputs:
       created: ${{ steps.rp.outputs.release_created }}
@@ -27,10 +57,19 @@ jobs:
     steps:
       - id: rp
         uses: googleapis/release-please-action@v4
+      # release-please pushes its PR with GITHUB_TOKEN, which fires no
+      # pull_request event, so ci is dispatched on the PR's branch instead.
+      # Its checks land on the PR's head commit like any PR's.
+      - name: Run ci on the release PR
+        if: steps.rp.outputs.pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ fromJSON(steps.rp.outputs.pr).headBranchName }}
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
 
   build:
-    needs: release-please
-    if: always() && (needs.release-please.outputs.created == 'true' || github.event_name == 'workflow_dispatch')
+    needs: [gate, release-please]
+    if: always() && needs.gate.outputs.go == 'true' && (needs.release-please.outputs.created == 'true' || github.event_name == 'workflow_dispatch')
     strategy:
       fail-fast: true
       matrix:
@@ -104,3 +143,10 @@ jobs:
           git add Formula/serenity.rb
           git diff --cached --quiet || git commit -m "serenity ${TAG#v}"
           git push
+      # A release created with GITHUB_TOKEN fires no `release` event, so the
+      # install smoke test (from mirrored artifacts, ADR 0056) and the website
+      # are dispatched here, once the binaries and the tap are in place.
+      - name: Smoke-test the install and refresh the website
+        run: |
+          gh workflow run install-smoke.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
+          gh workflow run website.yml --repo "$GITHUB_REPOSITORY" --ref main

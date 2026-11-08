@@ -19,7 +19,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0011](0011-pr-status-via-gh.md) | PR status via `gh`, refreshed on events | Amended by 0043, 0055, 0061 |
 | [0012](0012-ux-decisions.md) | UX decisions not covered by the canvas | Amended by 0058 |
 | [0013](0013-testing-strategy.md) | Testing strategy | Accepted |
-| [0014](0014-distribution-and-release.md) | Distribution, release, licence, telemetry | Accepted |
+| [0014](0014-distribution-and-release.md) | Distribution, release, licence, telemetry | Amended by 0068 |
 | [0015](0015-workflow-and-milestones.md) | Workflow and milestones | Accepted |
 | [0016](0016-importing-running-sessions.md) | Importing Claude sessions already running in tmux | Amended by 0064 |
 | [0017](0017-topics-zoom-shows-every-topic.md) | The topics zoom shows every topic; "topic" replaces "category" | Accepted |
@@ -34,7 +34,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0026](0026-arrows-between-nodes-enter-into-ctrl-m-master.md) | Arrow keys between nodes, Enter into a node and `w` `s` inside it, Esc out; `Ctrl+m` focuses the master from every view | Amended by 0051, 0053 |
 | [0027](0027-master-centred-in-topics-zoom.md) | The master sits in the centre of the topics zoom, topics on both sides; docks left when too narrow | Amended by 0059 |
 | [0028](0028-enter-attaches-enter-into-master-only.md) | Enter attaches a card and `i` messages it; only the master is gone into; WASD back beside the arrows; dim card frames; Slack keeps its place; MY PRS off | Accepted |
-| [0029](0029-website-on-github-pages.md) | The website: static page on GitHub Pages at getserenity.dev, release version filled in at deploy | Accepted |
+| [0029](0029-website-on-github-pages.md) | The website: static page on GitHub Pages at getserenity.dev, release version filled in at deploy | Amended by 0068 |
 | [0030](0030-master-skill-auto-mode-confirmed-slack.md) | The master's skill, auto mode, and Slack messages sent once confirmed in the chat | Accepted |
 | [0031](0031-slack-joins-needs-you.md) | Slack joins NEEDS YOU: only mentions and DMs that need an action, at most three; no SLACK section, `[` `]` back to topics | Amended by 0050 |
 | [0032](0032-master-watches-sessions.md) | The master reads status on demand and watches sessions; hook status is checked against Claude's own | Amended by 0046 |
@@ -61,7 +61,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0053](0053-ctrl-q-and-ctrl-w.md) | `Ctrl+q` leaves a session for the map and `Ctrl+w` focuses the master, replacing `Ctrl+g` and `Ctrl+m`; plain control bytes, no extended keys needed; serenity's old bindings are removed | Amended by 0054 |
 | [0054](0054-agent-pane-test-compares-marker.md) | The agent-pane test in the `Ctrl+q` / `Ctrl+w` bindings compares the marker with empty (tmux reads an id starting with `0` as false); the binding check reads tmux 3.4's folded `C-q`/`C-Q` and keeps trying instead of giving up | Accepted |
 | [0055](0055-session-prs-found-kept-and-polled.md) | A session's PR is found under the head it was pushed as (worktree branch, renamed upstream, `owner:branch` for forks, else the known number); no failure blanks a known PR; rate limits back off; pushes and `gh pr` refresh it; open PRs are polled while a map is open; `PR #n` is bright blue | Accepted |
-| [0056](0056-ci-installs-out-of-download-counts.md) | install-smoke installs from a copy of the release taken from the release run's artifacts and checked against the release's digests (`SERENITY_DOWNLOAD_BASE`), so release download counts are people; `scripts/stats/downloads.ts` takes the older CI downloads out | Accepted |
+| [0056](0056-ci-installs-out-of-download-counts.md) | install-smoke installs from a copy of the release taken from the release run's artifacts and checked against the release's digests (`SERENITY_DOWNLOAD_BASE`), so release download counts are people; `scripts/stats/downloads.ts` takes the older CI downloads out | Amended by 0068 |
 | [0057](0057-x-only-dismisses-needs-you-items.md) | `x` on any NEEDS YOU item only dismisses it: a session is hidden (a waiting one too, until it asks something new) with its ◆ suggestion declined, the master's permission request hidden but left pending; a card's `x` still cleans up | Accepted |
 | [0058](0058-settings-panel-and-base-branch.md) | A settings panel (`Ctrl+,`, or `,` on the map) saves a few config.json options through the daemon, applied live where it can; new worktrees branch off a per-repo or global base (repo default, the main checkout's branch, or a named one), with a fallback notice and a per-session override in the New session dialog | Accepted |
 | [0059](0059-topics-cards-fill-their-lanes.md) | Topic cards stretch to fill their side's lanes: a side holds as many lanes as fit a 36-column card, cards share one width up to 56, one-card bubbles share a shelf; padding tightened, so the master centres from about 164 columns | Accepted |
@@ -73,6 +73,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0065](0065-setup-logins.md) | GitHub and Slack logins as setup steps (`SETUP_STEPS`): a Setup panel on the first map, before the tutorial, runs `serenity setup github|slack` in a tmux popup (gh's device flow, `claude mcp login`) and shows who is connected; Slack's login turns it on for the repo; the same logins in the settings panel and `serenity doctor`; no tokens handled | Amended by 0066 |
 | [0066](0066-welcome-panel-import-step.md) | The Setup panel becomes "Welcome to serenity": an import step for this repo's past sessions first (count and newest three; Enter imports all, `p` picks, hidden when none), then GitHub and Slack, then "You're set" onto the tutorial; one line per step, the same key hints and statuses throughout, docs linked for the rest | Accepted |
 | [0067](0067-command-completion.md) | `@copy`, `@handover` and `@move` lead on in the `@` list: a space after the command lists live sessions without another `@`; `@move @a ` then space or Tab writes `to ` and lists the map's topics (bare, sand, labelled "topic"); `@copy @a ` hints for the brief; one state machine in core (`completionAt`); no syntax change | Accepted |
+| [0068](0068-release-gated-on-ci.md) | release.yml runs after ci passes on main's head (`workflow_run` + `scripts/release-gate.sh`), so a red main never tags, builds or bumps the tap; ci is dispatched on release-please's PR; publish dispatches install-smoke (mirrored assets) and the website; the website deploys once per reason and retries a busy Pages deploy; a red main opens a `main-red` issue; failing e2e files retry once and are reported as flaky; duplicate ADR numbers fail ci | Accepted |
 
 ## System at a glance
 
