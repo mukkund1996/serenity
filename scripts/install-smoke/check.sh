@@ -82,7 +82,15 @@ check "binary at $bin_dir/serenity" test -x "$bin_dir/serenity"
 if [ "$method" = script ]; then
 	case ":$path_before:" in
 	*":$bin_dir:"*) pass "PATH guidance not needed ($bin_dir already on PATH)" ;;
-	*) check "PATH guidance printed for $bin_dir" grep -q "is not on your PATH" "$log" ;;
+	*)
+		# The installer adds it to the shell profile (and says which).
+		profile=$(sed -n 's/^Added .* to your PATH in //p' "$log" | head -n 1)
+		if [ -n "$profile" ] && grep -q "${bin_dir#"$HOME"/}" "$profile"; then
+			pass "$bin_dir added to PATH in $profile"
+		else
+			fail "$bin_dir added to PATH in a shell profile (${profile:-none named})"
+		fi
+		;;
 	esac
 fi
 

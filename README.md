@@ -87,6 +87,7 @@ The install script reads these environment variables:
 | `SERENITY_INSTALL_DIR` | `~/.local/bin` | Where the binary goes |
 | `SERENITY_NO_DEPS` | unset | Set to `1` to skip installing dependencies |
 | `SERENITY_DOWNLOAD_BASE` | the GitHub release | An `https://` or `file:///` URL to a directory holding a copy of a release's binaries and `SHA256SUMS`, for mirrors and CI. The checksums come from the same place, so only use a copy you trust |
+| `SERENITY_NO_MODIFY_PATH` | unset | Set to `1` to not add the install directory to your shell profile (`~/.zshrc`, `~/.bashrc`, `~/.bash_profile` on macOS, fish's `conf.d`, or `~/.profile`) when it isn't on your PATH |
 | `SERENITY_NO_OPEN` | unset | Set to `1` to not open the [docs](https://getserenity.dev/docs/) in your browser when the install finishes. They never open in CI or without a display; the URL is printed either way |
 
 ## Install the skill
@@ -107,7 +108,7 @@ cd ~/path/to/your/repo   # a git repo you work in
 serenity                 # opens the map for this repo
 ```
 
-If your shell says `serenity` isn't found, add the install directory to your PATH (the install script prints the line, e.g. `export PATH="$HOME/.local/bin:$PATH"`) or open a new terminal.
+The install script adds its directory (`~/.local/bin`) to your shell profile if it isn't on your PATH yet, so `serenity` works in any new terminal. Set `SERENITY_NO_MODIFY_PATH=1` to leave your profile alone; it then prints the line to add yourself.
 
 `serenity doctor` checks your setup. Press `N` to start a session, `?` for the full keymap.
 

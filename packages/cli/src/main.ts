@@ -16,6 +16,7 @@ import {
 	waitForDaemonGone,
 } from "@serenity/core";
 import { printChecks, runChecks } from "./doctor";
+import { type ErrorLine, notInRepo, printError } from "./errors";
 import { runImport } from "./import";
 import { accountLines, setupGithub, setupSlack } from "./setup";
 import { gitRoot, runSlackCommand, SLACK_USAGE } from "./slack";
@@ -51,8 +52,8 @@ function markDoctorOk(): void {
 	writeFileSync(doctorMarkerPath(home), `${new Date().toISOString()}\n`);
 }
 
-function fail(message: string): never {
-	console.error(`serenity: ${message}`);
+function fail(title: string, lines?: ErrorLine[]): never {
+	printError({ title, lines });
 	process.exit(1);
 }
 
@@ -60,7 +61,12 @@ function repoRoot(): string {
 	const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
 		encoding: "utf8",
 	});
-	if (result.status !== 0) fail("run it inside a git repository");
+	if (result.status !== 0) {
+		const gitMissing =
+			(result.error as NodeJS.ErrnoException)?.code === "ENOENT";
+		printError(notInRepo(process.cwd(), "serenity", { gitMissing }));
+		process.exit(1);
+	}
 	return result.stdout.trim();
 }
 
@@ -77,7 +83,9 @@ async function launch(): Promise<void> {
 	const repo = repoRoot();
 	if (!existsSync(doctorMarkerPath(home))) {
 		if (!printChecks(runChecks()))
-			fail("fix the items above, then run serenity again");
+			fail("some requirements are missing", [
+				"Fix the items marked above, then run serenity again.",
+			]);
 		markDoctorOk();
 	}
 	(await ensureDaemon(home)).close();
@@ -187,7 +195,10 @@ async function detach(
 	then: string | undefined,
 ): Promise<void> {
 	const peer = await connectDaemon(home);
-	if (!peer) fail("daemon is not running");
+	if (!peer)
+		fail("the daemon is not running", [
+			{ cmd: "serenity restart", note: "start it" },
+		]);
 	await peer.request(
 		"session.detach",
 		{ pane, master: then === "master" },
@@ -273,7 +284,8 @@ switch (command) {
 		await hook(arg);
 		break;
 	case "mcp": {
-		if (!arg) fail("usage: serenity mcp <repo>");
+		if (!arg)
+			fail("missing <repo>", ["usage:", { cmd: "serenity mcp <repo>" }]);
 		const { runMcpProxy } = await import("@serenity/daemon");
 		await runMcpProxy(home, arg);
 		break;
@@ -324,7 +336,11 @@ switch (command) {
 		};
 		if (arg === "github") process.exit(await setupGithub(opts));
 		if (arg === "slack") process.exit(await setupSlack(opts));
-		fail("usage: serenity setup github|slack");
+		fail(arg ? `unknown setup "${arg}"` : "what should serenity set up?", [
+			"usage:",
+			{ cmd: "serenity setup github", note: "log in to GitHub with gh" },
+			{ cmd: "serenity setup slack", note: "log in to Slack" },
+		]);
 		break;
 	}
 	case "slack":
@@ -359,7 +375,10 @@ switch (command) {
 		console.log(USAGE);
 		break;
 	default:
-		console.error(`serenity: unknown command "${command}"`);
-		console.error(USAGE);
+		printError({
+			title: `unknown command "${command}"`,
+			lines: [{ cmd: "serenity help", note: "lists the commands" }],
+		});
+		console.error(`\n${USAGE}`);
 		process.exit(2);
 }

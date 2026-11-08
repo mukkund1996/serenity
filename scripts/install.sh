@@ -14,6 +14,9 @@
 #                         file:/// URL to a directory. For CI and mirrors (ADR 0056):
 #                         the checksums come from the same place, so only point
 #                         it at a copy you trust.
+#   SERENITY_NO_MODIFY_PATH=1  don't add the install directory to your shell
+#                         profile when it isn't on your PATH (it then prints
+#                         the line to add yourself)
 #   SERENITY_NO_OPEN=1    don't open the docs in a browser at the end (the URL
 #                         is printed either way; CI and machines with no
 #                         display never open it)
@@ -167,6 +170,54 @@ install_serenity() {
 	say "Installed $INSTALL_DIR/serenity ($("$INSTALL_DIR/serenity" version))"
 }
 
+# ── PATH ────────────────────────────────────────────────────────────────────
+# The profile the user's login shell reads for a new terminal. fish gets a
+# file of its own in conf.d.
+shell_profile() {
+	sh_name=${SHELL:-}
+	if [ -z "$sh_name" ] && has getent; then
+		sh_name=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)
+	fi
+	case "${sh_name##*/}" in
+		zsh) echo "${ZDOTDIR:-$HOME}/.zshrc" ;;
+		# macOS terminals start bash as a login shell, which skips .bashrc.
+		bash) if [ "$os" = darwin ]; then echo "$HOME/.bash_profile"; else echo "$HOME/.bashrc"; fi ;;
+		fish) echo "${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/serenity.fish" ;;
+		*) echo "$HOME/.profile" ;;
+	esac
+}
+
+# Adds INSTALL_DIR to the shell profile when it isn't on the user's PATH, so
+# `serenity` works in the next terminal. Says what it did, or what to do.
+PATH_NOTE=""
+add_to_path() {
+	case ":$USER_PATH:" in *":$INSTALL_DIR:"*) return 0 ;; esac
+	# $HOME/... rather than the expanded path, so the line reads like a person wrote it.
+	case "$INSTALL_DIR" in
+		"$HOME"/*) dir_expr="\$HOME/${INSTALL_DIR#"$HOME"/}" ;;
+		*) dir_expr=$INSTALL_DIR ;;
+	esac
+	export_line="export PATH=\"$dir_expr:\$PATH\""
+	if [ "${SERENITY_NO_MODIFY_PATH:-}" = 1 ]; then
+		warn "$INSTALL_DIR is not on your PATH; add this to your shell profile: $export_line"
+		PATH_NOTE="  (serenity not found? run first: $export_line)"
+		return 0
+	fi
+	profile=$(shell_profile)
+	case "$profile" in
+		*.fish) line="fish_add_path \"$dir_expr\"" ;;
+		*) line=$export_line ;;
+	esac
+	if [ -f "$profile" ] && grep -qF "$line" "$profile"; then
+		: # an earlier install added it; this terminal predates it
+	elif mkdir -p "$(dirname "$profile")" && printf '\n# Added by the serenity installer\n%s\n' "$line" >>"$profile"; then
+		say "Added $INSTALL_DIR to your PATH in $profile"
+	else
+		warn "could not write $profile; add this to your shell profile: $export_line"
+	fi
+	PATH_NOTE="  (This terminal doesn't have it yet: open a new one, or run  $export_line)"
+}
+
 # ── docs ────────────────────────────────────────────────────────────────────
 # The browser command for this machine, or nothing when no browser should
 # open: opted out, CI, or no display (ADR 0062).
@@ -207,10 +258,7 @@ next_steps() {
 		paint 1 1 serenity
 		echo
 	fi
-	case ":$USER_PATH:" in
-		*":$INSTALL_DIR:"*) ;;
-		*) printf '  (If serenity is not found, first run: export PATH="%s:%s")\n' "$INSTALL_DIR" "\$PATH" ;;
-	esac
+	[ -z "$PATH_NOTE" ] || echo "$PATH_NOTE"
 	echo "  First run: import past sessions, connect GitHub and Slack, take a short tour."
 	open_docs
 	echo
@@ -225,9 +273,6 @@ install_serenity
 
 echo
 "$INSTALL_DIR/serenity" doctor || true
-case ":$USER_PATH:" in
-	*":$INSTALL_DIR:"*) ;;
-	*) warn "$INSTALL_DIR is not on your PATH; add it to your shell profile: export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
-esac
+add_to_path
 has gh && ! gh auth status >/dev/null 2>&1 && warn "log in to GitHub for PR status: gh auth login"
 next_steps

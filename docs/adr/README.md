@@ -30,7 +30,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0022](0022-pinned-sessions.md) | `p` pins a session for reuse: a `pinned` topic, never done or cleaned up, resumed on attach | Amended by 0044, 0064 |
 | [0023](0023-slack-for-the-master.md) | Slack for the master: threads and mentions waiting on you, per repo, read through Slack's MCP server; `[` `]` cycle them | Amended by 0031, 0065 |
 | [0024](0024-slack-reply-suggestions.md) | Slack suggestions: a reply from sessions, PRs and reviews, or ask a session first; `y` posts it in the thread | Amended by 0050 |
-| [0025](0025-install-script-and-homebrew.md) | Installer and Homebrew formula install tmux, git, gh and Claude Code too; release-please and the release workflow | Amended by 0056 |
+| [0025](0025-install-script-and-homebrew.md) | Installer and Homebrew formula install tmux, git, gh and Claude Code too; release-please and the release workflow | Amended by 0056, 0069 |
 | [0026](0026-arrows-between-nodes-enter-into-ctrl-m-master.md) | Arrow keys between nodes, Enter into a node and `w` `s` inside it, Esc out; `Ctrl+m` focuses the master from every view | Amended by 0051, 0053 |
 | [0027](0027-master-centred-in-topics-zoom.md) | The master sits in the centre of the topics zoom, topics on both sides; docks left when too narrow | Amended by 0059 |
 | [0028](0028-enter-attaches-enter-into-master-only.md) | Enter attaches a card and `i` messages it; only the master is gone into; WASD back beside the arrows; dim card frames; Slack keeps its place; MY PRS off | Accepted |
@@ -74,6 +74,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0066](0066-welcome-panel-import-step.md) | The Setup panel becomes "Welcome to serenity": an import step for this repo's past sessions first (count and newest three; Enter imports all, `p` picks, hidden when none), then GitHub and Slack, then "You're set" onto the tutorial; one line per step, the same key hints and statuses throughout, docs linked for the rest | Accepted |
 | [0067](0067-command-completion.md) | `@copy`, `@handover` and `@move` lead on in the `@` list: a space after the command lists live sessions without another `@`; `@move @a ` then space or Tab writes `to ` and lists the map's topics (bare, sand, labelled "topic"); `@copy @a ` hints for the brief; one state machine in core (`completionAt`); no syntax change | Accepted |
 | [0068](0068-release-gated-on-ci.md) | release.yml runs after ci passes on main's head (`workflow_run` + `scripts/release-gate.sh`), so a red main never tags, builds or bumps the tap; ci is dispatched on release-please's PR; publish dispatches install-smoke (mirrored assets) and the website; the website deploys once per reason and retries a busy Pages deploy; a red main opens a `main-red` issue; failing e2e files retry once and are reported as flaky; duplicate ADR numbers fail ci | Accepted |
+| [0069](0069-installer-adds-to-path.md) | The install script adds `~/.local/bin` to the login shell's profile (zsh, bash, fish or `~/.profile`) when it isn't on PATH, once, and says so; `SERENITY_NO_MODIFY_PATH=1` opts out | Accepted |
 
 ## System at a glance
 
