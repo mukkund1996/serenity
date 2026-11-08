@@ -25,9 +25,12 @@ INSTALL_DIR="${SERENITY_INSTALL_DIR:-$HOME/.local/bin}"
 # The user's PATH, before installing Claude Code adds ~/.local/bin to ours.
 USER_PATH="$PATH"
 
-say() { printf '\033[1m%s\033[0m\n' "$*"; }
-warn() { printf '\033[33m! %s\033[0m\n' "$*" >&2; }
-die() { printf '\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
+# Colours only on a terminal, so logs and pipes get plain text.
+# $1: fd, $2: SGR code, $3: text
+paint() { if [ -t "$1" ]; then printf '\033[%sm%s\033[0m' "$2" "$3"; else printf '%s' "$3"; fi; }
+say() { paint 1 1 "$*"; echo; }
+warn() { { paint 2 33 "! $*"; echo; } >&2; }
+die() { { paint 2 31 "✗ $*"; echo; } >&2; exit 1; }
 has() { command -v "$1" >/dev/null 2>&1; }
 
 sudo_cmd() {
@@ -181,10 +184,38 @@ browser_cmd() {
 }
 
 open_docs() {
-	printf 'Docs: %s\n' "$DOCS_URL"
+	printf '  Docs: %s\n' "$DOCS_URL"
 	cmd=$(browser_cmd) || return 0
 	[ -n "$cmd" ] || return 0
 	"$cmd" "$DOCS_URL" >/dev/null 2>&1 </dev/null || true
+}
+
+# What to do now, with the star link (README "Quick start", the formula's caveats).
+next_steps() {
+	echo
+	say "serenity is installed."
+	echo
+	if repo=$(git rev-parse --show-toplevel 2>/dev/null); then
+		printf "Next: you're in %s, so just run  " "${repo##*/}"
+		paint 1 1 serenity
+		echo
+	else
+		echo "Next:"
+		printf '  1. cd into a git repo you work in   '
+		paint 1 1 "cd ~/path/to/your/repo"
+		printf '\n  2. open serenity                    '
+		paint 1 1 serenity
+		echo
+	fi
+	case ":$USER_PATH:" in
+		*":$INSTALL_DIR:"*) ;;
+		*) printf '  (If serenity is not found, first run: export PATH="%s:%s")\n' "$INSTALL_DIR" "\$PATH" ;;
+	esac
+	echo "  First run: import past sessions, connect GitHub and Slack, take a short tour."
+	open_docs
+	echo
+	paint 1 32 "★"
+	printf ' Like it? Star the repo: https://github.com/%s\n' "$REPO"
 }
 
 # Under `curl | sh` the rest of this script is on stdin: a package manager or
@@ -194,13 +225,9 @@ install_serenity
 
 echo
 "$INSTALL_DIR/serenity" doctor || true
-echo
 case ":$USER_PATH:" in
 	*":$INSTALL_DIR:"*) ;;
 	*) warn "$INSTALL_DIR is not on your PATH; add it to your shell profile: export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
 esac
 has gh && ! gh auth status >/dev/null 2>&1 && warn "log in to GitHub for PR status: gh auth login"
-say "Done. Run serenity inside any git repo."
-echo "New to serenity? The first map you open starts learn-serenity, a short tour."
-open_docs
-printf '\033[32m★\033[0m Enjoying serenity? Star it: https://github.com/%s\n' "$REPO"
+next_steps

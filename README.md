@@ -71,6 +71,8 @@ brew install mukkund1996/tap/serenity
 > [!TIP]
 > **If you don't have Claude Code yet,** install it first with `brew install --cask claude-code`. Skip this if you already installed it with npm or Anthropic's installer, or you end up with two copies.
 
+**Next:** `cd` into a git repo you work in and run `serenity` ([Quick start](#quick-start)). The install script ends with these steps too.
+
 The install script reads these environment variables:
 
 | Variable | Default | Effect |
@@ -95,9 +97,11 @@ For claude.ai, build the upload zip with `bun run package:skill` ([details](plug
 ## Quick start
 
 ```bash
-cd ~/your/repo
-serenity          # opens the map for this repo
+cd ~/path/to/your/repo   # a git repo you work in
+serenity                 # opens the map for this repo
 ```
+
+If your shell says `serenity` isn't found, add the install directory to your PATH (the install script prints the line, e.g. `export PATH="$HOME/.local/bin:$PATH"`) or open a new terminal.
 
 `serenity doctor` checks your setup. Press `N` to start a session, `?` for the full keymap.
 
