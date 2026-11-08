@@ -3,7 +3,9 @@ name: ci
 # The release workflow runs only after this one passes on a push to main, for
 # that exact commit (ADR 0068). workflow_dispatch lets the release workflow
 # run it on release-please's PR branch, whose pushes (made with GITHUB_TOKEN)
-# fire no pull_request event.
+# fire no pull_request event. A dispatched run's checks are not linked to the
+# PR, so it also posts commit statuses with the job's name, which the PR shows
+# and required checks accept.
 
 on:
   push:
@@ -16,6 +18,10 @@ concurrency:
   group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('{0}-{1}', github.event_name, github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+  statuses: write # only used by dispatched runs, see above
+
 jobs:
   check:
     strategy:
@@ -23,7 +29,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CONTEXT: check (${{ matrix.os }})
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
+      - if: github.event_name == 'workflow_dispatch'
+        run: gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state=pending -f context="$CONTEXT" -f target_url="$RUN_URL" -f description="running" >/dev/null
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
@@ -40,3 +52,9 @@ jobs:
       # Retries a failing e2e file once and reports it as flaky (ADR 0068).
       - run: bun run test:e2e:ci
       - run: bun run build && ./dist/serenity version
+      - if: always() && github.event_name == 'workflow_dispatch'
+        env:
+          STATUS: ${{ job.status }}
+        run: |
+          case "$STATUS" in success) state=success ;; failure) state=failure ;; *) state=error ;; esac
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state="$state" -f context="$CONTEXT" -f target_url="$RUN_URL" -f description="$STATUS" >/dev/null

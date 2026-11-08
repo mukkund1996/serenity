@@ -79,7 +79,7 @@ How a change reaches users (ADR 0068):
 
 1. A PR is squash-merged into `main`. `ci` runs on the push, on Ubuntu and macOS.
 2. **Only if that ci run passes, and its commit is still `main`'s head**, the `release` workflow goes on. Its `gate` job (`scripts/release-gate.sh`) checks this. Otherwise it stops with a notice, and nothing is tagged, built or bumped. A red `main` never ships.
-3. release-please opens or updates the release PR (`chore(main): release X.Y.Z`). It pushes with `GITHUB_TOKEN`, which fires no `pull_request` event, so the release workflow dispatches `ci` on the PR's branch. Its checks show on the PR like any other's.
+3. release-please opens or updates the release PR (`chore(main): release X.Y.Z`). It pushes with `GITHUB_TOKEN`, which fires no `pull_request` event, so the release workflow dispatches `ci` on the PR's branch. That run reports to the PR as commit statuses named like the ci jobs.
 4. Merging the release PR goes through steps 1 and 2 again. Then release-please tags `vX.Y.Z` and creates the GitHub release, and the `build` and `publish` jobs attach the binaries and `SHA256SUMS` and bump the Homebrew tap.
 5. `publish` then dispatches `install-smoke` for the new tag (installing from the release run's mirrored artifacts, so download counts stay clean, ADR 0056) and `website` (the page shows the new version). Check that both pass.
 
