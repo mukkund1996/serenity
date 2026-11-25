@@ -19,6 +19,7 @@ const EMPTY_STATE = {
 	pings: [],
 	slack: null,
 	health: [],
+	restore: null,
 };
 
 let server: Server | null = null;

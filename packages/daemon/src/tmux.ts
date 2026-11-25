@@ -1,4 +1,4 @@
-import { run } from "./exec";
+import { CommandError, run } from "./exec";
 
 /**
  * Whether the pane a key is typed in is an agent's: its @serenity_session
@@ -12,6 +12,9 @@ export const IN_AGENT_PANE = "#{!=:#{@serenity_session},}";
 const SHIFT_ENTER_CSI_U = "[13;2u";
 /** Ctrl+, as a CSI u key, after its Escape; Ink reads it as "," with ctrl (ADR 0058). */
 const CTRL_COMMA_CSI_U = "[44;5u";
+
+/** What tmux says when no server runs on its socket. */
+export const NO_SERVER = /no server running|error connecting to/i;
 
 /** tmux commands that leave the same result however often they run. */
 const IDEMPOTENT = new Set([
@@ -102,6 +105,20 @@ export class Tmux {
 			"#{pane_id}",
 			...opts.command,
 		]);
+	}
+
+	/**
+	 * Which tmux server is running, as its pid and start time, or null when
+	 * none is (ADR 0070). A reboot or `kill-server` gives a new one, and pane
+	 * ids start again at %0 in it.
+	 */
+	async serverId(): Promise<string | null> {
+		try {
+			return await this.cmd(["display-message", "-p", "#{pid}:#{start_time}"]);
+		} catch (e) {
+			if (e instanceof CommandError && NO_SERVER.test(e.stderr)) return null;
+			throw e;
+		}
 	}
 
 	async paneExists(pane: string): Promise<boolean> {

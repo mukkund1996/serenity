@@ -34,6 +34,7 @@ export type SettingsRow =
 	| "model:summarizer"
 	| "model:suggester"
 	| "maxTopics"
+	| "restore"
 	| "github"
 	| "slackLogin"
 	| "slack";
@@ -45,6 +46,7 @@ export const SETTINGS_ROWS: SettingsRow[] = [
 	"model:summarizer",
 	"model:suggester",
 	"maxTopics",
+	"restore",
 	"github",
 	"slackLogin",
 	"slack",
@@ -173,6 +175,8 @@ export function SettingsPanel({
 			return;
 		}
 		if (row === "slack") save({ key: "slack", repo, value: !view.slack });
+		if (row === "restore")
+			save({ key: "restoreSessions", value: !view.restoreSessions });
 		if ((row === "github" || row === "slackLogin") && enter) {
 			// The login runs in a popup; Slack's also turns it on for this repo.
 			setBusy(true);
@@ -329,6 +333,12 @@ export function SettingsPanel({
 					{value("model:suggester", view.models.suggester)}
 					{heading("TOPICS")}
 					{value("maxTopics", String(view.maxTopics))}
+					{heading("AFTER A RESTART")}
+					{value(
+						"restore",
+						view.restoreSessions ? "restore sessions" : "leave them ended",
+						view.restoreSessions ? "green" : "white",
+					)}
 					{heading("GITHUB")}
 					{login("github")}
 					{heading("SLACK")}
@@ -371,6 +381,7 @@ const LABELS: Record<SettingsRow, string> = {
 	"model:summarizer": "Summarizer",
 	"model:suggester": "Suggester",
 	maxTopics: "Max topics",
+	restore: "Sessions",
 	github: "Login",
 	slackLogin: "Login",
 	slack: "This repo",

@@ -91,6 +91,11 @@ export interface RecoveryState {
 	onboarding: Onboarded;
 	/** The first-boot Setup panel was closed; it doesn't open again (ADR 0065). */
 	setup: { at: number };
+	/**
+	 * The tmux server the session panes were last seen in, as its pid and
+	 * start time; a different one, or none, means they were lost (ADR 0070).
+	 */
+	tmuxServer: string;
 }
 
 /** When and where the first-boot tutorial started (ADR 0062). */

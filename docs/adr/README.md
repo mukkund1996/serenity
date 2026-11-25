@@ -27,7 +27,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0019](0019-topic-focus-shelves-and-topic-cap.md) | WASD between topics on the map; `z` out, `Z` in; shelves in the topics zoom; at most 10 topics; roomier master and cards | Amended by 0047 |
 | [0020](0020-usage-bar.md) | Usage bar in the header: session and weekly plan limits from the status line, average wait on you | Accepted |
 | [0021](0021-z-into-session-counts-in-header.md) | `Z` on a card attaches; session counts in the header, no SESSIONS section; roomier topics zoom | Accepted |
-| [0022](0022-pinned-sessions.md) | `p` pins a session for reuse: a `pinned` topic, never done or cleaned up, resumed on attach | Amended by 0044, 0064 |
+| [0022](0022-pinned-sessions.md) | `p` pins a session for reuse: a `pinned` topic, never done or cleaned up, resumed on attach | Amended by 0044, 0064, 0070 |
 | [0023](0023-slack-for-the-master.md) | Slack for the master: threads and mentions waiting on you, per repo, read through Slack's MCP server; `[` `]` cycle them | Amended by 0031, 0065 |
 | [0024](0024-slack-reply-suggestions.md) | Slack suggestions: a reply from sessions, PRs and reviews, or ask a session first; `y` posts it in the thread | Amended by 0050 |
 | [0025](0025-install-script-and-homebrew.md) | Installer and Homebrew formula install tmux, git, gh and Claude Code too; release-please and the release workflow | Amended by 0056, 0069 |
@@ -49,8 +49,8 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0041](0041-master-chat-scrolls.md) | The topics zoom's master shows four messages; `PgUp` `PgDn` (`Shift+↑↓`) scroll back and on; leaving resets it | Amended by 0042 |
 | [0042](0042-master-shows-three-eased-pulse-text-fields-edit.md) | The master shows three messages, its scroll hints grey; the pulse is one eased swell, not three blinks; text fields edit at a cursor like a terminal line | Accepted |
 | [0043](0043-dependency-retries-and-health.md) | gh, git and tmux calls retry with backoff and jitter, transient errors only, never anything unsafe twice; the map reconnects on its own (yellow, red after 15 s); dependencies failing call after call show as header badges | Amended by 0055 |
-| [0044](0044-claude-restarts-in-its-pane.md) | Any claude exit serenity did not cause restarts it in the same pane with `--resume`, backing off 1–16 s; a sixth exit in 10 min, or one before it started, leaves the session dead with the reason | Accepted |
-| [0045](0045-daemon-supervisor-crash-reports-recovery.md) | A supervisor restarts the daemon, crashes become deduped GitHub issues, and state survives a restart | Accepted |
+| [0044](0044-claude-restarts-in-its-pane.md) | Any claude exit serenity did not cause restarts it in the same pane with `--resume`, backing off 1–16 s; a sixth exit in 10 min, or one before it started, leaves the session dead with the reason | Amended by 0070 |
+| [0045](0045-daemon-supervisor-crash-reports-recovery.md) | A supervisor restarts the daemon, crashes become deduped GitHub issues, and state survives a restart | Amended by 0070 |
 | [0046](0046-master-survives-crashes-hangs-and-restarts.md) | The master survives crashes, hangs and daemon restarts: an outbox per repo, a 3-minute watchdog (5 until #106), restart with `--resume` and re-send, its state in SQLite, tools that answer within 2 minutes | Accepted, revised 2026-11-05 |
 | [0047](0047-finer-topics-moves-wait.md) | Finer topics: named for a feature or area, a new one for clearly distinct work; near-duplicate names join their topic; a topic move waits while the session works or the user types; `set_topic` stays immediate | Amended by 0063 |
 | [0048](0048-at-new-starts-sessions-from-a-brief.md) | `@new <brief>` starts sessions at once, the master choosing the split, names and prompts; command words are never session names and lead the `@` list | Amended by 0063 |
@@ -75,6 +75,7 @@ The screen specs live on the design canvas ([source](https://claude.ai/artifact/
 | [0067](0067-command-completion.md) | `@copy`, `@handover` and `@move` lead on in the `@` list: a space after the command lists live sessions without another `@`; `@move @a ` then space or Tab writes `to ` and lists the map's topics (bare, sand, labelled "topic"); `@copy @a ` hints for the brief; one state machine in core (`completionAt`); no syntax change | Accepted |
 | [0068](0068-release-gated-on-ci.md) | release.yml runs after ci passes on main's head (`workflow_run` + `scripts/release-gate.sh`), so a red main never tags, builds or bumps the tap; ci is dispatched on release-please's PR; publish dispatches install-smoke (mirrored assets) and the website; the website deploys once per reason and retries a busy Pages deploy; a red main opens a `main-red` issue; failing e2e files retry once and are reported as flaky; duplicate ADR numbers fail ci | Accepted |
 | [0069](0069-installer-adds-to-path.md) | The install script adds `~/.local/bin` to the login shell's profile (zsh, bash, fish or `~/.profile`) when it isn't on PATH, once, and says so; `SERENITY_NO_MODIFY_PATH=1` opts out | Accepted |
+| [0070](0070-restore-sessions-after-a-restart.md) | Sessions lost with the tmux server (a reboot, a shutdown, `tmux kill-server`), told apart from closed panes by the server's recorded pid and start time, come back with `claude --resume` in their folder when their map opens, staggered, idempotent; `restoreSessions` (settings panel) turns it off | Accepted |
 
 ## System at a glance
 

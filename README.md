@@ -201,7 +201,8 @@ Config lives in `~/.config/serenity/config.json`. Every field is optional. `Ctrl
   "repos": { "~/projects/app": { "baseBranch": { "branch": "develop" } } },
   "slack": { "repos": ["~/projects/serenity"] },
   "crashReports": { "enabled": true },
-  "onboarding": true
+  "onboarding": true,
+  "restoreSessions": true
 }
 ```
 
@@ -215,11 +216,12 @@ Config lives in `~/.config/serenity/config.json`. Every field is optional. `Ctrl
 | `slack.repos` | none | Repos whose maps show Slack mentions and DMs that need you. Easier: `serenity slack on` in the repo, or `Ctrl+,` → Slack, which write this list for you ([ADR 0023](docs/adr/0023-slack-for-the-master.md), [0024](docs/adr/0024-slack-reply-suggestions.md), [0031](docs/adr/0031-slack-joins-needs-you.md), [0034](docs/adr/0034-dismiss-slack-items.md), [0050](docs/adr/0050-needs-you-seen-and-explicit-actions.md)); log in once with `serenity setup slack` |
 | `crashReports.enabled` | `false` | File daemon crashes as GitHub issues through your `gh`, scrubbed of paths, tokens and emails, one issue per crash signature ([ADR 0045](docs/adr/0045-daemon-supervisor-crash-reports-recovery.md)). Reports are always kept in `crash-reports/` in the state directory |
 | `crashReports.repo` | `mukkund1996/serenity` | Where crash issues go |
+| `restoreSessions` | `true` | After a reboot, a shutdown or `tmux kill-server`, bring back the sessions that were still running when their map next opens ([ADR 0070](docs/adr/0070-restore-sessions-after-a-restart.md)). `false` leaves them ended; Enter resumes one. Also `Ctrl+,` → After a restart |
 | `onboarding` | `true` | Start the `learn-serenity` tutorial on the first map you open ([ADR 0062](docs/adr/0062-first-boot-tutorial.md)); `false` skips it, as does `SERENITY_NO_ONBOARDING=1` |
 
 Model names are anything `claude --model` accepts (an alias like `sonnet` or a full model id). The daemon reads the file when it starts and again whenever the settings panel opens. From the panel, the base branch applies to new sessions; the summarizer and suggester models, max topics and Slack apply at once (the master gets or drops its Slack tools with your next message). `serenity slack on|off` applies at once the same way. The master's chat model changes after `serenity restart`. After editing other fields by hand, run `serenity restart`.
 
-A supervisor restarts the daemon if it crashes, and it picks up where it left off (ADR 0045). State (SQLite, socket, daemon log, crash reports) lives in `~/.local/state/serenity`. Set `SERENITY_HOME` to use another directory.
+A supervisor restarts the daemon if it crashes, and it picks up where it left off (ADR 0045). A machine restart or shutdown takes tmux and every Claude Code pane with it. The next time you run `serenity` in the repo, each session that was still working, waiting or idle comes back in a new pane in its own worktree, continuing its conversation with `claude --resume`. They start one at a time, with the same topic, name, pin and PR. A notice says how many came back, and names any that couldn't, with the reason (for example, its worktree was deleted). Sessions you ended stay ended ([ADR 0070](docs/adr/0070-restore-sessions-after-a-restart.md)). State (SQLite, socket, daemon log, crash reports) lives in `~/.local/state/serenity`. Set `SERENITY_HOME` to use another directory.
 
 ## Usage and cost
 

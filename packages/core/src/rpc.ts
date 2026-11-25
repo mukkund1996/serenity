@@ -64,6 +64,8 @@ export interface SettingsView {
 	maxTopics: number;
 	/** Slack on this repo's map. */
 	slack: boolean;
+	/** Sessions come back after a restart or shutdown (ADR 0070). */
+	restoreSessions: boolean;
 }
 
 /** What cleaning up a session would do, computed by serenity, not the model (ADR 0008). */

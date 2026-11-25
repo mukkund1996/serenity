@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 import {
@@ -30,6 +30,7 @@ import {
 	RESPAWN_WINDOW_MS,
 	type RepoState,
 	type ResolvedBase,
+	type RestoreReport,
 	type Result,
 	RpcError,
 	RpcErrorCode,
@@ -91,7 +92,18 @@ import {
 import { Onboarding, writeTutorialPlugin } from "./onboarding";
 import { PrOverview } from "./pr-overview";
 import { PrWatcher, workDir } from "./prs";
-import { recoveryPlan } from "./recover";
+import {
+	INTERRUPTED_NOTE,
+	interruptedFrom,
+	NO_SERVER_KNOWN,
+	parseBootTime,
+	recoveryPlan,
+	restorable,
+	restoredNote,
+	restorePlan,
+	serverGone,
+	serverStartedAt,
+} from "./recover";
 import { ReviewWatcher } from "./reviews";
 import { githubStatus, slackStatus } from "./setup";
 import { SlackWatcher } from "./slack";
@@ -133,6 +145,8 @@ export interface DaemonOptions {
 	respawnBaseMs?: number;
 	/** How often the panes' markers and the key bindings are checked; SERENITY_TMUX_CHECK_MS overrides it (ADR 0051). */
 	tmuxCheckMs?: number;
+	/** The wait between two sessions restored after a restart; SERENITY_RESTORE_STAGGER_MS overrides it (ADR 0070). */
+	restoreStaggerMs?: number;
 	/** Repos whose map shows Slack; defaults to config (ADR 0023). */
 	slackRepos?: string[];
 	/** config.json, read at start and written by the settings panel (ADR 0058); tests point it elsewhere. */
@@ -165,6 +179,11 @@ const DEFAULT_SLACK_POLL_MS = 60_000;
  * the tmux server can change; they are checked this often (ADR 0051).
  */
 const DEFAULT_TMUX_CHECK_MS = 5000;
+/**
+ * Sessions restored after a restart start one at a time, this far apart
+ * (ADR 0070), so a big map does not start every claude at once.
+ */
+const DEFAULT_RESTORE_STAGGER_MS = 1500;
 /** Messages of the master conversation sent to clients: the four shown and what PgUp scrolls back to (ADR 0041). */
 const CONVERSATION_SHOWN = 50;
 
@@ -204,6 +223,7 @@ function invalidChange(change: ConfigChange): string | null {
 				: "name a branch";
 		}
 		case "slack":
+		case "restoreSessions":
 			return typeof change.value === "boolean" ? null : "on or off";
 	}
 	return "unknown setting";
@@ -222,6 +242,8 @@ function describeChange(change: ConfigChange): string {
 			return `max topics = ${change.value}`;
 		case "slack":
 			return `Slack for ${change.repo} ${change.value ? "on" : "off"}`;
+		case "restoreSessions":
+			return `restore after restart ${change.value ? "on" : "off"}`;
 	}
 }
 
@@ -240,6 +262,10 @@ function applies(change: ConfigChange): string {
 			return change.value
 				? "Slack shows on this map now, and the master can read it from your next message"
 				: "Slack is off on this map now, and for the master from your next message";
+		case "restoreSessions":
+			return change.value
+				? "sessions lost to a restart or shutdown come back when their map opens"
+				: "sessions lost to a restart or shutdown stay ended; Enter resumes one";
 	}
 }
 
@@ -268,6 +294,14 @@ export class Daemon {
 	private readonly timers = new Set<ReturnType<typeof setTimeout>>();
 	private readonly tmuxCheckMs: number;
 	private tmuxCheck: ReturnType<typeof setInterval> | null = null;
+	private readonly restoreStaggerMs: number;
+	/** Each repo's latest restore after the tmux server went away (ADR 0070). */
+	private readonly restores = new Map<string, RestoreReport>();
+	/** Repos whose restore is under way, so a second one does not start beside it. */
+	private readonly restoring = new Set<string>();
+	/** Server checks run one after another (ADR 0070). */
+	private serverCheck: Promise<void> = Promise.resolve();
+	private stopping = false;
 	/** Binds Ctrl+q / Ctrl+w again when something removed them. */
 	private readonly keys: SessionKeysKeeper;
 	/** A check still waiting on tmux; the next one is skipped. */
@@ -321,6 +355,9 @@ export class Daemon {
 		this.tmuxCheckMs =
 			opts.tmuxCheckMs ??
 			envNumber("SERENITY_TMUX_CHECK_MS", DEFAULT_TMUX_CHECK_MS);
+		this.restoreStaggerMs =
+			opts.restoreStaggerMs ??
+			envNumber("SERENITY_RESTORE_STAGGER_MS", DEFAULT_RESTORE_STAGGER_MS);
 		this.log =
 			opts.log ??
 			((line) => console.log(`${new Date().toISOString()} ${line}`));
@@ -556,23 +593,40 @@ export class Daemon {
 		const storage = this.opts.storage;
 		const sessions = storage.sessions.listAll();
 		const attached = storage.recovery.get("attached") ?? [];
-		const panes = new Set(
-			[
-				...sessions
-					.filter((s) => s.status !== "dead" && s.status !== "archived")
-					.map((s) => s.tmuxPane),
-				...attached.map((a) => a.clientPane),
-			].filter((p): p is string => !!p),
-		);
-		const livePanes = new Set<string>();
-		for (const pane of panes)
-			if (await this.tmux.paneExists(pane)) livePanes.add(pane);
+		const server = await this.tmux.serverId().catch(() => undefined);
+		const known = storage.recovery.get("tmuxServer");
+		const serverLost = server !== undefined && serverGone(known, server);
+		// The first start of a build that records the server (ADR 0070).
+		const firstStart = known === null;
+		let livePanes = new Set<string>();
+		if (serverLost) {
+			// Pane ids start again at %0: only a pane marked with its session counts.
+			if (server) livePanes = await this.markedPanes(sessions);
+		} else {
+			const panes = new Set(
+				[
+					...sessions
+						.filter((s) => s.status !== "dead" && s.status !== "archived")
+						.map((s) => s.tmuxPane),
+					...attached.map((a) => a.clientPane),
+				].filter((p): p is string => !!p),
+			);
+			for (const pane of panes)
+				if (await this.tmux.paneExists(pane)) livePanes.add(pane);
+		}
 		const plan = recoveryPlan({
 			sessions,
 			attached,
 			livePanes,
 			exists: existsSync,
+			serverLost,
+			...(firstStart && server && !serverLost
+				? { serverStartedAt: serverStartedAt(server) }
+				: {}),
+			...(firstStart ? { bootedAt: await bootedAt() } : {}),
 		});
+		if (server !== undefined)
+			storage.recovery.set("tmuxServer", server ?? NO_SERVER_KNOWN);
 		const byId = new Map(sessions.map((s) => [s.id, s]));
 		for (const id of plan.worktreeGone) {
 			const session = storage.sessions.get(id);
@@ -583,6 +637,21 @@ export class Daemon {
 			if (!session) continue;
 			this.log(`${session.name} ended while the daemon was down`);
 			this.markEnded(session);
+		}
+		for (const id of plan.interrupted) {
+			const session = storage.sessions.get(id);
+			if (session) this.interrupt(session);
+		}
+		for (const id of plan.catchUp) {
+			const session = storage.sessions.get(id);
+			if (!session) continue;
+			this.log(
+				`${session.name} was ended by an older build after this boot; restoring it`,
+			);
+			this.change(session, {
+				exitNote: INTERRUPTED_NOTE,
+				interrupted: { status: "idle", waitingOn: null, at: this.now() },
+			});
 		}
 		for (const id of plan.park) {
 			const s = byId.get(id);
@@ -599,7 +668,7 @@ export class Daemon {
 		}
 		for (const id of plan.watchStartup) this.watchStartup(id);
 		this.log(
-			`recovered ${sessions.length} sessions: ${plan.ended.length} ended, ${plan.worktreeGone.length} worktrees gone, ${plan.attached.length} attached, ${plan.park.length} parked`,
+			`recovered ${sessions.length} sessions: ${plan.ended.length} ended, ${plan.interrupted.length + plan.catchUp.length} interrupted${serverLost ? " (the tmux server went away)" : ""}, ${plan.worktreeGone.length} worktrees gone, ${plan.attached.length} attached, ${plan.park.length} parked`,
 		);
 	}
 
@@ -608,6 +677,7 @@ export class Daemon {
 	}
 
 	async stop(): Promise<void> {
+		this.stopping = true;
 		this.unhearDependencies();
 		for (const timer of this.timers) clearTimeout(timer);
 		if (this.tmuxCheck) clearInterval(this.tmuxCheck);
@@ -674,6 +744,7 @@ export class Daemon {
 			health: this.health
 				.issues()
 				.filter((i) => i.dependency !== "slack" || this.slackRepos.has(repo)),
+			restore: this.restores.get(repo) ?? null,
 		};
 	}
 
@@ -771,6 +842,10 @@ export class Daemon {
 			}
 			// First boot: the learn-serenity tutorial joins the map (ADR 0062).
 			void this.onboarding.mapOpened(repo);
+			// After a restart, the sessions tmux lost come back (ADR 0070).
+			void this.noticeServer()
+				.catch(() => {})
+				.then(() => this.restore(repo));
 			this.prs.refreshRepo(repo);
 			this.prs.watch(repo);
 			this.reviews.watch(repo);
@@ -800,6 +875,8 @@ export class Daemon {
 			}
 			this.reloadConfig();
 			this.log(`settings: ${describeChange(change)}`);
+			if (change.key === "restoreSessions" && change.value)
+				for (const r of this.openRepos()) void this.restore(r);
 			return { view: await this.settingsView(repo), applies: applies(change) };
 		},
 
@@ -1162,6 +1239,7 @@ export class Daemon {
 			);
 		if (!live.length && !this.mapPanes.size) return;
 		try {
+			await this.noticeServer();
 			const panes = new Map(
 				(await this.tmux.listPanes()).map((p) => [p.pane, p]),
 			);
@@ -1338,6 +1416,8 @@ export class Daemon {
 			prompt,
 			agentMcpPath(this.opts.home),
 		);
+		// A pane id from a server that went away may name another pane now.
+		await this.noticeServer(session.id).catch(() => {});
 		let pane = session.tmuxPane;
 		if (pane && (await this.tmux.paneExists(pane))) {
 			await this.tmux.respawnPane({ pane, cwd: session.cwd, env, command });
@@ -1354,6 +1434,8 @@ export class Daemon {
 		}
 		await this.tmux.setPaneOption(pane, "@serenity_session", session.id);
 		await this.tmux.setPaneOption(pane, "remain-on-exit", "on");
+		// ensureSession may have started a new server; the panes live there now.
+		await this.noticeServer(session.id).catch(() => {});
 		return pane;
 	}
 
@@ -1497,7 +1579,7 @@ export class Daemon {
 	 */
 	private async attach(found: Session, clientPane: string): Promise<void> {
 		const session =
-			found.pinned || found.origin === "imported"
+			found.pinned || found.origin === "imported" || found.interrupted
 				? await this.resume(found)
 				: found;
 		const pane = await this.requireLivePane(session);
@@ -1538,7 +1620,8 @@ export class Daemon {
 	/**
 	 * Brings back a pinned session whose pane is gone in a new window of its
 	 * own, continuing its conversation with `claude --resume` (ADR 0022). An
-	 * imported one comes back as serenity's, under its hooks.
+	 * imported one comes back as serenity's, under its hooks, and so does one
+	 * the tmux server took with it (ADR 0070).
 	 */
 	private async resume(session: Session): Promise<Session> {
 		if (session.status === "archived") return session;
@@ -1572,13 +1655,205 @@ export class Daemon {
 			status: "idle",
 			ask: null,
 			waitingOn: null,
-			exitNote: null,
+			exitNote: session.interrupted ? restoredNote(session.interrupted) : null,
 			dismissedAt: null,
+			interrupted: null,
 		});
 		this.watchStartup(session.id);
 		this.log(`resumed ${session.name} in ${session.cwd} (pane ${pane})`);
 		this.broadcast(session.repo);
 		return next;
+	}
+
+	/**
+	 * Panes still marked with the id of the session that names them. After
+	 * the tmux server went away, only those are a session's: a new server
+	 * reuses the old pane ids for other panes.
+	 */
+	private async markedPanes(sessions: Session[]): Promise<Set<string>> {
+		const owner = new Map(
+			sessions.filter((s) => s.tmuxPane).map((s) => [s.tmuxPane, s.id]),
+		);
+		const panes = await this.tmux.listPanes().catch(() => []);
+		return new Set(
+			panes
+				.filter((p) => p.session && owner.get(p.pane) === p.session)
+				.map((p) => p.pane),
+		);
+	}
+
+	/**
+	 * Checks the tmux server is the one the session panes were in (ADR 0070).
+	 * When it went away (a reboot, a shutdown, tmux killed) while the daemon
+	 * ran, its live sessions are interrupted, not ended, and the repos with a
+	 * map open restore them. `launching` is a session whose pane is being
+	 * made now, which is left alone. Checks run one at a time.
+	 */
+	private noticeServer(launching?: string): Promise<void> {
+		const next = this.serverCheck.then(() => this.checkServer(launching));
+		this.serverCheck = next.catch(() => {});
+		return next;
+	}
+
+	private async checkServer(launching?: string): Promise<void> {
+		const storage = this.opts.storage;
+		const server = await this.tmux.serverId();
+		const known = storage.recovery.get("tmuxServer");
+		if ((server ?? NO_SERVER_KNOWN) === known) return;
+		if (serverGone(known, server)) {
+			const sessions = storage.sessions
+				.listAll()
+				.filter(
+					(s) =>
+						s.id !== launching &&
+						s.status !== "dead" &&
+						s.status !== "archived",
+				);
+			const marked = server
+				? await this.markedPanes(sessions)
+				: new Set<string>();
+			const repos = new Set<string>();
+			for (const s of sessions) {
+				if (s.tmuxPane && marked.has(s.tmuxPane)) continue;
+				// Observed ones without a pane are the observer's to judge.
+				if (s.tracking === "observed" && !s.tmuxPane) continue;
+				const now = storage.sessions.get(s.id);
+				if (!now || now.status === "dead" || now.status === "archived")
+					continue;
+				if (restorable(now)) this.interrupt(now);
+				else this.markEnded({ ...now, tmuxPane: null });
+				repos.add(now.repo);
+			}
+			if (repos.size)
+				this.log(
+					`the tmux server ${server ? "was replaced" : "went away"}; sessions there were interrupted`,
+				);
+			for (const repo of repos)
+				if (this.openRepos().includes(repo)) void this.restore(repo);
+		}
+		storage.recovery.set("tmuxServer", server ?? NO_SERVER_KNOWN);
+	}
+
+	/**
+	 * Marks a session whose pane went with the tmux server (ADR 0070): ended
+	 * for now, keeping what it was doing, so restore can bring it back.
+	 */
+	private interrupt(session: Session): void {
+		const interrupted = interruptedFrom(session, this.now());
+		if (!interrupted) return;
+		if (this.attached.get(session.repo)?.sessionId === session.id) {
+			this.attached.delete(session.repo);
+			this.saveAttached();
+		}
+		if (session.tracking === "observed") this.observer.forget(session.id);
+		this.respawns.delete(session.id);
+		this.change(session, {
+			status: "dead",
+			ask: null,
+			waitingOn: null,
+			subagents: [],
+			tmuxPane: null,
+			claudePid: null,
+			exitNote: INTERRUPTED_NOTE,
+			interrupted,
+		});
+		this.log(`${session.name} was interrupted: ${INTERRUPTED_NOTE}`);
+		this.broadcast(session.repo);
+	}
+
+	/**
+	 * Brings back a repo's interrupted sessions (ADR 0070), one at a time
+	 * and staggered, each with `claude --resume` in its folder. One that
+	 * cannot come back is left ended with why. Running it again, or while it
+	 * runs, never starts a session twice.
+	 */
+	private async restore(repo: string): Promise<void> {
+		if (!this.config.restoreSessions || this.restoring.has(repo)) return;
+		const plan = restorePlan(
+			this.opts.storage.sessions.listByRepo(repo),
+			existsSync,
+		);
+		if (!plan.restore.length && !plan.skip.length) return;
+		this.restoring.add(repo);
+		const report: RestoreReport = {
+			id: this.now(),
+			pending: plan.restore.length,
+			restored: [],
+			failed: [],
+		};
+		this.restores.set(repo, report);
+		const fail = (id: string, reason: string) => {
+			const session = this.opts.storage.sessions.get(id);
+			if (!session) return;
+			report.failed.push({ name: session.name, reason });
+			this.log(`${session.name} not restored: ${reason}`);
+			this.change(session, {
+				interrupted: null,
+				exitNote: `not restored after a restart: ${reason}`,
+			});
+		};
+		try {
+			for (const { id, reason } of plan.skip) fail(id, reason);
+			this.broadcast(repo);
+			for (const [i, id] of plan.restore.entries()) {
+				if (i) await this.pause(this.restoreStaggerMs);
+				if (this.stopping) return;
+				try {
+					const name = await this.restoreOne(id);
+					if (name) report.restored.push(name);
+				} catch (e) {
+					fail(id, (e as Error).message);
+				}
+				report.pending--;
+				this.broadcast(repo);
+			}
+			this.log(
+				`restored ${report.restored.length} sessions in ${repo}${report.failed.length ? `; ${report.failed.length} not restored` : ""}`,
+			);
+		} finally {
+			report.pending = 0;
+			this.restoring.delete(repo);
+			this.broadcast(repo);
+		}
+	}
+
+	/**
+	 * Resumes one interrupted session; null if it is not one any more (Enter
+	 * resumed it meanwhile). A pane already marked with its id, from a
+	 * restore cut short, is taken back instead of opening a second one.
+	 */
+	private async restoreOne(id: string): Promise<string | null> {
+		const session = this.opts.storage.sessions.get(id);
+		if (!session?.interrupted || session.status !== "dead") return null;
+		const mine = (await this.tmux.listPanes().catch(() => [])).find(
+			(p) => p.session === session.id && p.command.includes(AGENT_WRAPPER),
+		);
+		if (mine) {
+			this.change(session, {
+				tmuxPane: mine.pane,
+				origin: "spawned",
+				tracking: "hooks",
+				claudePid: null,
+				status: "idle",
+				exitNote: restoredNote(session.interrupted),
+				interrupted: null,
+			});
+			this.log(`${session.name}: took back pane ${mine.pane}`);
+			return session.name;
+		}
+		await this.resume(session);
+		return session.name;
+	}
+
+	/** Waits `ms`; stop() cancels the wait with the other timers. */
+	private pause(ms: number): Promise<void> {
+		return new Promise((resolve) => {
+			const timer = setTimeout(() => {
+				this.timers.delete(timer);
+				resolve();
+			}, ms);
+			this.timers.add(timer);
+		});
 	}
 
 	/** The master's open_session: attach beside a map showing this repo. */
@@ -1763,6 +2038,7 @@ export class Daemon {
 			models: { ...this.models },
 			maxTopics: this.maxTopics,
 			slack: this.slackRepos.has(repo),
+			restoreSessions: this.config.restoreSessions,
 		};
 	}
 
@@ -1840,6 +2116,7 @@ export class Daemon {
 			exitNote: null,
 			dismissedAt: null,
 			parentId: params.parentId ?? null,
+			interrupted: null,
 			createdAt: at,
 			updatedAt: at,
 		};
@@ -1862,4 +2139,15 @@ function stopProcess(pid: number): void {
 	try {
 		process.kill(pid, "SIGTERM");
 	} catch {}
+}
+
+/** When the machine booted, in ms, or undefined if it cannot be read (ADR 0070). */
+async function bootedAt(): Promise<number | undefined> {
+	try {
+		if (process.platform === "linux")
+			return parseBootTime(readFileSync("/proc/stat", "utf8"));
+		return parseBootTime(await run(["sysctl", "-n", "kern.boottime"]));
+	} catch {
+		return undefined;
+	}
 }
