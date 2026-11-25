@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/mukkund1996/serenity/compare/v0.14.0...v0.15.0) (2026-11-25)
+
+
+### Features
+
+* restore sessions after a machine restart or shutdown ([#132](https://github.com/mukkund1996/serenity/issues/132)) ([dfdd738](https://github.com/mukkund1996/serenity/commit/dfdd738c1b2e35519e08d9f3ffe38f3f4d6a5432)), closes [#131](https://github.com/mukkund1996/serenity/issues/131)
+
 ## [0.14.0](https://github.com/mukkund1996/serenity/compare/v0.13.0...v0.14.0) (2026-11-08)
 
 
