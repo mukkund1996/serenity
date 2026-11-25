@@ -103,7 +103,7 @@ import {
 	isTyping,
 	splitAtNewline,
 } from "./text-input";
-import { askLine, masterTurnLabel } from "./theme";
+import { askLine, masterTurnLabel, restoreNotice } from "./theme";
 import {
 	type CardElement,
 	cardElements,
@@ -769,6 +769,18 @@ export function App({ home, repo, tmuxPane }: AppProps) {
 		}, noticeMs.current);
 		return () => clearTimeout(timer);
 	}, [notice]);
+
+	// Sessions lost to a restart come back on their own; say so (ADR 0070).
+	const restore = state?.restore ?? null;
+	const restoreShown = useRef("");
+	useEffect(() => {
+		const text = restoreNotice(restore, Date.now());
+		const key = `${restore?.id}:${restore?.pending}`;
+		if (!text || restoreShown.current === key) return;
+		restoreShown.current = key;
+		if (!restore?.pending) noticeMs.current = HINT_MS;
+		setNotice(text);
+	}, [restore]);
 
 	// A map with nothing on it yet (but the tour) points at Claude Code
 	// sessions the user already has here, once per map (ADR 0064).

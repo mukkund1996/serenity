@@ -170,6 +170,7 @@ export class ClaudeHistory {
 				exitNote: null,
 				dismissedAt: null,
 				parentId: null,
+				interrupted: null,
 				createdAt: at,
 				updatedAt: at,
 			};

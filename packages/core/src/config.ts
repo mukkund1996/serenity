@@ -49,6 +49,12 @@ export interface Config {
 	 * first map opened. False skips it; SERENITY_NO_ONBOARDING=1 does too.
 	 */
 	onboarding: boolean;
+	/**
+	 * Sessions whose panes were lost with the tmux server (a reboot, a
+	 * shutdown, tmux killed) come back with `claude --resume` when their map
+	 * opens (ADR 0070). False leaves them ended; Enter resumes one.
+	 */
+	restoreSessions: boolean;
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -60,6 +66,7 @@ export const DEFAULT_CONFIG: Config = {
 	baseBranch: "default",
 	repos: {},
 	onboarding: true,
+	restoreSessions: true,
 };
 
 const REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
@@ -118,6 +125,7 @@ export function loadConfig(path = configPath()): Config {
 		baseBranch?: unknown;
 		repos?: unknown;
 		onboarding?: unknown;
+		restoreSessions?: unknown;
 	};
 	try {
 		raw = JSON.parse(readFileSync(path, "utf8"));
@@ -175,6 +183,7 @@ export function loadConfig(path = configPath()): Config {
 		baseBranch: parseBaseSetting(raw.baseBranch) ?? DEFAULT_CONFIG.baseBranch,
 		repos,
 		onboarding: raw.onboarding !== false,
+		restoreSessions: raw.restoreSessions !== false,
 	};
 }
 
@@ -192,7 +201,8 @@ export type ConfigChange =
 	  }
 	| { key: "model"; role: keyof Config["models"]; value: string }
 	| { key: "maxTopics"; value: number }
-	| { key: "slack"; repo: string; value: boolean };
+	| { key: "slack"; repo: string; value: boolean }
+	| { key: "restoreSessions"; value: boolean };
 
 /** Model aliases the settings panel steps through; a custom id in the file is kept as one more. */
 export const MODEL_CHOICES = ["opus", "sonnet", "haiku"];
@@ -259,6 +269,9 @@ export function applyConfigChange(raw: Json, change: ConfigChange): void {
 			slack.repos = change.value ? [...others, want] : others;
 			return;
 		}
+		case "restoreSessions":
+			raw.restoreSessions = change.value;
+			return;
 	}
 }
 

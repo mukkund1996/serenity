@@ -3,6 +3,7 @@ import type {
 	MasterTurn,
 	MentionKind,
 	PrTone,
+	RestoreReport,
 	Session,
 	SessionStatus,
 } from "@serenity/core";
@@ -93,6 +94,9 @@ export function cardText(session: Session): string {
 
 /** A dead session's card line, with why claude was not restarted (ADR 0044). */
 export function endedText(session: Session): string {
+	// Lost with the tmux server; restore brings it back (ADR 0070).
+	if (session.interrupted)
+		return `Ended: ${session.exitNote ?? "tmux stopped"}. Enter resumes it.`;
 	if (session.pinned) return "Ended. Enter resumes it.";
 	if (session.origin === "imported") return "Imported. Enter resumes it.";
 	return session.exitNote
@@ -164,4 +168,31 @@ export function age(at: number, now: number): string {
 	if (hours < 24) return `${hours}h`;
 	const days = Math.floor(hours / 24);
 	return days < 14 ? `${days}d` : `${Math.floor(days / 7)}w`;
+}
+
+/** How long after a restore started its notice is still news to a map that opens (ADR 0070). */
+export const RESTORE_NEWS_MS = 2 * 60_000;
+
+/**
+ * The map's notice for a restore after the tmux server went away (ADR
+ * 0070): while it runs, then what came back and what did not. Null when
+ * there is nothing to say, or it is old news.
+ */
+export function restoreNotice(
+	report: RestoreReport | null,
+	now: number,
+): string | null {
+	if (!report) return null;
+	if (!report.pending && now - report.id > RESTORE_NEWS_MS) return null;
+	const n = (count: number) =>
+		`${count} ${count === 1 ? "session" : "sessions"}`;
+	if (report.pending) return `restoring ${n(report.pending)} after a restart…`;
+	const failed = report.failed.map((f) => `${f.name} (${f.reason})`).join(", ");
+	const restored = report.restored.length
+		? `restored ${n(report.restored.length)} after a restart`
+		: "";
+	if (!failed) return restored || null;
+	return restored
+		? `${restored} · not restored: ${failed}`
+		: `not restored after a restart: ${failed}`;
 }

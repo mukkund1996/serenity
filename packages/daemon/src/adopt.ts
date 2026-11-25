@@ -220,6 +220,7 @@ export class ClaudeObserver {
 				exitNote: null,
 				dismissedAt: null,
 				parentId: null,
+				interrupted: null,
 				createdAt: at,
 				updatedAt: at,
 			};

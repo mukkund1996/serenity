@@ -230,3 +230,16 @@ test("writeConfig refuses a file that is not valid JSON and leaves it as it was"
 	expect(readFileSync(path, "utf8")).toBe('{"maxTopics": 3,');
 	expect(existsSync(`${path}.${process.pid}.tmp`)).toBe(false);
 });
+
+test("restoring sessions after a restart is on unless set to false (ADR 0070)", () => {
+	expect(loadConfig(join(dir, "missing.json")).restoreSessions).toBe(true);
+	const file = join(dir, "r.json");
+	writeFileSync(file, "{}\n");
+	writeConfig([{ key: "restoreSessions", value: false }], file);
+	expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+		restoreSessions: false,
+	});
+	expect(loadConfig(file).restoreSessions).toBe(false);
+	writeConfig([{ key: "restoreSessions", value: true }], file);
+	expect(loadConfig(file).restoreSessions).toBe(true);
+});

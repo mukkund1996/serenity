@@ -21,7 +21,8 @@
  *   Like Claude Code, with CLAUDE_CONFIG_DIR set and inside tmux it keeps
  *   `sessions/<pid>.json` (status, pane) and a transcript current, which is
  *   what serenity reads for sessions it adopted (ADR 0016). `--resume <id>`
- *   continues that session id. A prompt after `--` is the first line, sent
+ *   continues that session id; its hooks name that transcript, which a
+ *   restore after a restart checks for (ADR 0070). A prompt after `--` is the first line, sent
  *   once the session starts. After each reply it runs the `statusLine`
  *   command with fixed `rate_limits` (session 42%, week 17%).
  *
@@ -234,7 +235,7 @@ async function interactive(): Promise<void> {
 	const fire = (event: string, extra: Record<string, unknown> = {}) => {
 		const payload = JSON.stringify({
 			session_id: sessionId,
-			transcript_path: `/tmp/${sessionId}.jsonl`,
+			transcript_path: registry.transcript ?? `/tmp/${sessionId}.jsonl`,
 			hook_event_name: event,
 			...extra,
 		});
@@ -404,7 +405,12 @@ function claudeRegistry(sessionId: string) {
 				).stdout.trim()
 			: "";
 	if (!config || !where)
-		return { status: () => {}, prompt: () => {}, reply: () => {} };
+		return {
+			transcript: null,
+			status: () => {},
+			prompt: () => {},
+			reply: () => {},
+		};
 	const cwd = process.cwd();
 	const file = join(config, "sessions", `${process.pid}.json`);
 	const transcript = join(
@@ -432,6 +438,7 @@ function claudeRegistry(sessionId: string) {
 			}),
 		);
 	return {
+		transcript,
 		status,
 		prompt: (text: string) => {
 			log({ type: "last-prompt", lastPrompt: text });

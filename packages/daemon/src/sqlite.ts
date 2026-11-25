@@ -89,6 +89,7 @@ const SESSION_DEFAULTS: Pick<
 	| "subagents"
 	| "topicHeld"
 	| "parentId"
+	| "interrupted"
 > = {
 	waitingOn: null,
 	waitingSince: null,
@@ -105,6 +106,7 @@ const SESSION_DEFAULTS: Pick<
 	subagents: [],
 	topicHeld: null,
 	parentId: null,
+	interrupted: null,
 };
 
 /** Rows written before "category" was renamed to "topic". */

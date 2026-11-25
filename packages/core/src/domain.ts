@@ -109,8 +109,35 @@ export interface Session {
 	 * it and cannot fan out itself. Null for every other session.
 	 */
 	parentId: string | null;
+	/**
+	 * Its pane was lost with the tmux server (a reboot, a shutdown, tmux
+	 * killed) while it was live, not ended by the user or claude (ADR 0070).
+	 * The session shows as ended until it is restored with `claude --resume`;
+	 * this keeps how it was then. Null for every other session.
+	 */
+	interrupted: Interrupted | null;
 	createdAt: number;
 	updatedAt: number;
+}
+
+/** What a session was doing when the tmux server holding its pane went away. */
+export interface Interrupted {
+	status: "idle" | "working" | "waiting";
+	waitingOn: WaitingOn | null;
+	at: number;
+}
+
+/**
+ * The latest restore of sessions after the tmux server went away (ADR 0070),
+ * shown as a notice on the map. `id` changes with each restore.
+ */
+export interface RestoreReport {
+	id: number;
+	/** Sessions still to restore; 0 once it is over. */
+	pending: number;
+	restored: string[];
+	/** Sessions that could not be restored, by name, with why. */
+	failed: { name: string; reason: string }[];
 }
 
 export type WaitingOn = "permission" | "question" | "startup";
@@ -371,4 +398,6 @@ export interface RepoState {
 	pings: Ping[];
 	/** gh, git, tmux or Slack failing call after call (ADR 0043); empty when all answer. */
 	health: DependencyIssue[];
+	/** The latest restore after the tmux server went away (ADR 0070); null when none ran. */
+	restore: RestoreReport | null;
 }

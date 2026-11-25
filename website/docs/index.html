@@ -184,6 +184,7 @@
 </tbody>
 </table></div>
 <p>Behind the map, a background daemon keeps the state, receives status from Claude Code hooks, polls PRs through <code>gh</code> and runs the master. If it crashes, a supervisor restarts it and it picks up where it left off.</p>
+<p>A machine restart or shutdown (or <code>tmux kill-server</code>) takes tmux and every Claude Code pane with it. The next time you run <code>serenity</code> in the repo, each session that was still working, waiting or idle comes back in a new pane in its own worktree, continuing its conversation with <code>claude --resume</code>. They start one at a time, with their topic, name, pin and PR unchanged. A notice says how many came back and names any that couldn't, with why. Sessions you ended stay ended. A session that was waiting on a permission prompt comes back idle, with a note to ask it to go on.</p>
 </section>
 
 <!-- ============ MAP ============ -->
@@ -366,6 +367,7 @@
 <tr><td>Base branch: this repo, all repos</td><td>Repo default (origin's HEAD), the branch the main checkout is on, or a branch you name. This repo can also follow all repos.</td><td>New sessions. A branch that can't be found falls back to the repo default, with a notice.</td></tr>
 <tr><td>Master models</td><td>Opus, Sonnet or Haiku for the chat, summarizer and suggester</td><td>Summarizer and suggester at once; the chat after <code>serenity restart</code></td></tr>
 <tr><td>Max topics</td><td>1 to 30</td><td>At once</td></tr>
+<tr><td>After a restart: sessions</td><td>Restore sessions, or leave them ended (Enter then resumes one)</td><td>The next time tmux goes away</td></tr>
 <tr><td>Slack: this repo</td><td>On or off</td><td>On the map at once; the master's Slack tools after <code>serenity restart</code></td></tr>
 </tbody>
 </table></div>
